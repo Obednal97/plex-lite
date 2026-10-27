@@ -316,7 +316,26 @@
 
   ui.Shelf = Shelf;
 
-  // ---- Button row (pill + round buttons) ------------------------------------------------------
+  // ---- Icons: Phosphor (js/icons.js, generated) as inline SVG -------------------------------
+
+  var SVG = 'http://www.w3.org/2000/svg';
+
+  ui.icon = function (name) {
+    var parts = PL.ICONS && PL.ICONS[name];
+    if (!parts) return null;
+    var svg = document.createElementNS(SVG, 'svg');
+    svg.setAttribute('viewBox', '0 0 256 256');
+    svg.setAttribute('class', 'ico');
+    svg.setAttribute('fill', 'currentColor');
+    parts.forEach(function (p) {
+      var n = document.createElementNS(SVG, p[0]);
+      Object.keys(p[1]).forEach(function (k) { n.setAttribute(k, p[1][k]); });
+      svg.appendChild(n);
+    });
+    return svg;
+  };
+
+  // ---- Button row: a primary pill, then labelled secondary pills ---------------------------
 
   // buttons: [{label, icon, kind:'primary'|'round', action()}]
   function ButtonRow(buttons) {
@@ -331,8 +350,9 @@
     PL.clear(this.el);
     this.buttons = buttons;
     this.nodes = buttons.map(function (b) {
-      var n = PL.el('div', 'btn btn-' + (b.kind || 'round'));
-      if (b.icon) n.appendChild(PL.el('span', 'icon icon-' + b.icon));
+      var n = PL.el('div', 'btn btn-' + (b.kind === 'primary' ? 'primary' : 'secondary'));
+      var ico = b.icon && ui.icon(b.icon);
+      if (ico) n.appendChild(ico);
       if (b.label) n.appendChild(PL.el('span', 'btn-label', b.label));
       return n;
     });
@@ -501,9 +521,15 @@
     var z = this.zones[this.index];
     var keep = this.opts.keep || 3;
     var self = this;
+    var cur = this.zones[this.index];
+    var shiftY = cur ? (this.opts.anchor ? this.opts.anchor(this.index, cur.top, cur) : cur.top) - cur.top : 0;
     this.zones.forEach(function (zone, i) {
+      // text blocks (skip zones) only fade once scrolling pushes them off the top of the screen
+      if (zone.skip) {
+        zone.el.classList.toggle('zone-clipped', zone.top + shiftY < 0);
+        return;
+      }
       zone.el.classList.toggle('zone-above', i < self.index);
-      if (zone.skip) return;
       var near = Math.abs(i - self.index) <= keep;
       if (zone.attach) {
         if (near && !zone.attached) zone.attach();

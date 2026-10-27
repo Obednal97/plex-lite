@@ -274,7 +274,7 @@
       if (f.type === 'show') label += ' ' + PL.fmt.episode(target);
       if (resume) label += ' from ' + PL.fmt.clock(target.viewOffset / 1000);
       out.push({ kind: 'primary', icon: 'play', label: label, action: function () { self.play(target, resume ? target.viewOffset : 0, self.mediaIndex); } });
-      if (resume) out.push({ icon: 'restart', label: 'Play from start', hint: 'Play from the beginning', action: function () { self.play(target, 0, self.mediaIndex); } });
+      if (resume) out.push({ icon: 'restart', label: 'From start', hint: 'Play from the beginning', action: function () { self.play(target, 0, self.mediaIndex); } });
     }
     if ((f.type === 'movie' || f.type === 'episode') && f.Media && f.Media.length > 1) {
       out.push({ icon: 'versions', label: 'Versions', hint: 'Choose version (' + f.Media.length + ')', action: function () { self.pickVersion(); } });
@@ -284,12 +284,12 @@
     }
     var trailer = this.trailer();
     if (trailer) {
-      out.push({ icon: 'trailer', label: 'Watch trailer', hint: 'Watch trailer', action: function () { self.playExtra(trailer); } });
+      out.push({ icon: 'trailer', label: 'Trailer', hint: 'Watch trailer', action: function () { self.playExtra(trailer); } });
     }
     var watched = ui.isWatched(f);
     out.push({
-      icon: watched ? 'uncheck' : 'check',
-      label: watched ? 'Mark unwatched' : 'Mark watched',
+      icon: watched ? 'watched' : 'check',
+      label: (watched ? 'Mark ' + (f.type === 'show' ? 'show ' : '') + 'unwatched' : 'Mark ' + (f.type === 'show' ? 'show ' : '') + 'watched'),
       hint: watched ? 'Mark as unwatched' : 'Mark as watched',
       action: function () { self.toggleWatched(); },
     });
@@ -297,8 +297,8 @@
     if (season) {
       var seasonWatched = ui.isWatched(season);
       out.push({
-        icon: seasonWatched ? 'season-uncheck' : 'season-check',
-        label: seasonWatched ? 'Mark season unwatched' : 'Mark season watched',
+        icon: 'season',
+        label: 'Mark ' + (season.title || 'season') + (seasonWatched ? ' unwatched' : ' watched'),
         hint: (seasonWatched ? 'Mark ' : 'Mark ') + season.title + (seasonWatched ? ' unwatched' : ' watched'),
         action: function () { self.toggleSeasonWatched(season); },
       });

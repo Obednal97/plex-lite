@@ -333,8 +333,8 @@
       app.selectTab(app.startTab());
       app.ready = true;
       launch.run();
-      // warm the search index once the first screen has settled
-      if (PL.fuzzy) setTimeout(function () { PL.fuzzy.ensure(); }, 8000);
+      // load the search index as soon as the first screen has drawn (cached copies load in slices)
+      if (PL.fuzzy) setTimeout(function () { PL.fuzzy.ensure(); }, 1500);
     }).then(null, function (err) {
       PL.warn('start failed', err && err.message);
       if (err && err.status === 401) {

@@ -17,14 +17,6 @@
 .card-person.focused .person-meta { transform: translate3d(0, 12px, 0); }
 
 /* film frame with a play triangle */
-.icon-trailer::before {
-  content: ""; position: absolute; left: 0; top: 4px; width: 28px; height: 20px;
-  border: 3px solid currentColor; border-radius: 4px;
-}
-.icon-trailer::after {
-  content: ""; position: absolute; left: 11px; top: 9px; border-style: solid;
-  border-width: 5px 0 5px 8px; border-color: transparent transparent transparent currentColor;
-}
 
 /* ratings: small outlined text badges after the media badges */
 .rating-badges { display: block; margin: 10px 0 0; }
@@ -33,15 +25,4 @@
   font-size: 17px; font-weight: 600; color: var(--text-2); background: transparent; border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-/* two offset frames */
-.icon-versions::before { content: ""; position: absolute; left: 7px; top: 1px; width: 20px; height: 16px; border: 3px solid currentColor; border-radius: 3px; opacity: 0.5; }
-.icon-versions::after { content: ""; position: absolute; left: 1px; top: 9px; width: 20px; height: 16px; border: 3px solid currentColor; border-radius: 3px; }
 
-/* check inside a frame (season) */
-.icon-season-check::before, .icon-season-uncheck::before { content: ""; position: absolute; left: 1px; top: 1px; width: 26px; height: 26px; border: 3px solid currentColor; border-radius: 6px; }
-/* a framed "S" reads as "season", distinct from the plain watched check next to it */
-.icon-season-check::after, .icon-season-uncheck::after {
-  content: "S"; position: absolute; left: 0; top: 0; width: 28px; height: 28px; line-height: 28px; text-align: center;
-  font: 700 18px "LG Display", sans-serif;
-}
-.icon-season-uncheck::before { border-style: dashed; }
