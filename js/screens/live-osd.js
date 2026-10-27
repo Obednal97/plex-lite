@@ -556,8 +556,7 @@
         var fresh = this.makeGuideRow(c, i, t);
         if (r) this.guideTrack.replaceChild(fresh.el, r.el);
         else this.guideTrack.appendChild(fresh.el);
-        fresh.slot = r ? r.slot : null;
-        r = this.gRows[c.identifier] = fresh;
+        r = this.gRows[c.identifier] = fresh; // placed below without a glide (slot null)
       }
       if (r.slot !== slot) {
         // rows arriving at the edge appear in place; the rest glide
@@ -695,6 +694,11 @@
     }
     var name = PL.isBack(code) ? 'back' : NAMES[code];
     if (!name) return true;
+    // a failed tune keeps the banner up: Back leaves at once rather than just hiding it
+    if (name === 'back' && this.p.state === 'error' && this.view === 'banner' && !held) {
+      this.p.exit();
+      return true;
+    }
     if (held && !(this.view === 'guide' && (name === 'up' || name === 'down')) && name !== 'left' && name !== 'right') return true;
     var action = L.liveKey({
       view: this.view, zone: this.zone, canSeek: !!this.buffer(), playing: playing, hasIcons: this.icons.length > 0,

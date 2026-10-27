@@ -193,7 +193,9 @@
     });
   };
 
-  G.list = function (identifier) { return G.airings[identifier] || []; };
+  var EMPTY = [];
+  // (the same empty array every time, so callers can tell nothing changed)
+  G.list = function (identifier) { return G.airings[identifier] || EMPTY; };
 
   G.nowNext = function (identifier, t) { return L.nowNext(G.airings[identifier], t == null ? now() : t); };
 

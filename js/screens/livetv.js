@@ -112,13 +112,13 @@
     this.chanTrack = PL.el('div', 'lg-track');
     cclip.appendChild(this.chanTrack);
     var pclip = PL.el('div', 'lg-progs');
-    this.progTrack = PL.el('div', 'lg-track');
-    pclip.appendChild(this.progTrack);
-    // the now line scrolls with time only
+    // the now line scrolls with time only, under the (translucent) cells so it never crosses a title
     this.nowTrack = PL.el('div', 'lg-track');
     this.nowLine = PL.el('div', 'lg-now');
     this.nowTrack.appendChild(this.nowLine);
     pclip.appendChild(this.nowTrack);
+    this.progTrack = PL.el('div', 'lg-track');
+    pclip.appendChild(this.progTrack);
     grid.appendChild(cclip);
     grid.appendChild(pclip);
     grid.appendChild(PL.el('div', 'lg-fade'));
@@ -158,10 +158,12 @@
 
   LiveTVScreen.prototype.paintRuler = function () {
     PL.clear(this.rulerTrack);
+    this.ticks = [];
     for (var t = this.origin; t <= this.origin + 24 * 3600; t += STEP) {
       var n = PL.el('div', 'lg-tick', L.clock(t));
       PL.translate(n, (t - this.origin) * PPS, 0);
       this.rulerTrack.appendChild(n);
+      this.ticks.push({ x: (t - this.origin) * PPS, node: n, hidden: false });
     }
     this.nowPill = PL.el('div', 'lg-now-pill');
     this.rulerTrack.appendChild(this.nowPill);
@@ -173,7 +175,16 @@
     var x = Math.round((t - this.origin) * PPS);
     PL.translate(this.nowLine, x, 0);
     this.nowPill.textContent = L.clock(t);
-    PL.translate(this.nowPill, x, 0);
+    // the pill stays whole at the left edge, and the half-hour label it covers steps aside
+    var px = Math.max(x, 44);
+    PL.translate(this.nowPill, px, 0);
+    (this.ticks || []).forEach(function (k) {
+      var hide = k.x > px - 120 && k.x < px + 44;
+      if (hide !== k.hidden) {
+        k.hidden = hide;
+        k.node.style.opacity = hide ? '0' : '';
+      }
+    });
   };
 
   // ---- Data -----------------------------------------------------------------------------------------

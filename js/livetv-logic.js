@@ -69,7 +69,7 @@
 
   // ---- Guide data ---------------------------------------------------------------------------------
 
-  // Guide titles from an XMLTV feed are often "<number> <group> - <name>" ("1001 UK - BBC 1"). The
+  // Guide titles from an XMLTV feed are often "<number> <group> - <name>" ("1001 UK - News One"). The
   // number is shown on its own, so it is dropped; a group prefix ("UK - ") is dropped only when most
   // channels have one (then it says nothing).
   L.GROUP = /^([A-Za-z0-9+]{2,6}) ?[-|:] (.+)$/;

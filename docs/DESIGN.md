@@ -71,7 +71,16 @@ Transform and opacity only.
 - **Details:** full-bleed art; ratings and badges as 1 px keylines; dark capsule actions with Phosphor
   icons; borderless season tabs; episodes with titles on the art.
 - **Search:** the query is the headline (48 px with an underline), not a boxed field; flat keys.
-- **Live TV, Settings:** quiet rows on the ground (hairline separators), white plate on focus.
+- **Settings:** quiet rows on the ground (hairline separators), white plate on focus.
+- **Live TV** (spec and remote tables in [LIVETV-v2-design.md](LIVETV-v2-design.md)): a two-hour time
+  grid on the plain ground, six channels down. The focused programme's details sit above it like a small
+  hero (red LIVE pill, 48 px title, a two-line synopsis, 400×225 art at the right); a ruler with a teal
+  "now" pill and a 2 px teal now line. Cells are quiet `rgba(255,255,255,.06)` tiles (on-now ones a little
+  lighter) with 26 px titles; the focused cell is the white plate. Channel logos sit on a light plate,
+  as on the player. Number entry is a lit-glass tile over the art. The live player keeps player v2's
+  bottom block (scrim, eyebrow, 64 px title, round icons, keycap hints) with a logo plate, a programme
+  bar (aired / position / live edge) instead of the seek bar, and "Next …" on the right; the mini guide
+  is a column of rows over a left wedge scrim while the picture keeps playing.
 - **Sheets, toasts, Up Next:** lit glass (gradient fill + rim + soft shadow), opaque enough that
   no live blur is needed.
 - **Player** (Apple TV app first, Netflix second; spec and remote table in

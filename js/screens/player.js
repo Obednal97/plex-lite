@@ -1778,11 +1778,15 @@
     var self = this;
     if (this.state === 'stopped') return;
     clearTimeout(this.channelTimer);
-    var playing = this.live.channel;
+    // during a CH+/CH− run live.channel already shows the target: what plays is pendingFrom
+    var playing = this.pendingFrom || this.live.channel;
+    this.pendingFrom = null;
     if (this.liveTuned && playing && playing.identifier !== channel.identifier) this.lastChannel = playing;
     this.teardownVideo();
     this.stopTranscode();
-    var released = this.releaseLive();
+    // one tuner: the old session goes first, and a tune still in flight must have answered
+    var released = Promise.all([this.releaseLive(), this.tunePending || null]).then(function () {}, function () {});
+    released = Promise.race([released, new Promise(function (resolve) { setTimeout(resolve, 2500); })]);
     var gen = ++this.gen;
     this.live.channel = channel;
     this.programme = '';
@@ -1795,20 +1799,26 @@
     this.setStatus('Tuning ' + (channel.title || 'channel') + '…', true);
     var session = PL.uuid();
     this.liveSession = session;
-    released.then(function () {
+    var tuned = released.then(function () {
       if (gen !== self.gen) return null;
       return PL.plex.request('POST', '/livetv/dvrs/' + self.live.dvrKey + '/channels/' + encodeURIComponent(channel.identifier) + '/tune',
         { 'X-Plex-Session-Identifier': session }, { timeout: 45000 });
-    }).then(function (mc) {
+    });
+    // settles once this tune has answered (and, if superseded, been released)
+    var pending = this.tunePending = tuned.then(function (mc) {
+      if (gen === self.gen || !mc) return null;
+      var sub = mc.MediaSubscription && mc.MediaSubscription[0];
+      var op = sub && sub.MediaGrabOperation && sub.MediaGrabOperation[0];
+      var uuid = op && op.Metadata && op.Metadata.Media && op.Metadata.Media[0] && op.Metadata.Media[0].uuid;
+      return uuid ? PL.plex.request('DELETE', '/transcode/sessions/' + uuid).catch(function () {}) : null;
+    }, function () {}).then(function () { if (self.tunePending === pending) self.tunePending = null; });
+    tuned.then(function (mc) {
       if (!mc && gen !== self.gen) return;
       var sub = mc && mc.MediaSubscription && mc.MediaSubscription[0];
       var op = sub && sub.MediaGrabOperation && sub.MediaGrabOperation[0];
       var meta = op && op.Metadata;
       if (!meta || !meta.key) throw new Error('The tuner did not start this channel');
-      if (gen !== self.gen) {
-        self.releaseLiveMeta(meta);
-        return;
-      }
+      if (gen !== self.gen) return; // superseded: tunePending releases it
       self.liveMeta = meta;
       self.liveKey = meta.key;
       // the stream path names the consumer the server attached: /livetv/sessions/<uuid>/<id>/index.m3u8
@@ -1864,17 +1874,15 @@
     this.showOsd();
     if (this.liveOsd) this.liveOsd.onTune(channel);
     this.channelTimer = setTimeout(function () {
-      // the channel that was playing when the presses began is the "last channel"
       var from = self.pendingFrom;
-      self.pendingFrom = null;
-      self.live.channel = from || self.live.channel;
-      self.tune(channel);
+      // back where the presses started: nothing to tune
+      if (from && from.identifier === channel.identifier && self.liveTuned && self.state !== 'error') {
+        self.pendingFrom = null;
+        self.paintText();
+        return;
+      }
+      self.tune(channel); // pendingFrom becomes the last channel
     }, delay);
-  };
-
-  Player.prototype.releaseLiveMeta = function (meta) {
-    var uuid = meta && meta.Media && meta.Media[0] && meta.Media[0].uuid;
-    if (uuid) PL.plex.request('DELETE', '/transcode/sessions/' + uuid).catch(function () {});
   };
 
   // Ends the tuner session. Resolves when the server has answered (or after 2 s), so a new tune
@@ -2435,7 +2443,7 @@
     this.teardownVideo();
     this.stopTranscode();
     this.setStatus(PL.errorMessage(err) + (this.live ? '  ·  Choose another channel, or press Back' : '  ·  Press Back to return'), false);
-    PL.toast(PL.errorMessage(err));
+    if (!this.live) PL.toast(PL.errorMessage(err)); // live: the banner stays up and says so
   };
 
   // ---- Stopping --------------------------------------------------------------------------------
