@@ -1,6 +1,6 @@
 # Live TV v2: design
 
-Status: built on `feature/livetv-v2` for review (2026-10-27). Replaces the "On now" channel list and the
+Status: built and merged into main (2026-10-27). Replaces the "On now" channel list and the
 player's old live mode (a title over the VOD block, CH+/CH− only).
 
 ## Why
@@ -33,7 +33,7 @@ Research (Sky Q, Virgin TV 360, YouTube TV, Google TV, BBC iPlayer, Plex, Channe
 | Synopsis | not in the grid (we exclude it); `key` → `/metadata/<id>` has `summary` | the details panel, fetched once the focus rests |
 | Categories | Plex's own Movies / Shows / Sports / News sections; genres on each programme | the filters |
 | Pause buffer | the live HLS playlist keeps every segment since the tune (`TranscoderLivePruneBuffer`, 90 min by default): no `ENDLIST`, media sequence 0 | pause, Go live, and seeking *if the TV exposes a seekable range* (see below) |
-| Recording | DVR present, `subscribe` feature, no recordings yet | not built (open question) |
+| Recording | DVR present, `subscribe` feature, no recordings yet | not built (owner decision, below) |
 | Tuners | the proxy advertises **one** tuner | release-then-tune; a busy tuner is reported in words |
 
 Live TV/Threadfin session-ID rule (unchanged, see `js/screens/player.js`): Plex binds the tuned stream to the
@@ -53,7 +53,7 @@ from the part key `/livetv/sessions/<uuid>/<id>/index.m3u8`, else "Failed to fin
 
 ## Non-goals
 
-- Recording, series links, reminders (see open questions).
+- Recording, series links, reminders (recording: not wanted, see owner decisions).
 - Catch-up or "start over" before the tune (Plex has no catch-up; Start over appears only when the
   programme's start is inside the buffer, which is rare).
 - Live video previews in the guide or picture-in-picture (one tuner, weak GPU).
@@ -198,5 +198,5 @@ session as before. CH+/CH− presses within 600 ms tune only the last channel, a
    Would you like the groups (UK, USA, sports…) as filters too?
 2. **Tune time.** 9–14 s per channel change on your setup, nearly all in the server's tune call (the IPTV proxy
    starting the stream). The proxy's buffer settings may shorten it; the app can't.
-3. **Buffer.** Plex keeps 90 minutes (`TranscoderLivePruneBuffer`). Forum reports say Plex's own players stall at that limit; long pauses were not tested here. Go live always works.
-   that limit; ours goes live when the buffer runs out under it (not yet seen in a long test).
+3. **Buffer.** Plex keeps 90 minutes (`TranscoderLivePruneBuffer`). Forum reports say Plex's own players stall at
+   that limit; pauses that long were not tested here. Go live always works.

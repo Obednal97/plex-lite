@@ -1,6 +1,6 @@
 # Player v2: design
 
-Status: approved for building (2026-10-27). Replaces the "row of labelled capsules" player from 0a7eede.
+Status: built and merged into main (2026-10-27). Replaces the "row of labelled capsules" player from 0a7eede.
 
 ## Why
 
@@ -20,7 +20,8 @@ players do (tvOS, Netflix TV, Infuse, Disney+, Prime, Plex) led to the layout be
 
 ## Non-goals
 
-- No picture-in-picture, no ratings row, no X-Ray/cast tab, no playback speed.
+- No picture-in-picture, no ratings row, no per-scene X-Ray (Plex has no such data; the Cast tab below is the
+  achievable part), no playback speed.
 - No shrinking the video at the end of an episode (the video plane is hardware; scaling it is not worth the risk).
 - No change to how streams are chosen, transcoded or reported.
 

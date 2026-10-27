@@ -26,12 +26,14 @@ More in [Screenshots](#screenshots).</sub>
 - **Title pages**: cast and crew, trailers and extras, ratings, versions, seasons and episodes, and
   a page for each person
 - **Player**: direct play (H.264/HEVC including 10-bit, in MKV/MP4) or server transcoding when
-  needed. Resume, a chapter-segmented seek bar you can jump along or scrub with a preview,
-  subtitle and audio menus that keep the video playing, Info / Chapters / Episodes tabs, Skip Intro
-  and Skip Credits, and an end-of-episode card with autoplay (see [Player](#player)).
+  needed. Resume, a chapter-segmented seek bar you can jump along or scrub, subtitle and audio
+  menus that keep the video playing, Info / Cast / Chapters / Episodes tabs, Skip Intro and Skip
+  Credits, and an end-of-episode card with autoplay (see [Player](#player)).
 - **Search as you type**: typo-tolerant fuzzy search over your libraries, plus episodes and people
   from the server
-- **Live TV**: guide and playback through Plex Live TV & DVR
+- **Live TV**: a two-hour guide of every channel through Plex Live TV & DVR, favourites, channel
+  numbers, a channel banner, a mini guide over the picture, last channel and pause (see
+  [Live TV](#live-tv))
 - **Accounts**: sign in with a plex.tv/link code, switch Plex Home profiles (not PIN-protected ones
   yet), set server addresses manually when discovery doesn't work
 - **Remote**: built for the arrow keys, with pointer (Magic Remote) support. Hold OK for quick
@@ -71,7 +73,7 @@ seconds while playing and stay up while paused, scrubbing or with a menu or tab 
 
 | Key | Watching (controls hidden) | Seek bar | Icons, menus, tabs |
 | --- | --- | --- | --- |
-| Left / Right | Jump back 10 s / forward 30 s (and show the controls) | Jump back 10 s / forward 30 s at once; hold to scrub with a preview. Paused: move the scrub target | Move between icons, tabs or cards |
+| Left / Right | Jump back 10 s / forward 30 s (and show the controls) | Jump back 10 s / forward 30 s at once; hold to scrub. Paused: move the scrub target | Move between icons, tabs or cards |
 | OK | Skip Intro / Credits or the end card's button when shown, else show the controls | Pause or play; while scrubbing, jump to the target and play | Open the menu, choose, play the chapter or episode |
 | Up / Down | Show the controls | Up: the icons. Down: the tabs | Back towards the bar (Down from icons, Up from tabs) |
 | Back | Dismiss Skip Intro or the end card, else leave the player | Return from a scrub, else hide the controls | Close the menu or tab |
@@ -93,6 +95,32 @@ next one, a card offers Watch Credits and Next Episode (counting down when autop
 the Magic Remote, point and click: hovering focuses, the seek bar jumps where you click (hover to
 see the time). The LG Magic Remote (MR19) has Play and Pause keys but no fast-forward, so use OK on
 Skip Intro there.
+
+## Live TV
+
+The Live TV tab is a two-hour guide of every channel in your Plex DVR lineup, including channels with
+no guide data, six channels down, with the focused programme's details and artwork above it.
+Filters: All, Favourites, Movies, Sports and News; the guide opens on Favourites once you have some.
+Programmes load in three-hour blocks in the background, so moving around never waits on the network.
+
+While watching, a banner shows the channel, the programme, its progress, the time left and what's
+next, with round icons for Go live, Start over, Favourite, Channels and Last channel. Pausing keeps
+playing from a buffer that starts at the tune, and the banner says how far behind live you are.
+Changing channel releases the old tuner session before tuning the next, so one-tuner setups work.
+Recording isn't supported. Full details: [docs/LIVETV-v2-design.md](docs/LIVETV-v2-design.md).
+
+| Key | Guide | Watching |
+| --- | --- | --- |
+| Up / Down | Channel above / below | The mini guide over the picture |
+| Left / Right | Previous / next programme | Back 10 s / forward 30 s in the pause buffer |
+| OK | Watch the channel | The banner (OK again pauses or plays) |
+| Play / Pause | Play watches the channel | Pause or play (pausing falls behind live) |
+| Hold OK | Watch, or add to / remove from Favourites | |
+| CH+ / CH− | Page six channels | Next / previous channel |
+| 0–9 | Jump to a channel number | Tune a channel number |
+| Red | | Last channel |
+| Yellow | Favourite on / off | Favourite on / off |
+| Back | Back to now, then the tab bar | Leave the player (the guide focuses that channel) |
 
 ## Surprise Me
 
@@ -132,7 +160,7 @@ differently from the TV's Chrome 53. Credits and licences: [docs/screenshots/CRE
 | ![Scrubbing in Sintel: a preview frame and its time ride above the target](docs/screenshots/player-scrub.jpg) | ![The Subtitles menu open above its icon](docs/screenshots/player-subtitles.jpg) |
 | ![The Chapters tab: the controls slide up for a row of chapter cards](docs/screenshots/player-chapters.jpg) | |
 | ![Skip Intro on a Caminandes episode](docs/screenshots/skip-intro.jpg) | ![The end card over the credits of a Caminandes episode](docs/screenshots/up-next.jpg) |
-| ![Live TV: channels with what's on now and next](docs/screenshots/live-tv.jpg) | ![Settings](docs/screenshots/settings.jpg) |
+| ![Live TV: a two-hour guide grid with the focused programme's details and art above it](docs/screenshots/live-tv.jpg) | ![Settings](docs/screenshots/settings.jpg) |
 | ![Settings, Profile: the Plex Home "Who's watching?" sheet](docs/screenshots/settings-profiles.jpg) | ![Sign-in with a plex.tv/link code](docs/screenshots/signin.jpg) |
 
 To retake them: `node tools/demo/fetch-media.mjs`, then `node tools/demo/shots.mjs` (see
@@ -248,7 +276,7 @@ account belongs in the repo.
 | --- | --- |
 | `tools/deploy.sh [--dev] [--no-launch]` | Builds, installs on the TV over SSH (`PLEXLITE_TV_SSH`, root or dev mode) and launches. `--dev` embeds a Plex token from `PLEX_ENV_FILE` so the TV skips sign-in. Dev builds go to `~/.cache/plexlite`, never into the repo. |
 | `node tools/check.mjs` | Checks JS and CSS against Chrome 53 and that the versions match. Run it before every commit. |
-| `node --test test/` | All unit tests (search, A–Z rail offsets, plugins, Overseerr). `node test/fuzzy.test.mjs` alone adds a small search benchmark. |
+| `node --test test/` | All unit tests (search, A–Z rail offsets, player and Live TV logic, plugins, Overseerr). `node test/fuzzy.test.mjs` alone adds a small search benchmark. |
 | `node tools/devserver.mjs` | Serves the app on the desktop at http://127.0.0.1:8920 with a read-only Plex proxy. The browser never sees your real token. |
 | `node tools/demo/server.mjs` | Runs the app on the desktop at http://127.0.0.1:8930 against a mock Plex server and plex.tv with a demo library of openly licensed films, so no Plex account or server is needed. Run `node tools/demo/fetch-media.mjs` once first for the artwork. See [tools/demo/README.md](tools/demo/README.md). |
 | `node tools/demo/shots.mjs` | Retakes the README screenshots in `docs/screenshots/` from the demo server (needs `playwright-core`, installed outside the repo). |
