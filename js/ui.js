@@ -121,7 +121,7 @@
       img.width = geo.w;
       img.height = geo.h;
       img.onerror = function () { img.style.visibility = 'hidden'; inner.classList.add('no-art'); };
-      img.src = src;
+      ui.fadeInImage(img, src);
       inner.appendChild(img);
     } else {
       inner.classList.add('no-art');
@@ -194,7 +194,7 @@
       img.width = geo.w;
       img.height = geo.h;
       img.onerror = function () { img.style.visibility = 'hidden'; };
-      img.src = PL.plex.image(person.thumb, geo.w, geo.h);
+      ui.fadeInImage(img, PL.plex.image(person.thumb, geo.w, geo.h));
       inner.appendChild(img);
     }
     inner.appendChild(PL.el('div', 'card-edge'));
@@ -256,6 +256,10 @@
   Shelf.prototype.render = function () {
     if (!this.attached) return;
     var shift = this.shift();
+    if (shift !== this.lastShift) {
+      ui.glide(this.track, this);
+      this.lastShift = shift;
+    }
     PL.translate(this.track, this.left - shift, 0);
     var pitch = this.geo.pitch;
     var first = Math.max(0, Math.floor((shift - this.left) / pitch) - 1);
@@ -379,6 +383,129 @@
 
   ui.Shelf = Shelf;
 
+  // ---- Motion helpers (docs/MOTION.md) -----------------------------------------------------------
+
+  // A value that is retargeted while it is still moving keeps its speed (PlxNative's springs do;
+  // a CSS transition would restart from rest), so the next move takes the "glide" curve.
+  ui.glide = function (el, owner) {
+    var now = Date.now();
+    el.classList.toggle('glide', now - (owner.movedAt || 0) < 380);
+    owner.movedAt = now;
+  };
+
+  // Plays a one-shot entrance (CSS animation class) after `delay` ms and removes the class when it
+  // ends, so no layer lingers once the element is at rest.
+  ui.enter = function (el, cls, delay) {
+    el.style.animationDelay = Math.min(delay || 0, 320) + 'ms';
+    el.classList.add(cls);
+    var done = function () {
+      el.removeEventListener('animationend', done);
+      el.classList.remove(cls);
+      el.style.animationDelay = '';
+    };
+    el.addEventListener('animationend', done);
+  };
+
+  // Art that arrives after its placeholder dissolves in; art already in memory is drawn at once.
+  ui.fadeInImage = function (img, src) {
+    img.src = src;
+    if (img.complete && img.naturalWidth) return;
+    img.classList.add('img-wait');
+    img.addEventListener('load', function () { img.classList.remove('img-wait'); });
+  };
+
+  // One selection plate and one focus capsule per bar, each a single element that travels between
+  // the measured pills (PlxNative's TabStrip: "OK moves the plate", the capsule follows focus).
+  function Glider(container) {
+    this.container = container;
+    this.plateEl = PL.el('div', 'glide-plate');
+    this.capEl = PL.el('div', 'glide-cap');
+    container.insertBefore(this.capEl, container.firstChild);
+    container.insertBefore(this.plateEl, container.firstChild);
+    this.rects = null;
+  }
+
+  Glider.prototype.measure = function (nodes) {
+    if (this.rects && this.rects.length === nodes.length && this.rects.w) return this.rects;
+    var rects = nodes.map(function (n) { return { x: n.offsetLeft, w: n.offsetWidth }; });
+    var total = rects.reduce(function (a, r) { return a + r.w; }, 0);
+    if (!total) return null; // not laid out yet (screen still parked)
+    rects.w = total;
+    this.rects = rects;
+    return rects;
+  };
+
+  Glider.prototype.invalidate = function () { this.rects = null; };
+
+  Glider.prototype.place = function (el, r, on, land) {
+    if (!r) {
+      el.classList.remove('on');
+      return;
+    }
+    var first = !el.style.width || land;
+    if (first) el.classList.add('instant');
+    el.style.width = r.w + 'px';
+    el.style.transform = 'translate3d(' + r.x + 'px,0,0)';
+    if (on) el.classList.add('on');
+    if (first) {
+      el.offsetWidth; // the first placement lands; later ones travel
+      el.classList.remove('instant');
+    }
+  };
+
+  Glider.prototype.plate = function (r) { this.place(this.plateEl, r, true); };
+  // a capsule that was not showing LANDS on its pill rather than flying in from where it last was
+  Glider.prototype.cap = function (r) { this.place(this.capEl, r, true, !this.capEl.classList.contains('on')); };
+
+  ui.Glider = Glider;
+
+  // ---- Title art (Plex clearLogo) ------------------------------------------------------------------
+
+  // The item's clearLogo path, or for an episode/season its show's (hub items carry the show's).
+  ui.logoPath = function (item) {
+    var imgs = (item && item.Image) || [];
+    for (var i = 0; i < imgs.length; i++) if (imgs[i].type === 'clearLogo' && imgs[i].url) return imgs[i].url;
+    return null;
+  };
+
+  // A reserved box holding the logo, sized by CONSTANT AREA (PlxNative's rule: a square emblem and
+  // a wide wordmark carry the same weight), bottom-left aligned; the text title shows instead if the
+  // logo is missing or fails. opts: {area, minH, maxH, boxW, small, textClass}
+  ui.titleArt = function (item, title, opts) {
+    opts = opts || {};
+    var path = ui.logoPath(item);
+    if (!path) return null;
+    var box = PL.el('div', 'title-art' + (opts.small ? ' small' : ''));
+    var text = PL.el('div', 'title-art-text ' + (opts.textClass || 'hero-title'), title || '');
+    box.appendChild(text);
+    var img = PL.el('img', '');
+    img.alt = '';
+    var settled = false;
+    var fallback = function () {
+      if (settled) return;
+      settled = true;
+      box.classList.add('fallback');
+    };
+    img.onload = function () {
+      if (settled) return;
+      settled = true;
+      var aspect = img.naturalWidth / Math.max(1, img.naturalHeight);
+      var area = opts.area || 72000;
+      var h = PL.clamp(Math.sqrt(area / aspect), opts.minH || 70, opts.maxH || 200);
+      var w = h * aspect;
+      var boxW = opts.boxW || 760;
+      if (w > boxW) { w = boxW; h = w / aspect; }
+      img.style.width = Math.round(w) + 'px';
+      img.style.height = Math.round(h) + 'px';
+      box.classList.add('loaded');
+    };
+    img.onerror = fallback;
+    setTimeout(fallback, 2500);
+    img.src = PL.plex.image(path, 800, 300, { format: 'png', minSize: 0, upscale: 0 });
+    box.appendChild(img);
+    return box;
+  };
+
   // ---- Icons: Phosphor (js/icons.js, generated) as inline SVG -------------------------------
 
   var SVG = 'http://www.w3.org/2000/svg';
@@ -472,9 +599,10 @@
   // chips: [{label, value}], opts: {selected, onChange(value, index), title}
   function ChipRow(chips, opts) {
     this.opts = opts || {};
-    this.el = PL.el('div', 'chip-row');
+    this.el = PL.el('div', 'chip-row sliding');
     this.track = PL.el('div', 'chip-track');
     this.el.appendChild(this.track);
+    this.glider = new Glider(this.track);
     this.height = 88;
     this.focused = false;
     this.chips = chips;
@@ -496,12 +624,15 @@
       n.classList.toggle('focused', self.focused && i === self.index);
       n.classList.toggle('selected', i === self.selected);
     });
+    var rects = this.glider.measure(this.nodes);
+    if (!rects) return;
+    this.glider.plate(rects[this.selected]);
+    this.glider.cap(this.focused ? rects[this.index] : null);
     // keep the focused chip on screen when there are many (long-running shows)
-    var node = this.nodes[this.index];
-    if (node) {
-      var right = node.offsetLeft + node.offsetWidth;
+    var r = rects[this.index];
+    if (r) {
       var limit = ui.SCREEN_W - ui.MARGIN * 2;
-      var shift = right > limit ? right - limit : 0;
+      var shift = r.x + r.w > limit ? r.x + r.w - limit : 0;
       PL.translate(this.track, -shift, 0);
     }
   };
@@ -567,12 +698,20 @@
     zones.forEach(function (z) {
       if (z.height == null) z.height = z.el.offsetHeight;
       z.top = y;
-      PL.translate(z.el, 0, y);
+      z.el.style.top = y + 'px';
       y += z.height;
     });
     this.index = PL.clamp(index || 0, 0, Math.max(0, zones.length - 1));
     if (zones[this.index] && zones[this.index].skip) this.index = this.nextFocusable(this.index, 1);
     this.layout();
+  };
+
+  // A fresh page: its first rows rise in one after another (only rows on screen, capped).
+  VStack.prototype.enter = function () {
+    var n = 0;
+    this.zones.forEach(function (z) {
+      if (n < 4 && z.top < ui.SCREEN_H + 200) ui.enter(z.el, 'zone-enter', n++ * 60);
+    });
   };
 
   VStack.prototype.nextFocusable = function (from, dir) {
@@ -601,6 +740,10 @@
     });
     if (!z) return;
     var y = this.opts.anchor ? this.opts.anchor(this.index, z.top, z) : z.top;
+    if (y - z.top !== this.lastY) {
+      ui.glide(this.inner, this);
+      this.lastY = y - z.top;
+    }
     PL.translate(this.inner, 0, y - z.top);
   };
 
@@ -668,6 +811,7 @@
     this.index = 0;
     this.generation++;
     this.loaded = false;
+    this.entering = true;
     this.ensurePage(0);
     this.render();
   };
@@ -691,6 +835,7 @@
         if (self.opts.onLoaded) self.opts.onLoaded(self.total);
       }
       self.render();
+      self.entering = false;
       if (self.focused) self.notify();
     }, function (err) {
       if (gen !== self.generation) return;
@@ -710,6 +855,10 @@
 
   Grid.prototype.render = function () {
     var scroll = this.scrollY();
+    if (scroll !== this.lastScroll) {
+      ui.glide(this.inner, this);
+      this.lastScroll = scroll;
+    }
     PL.translate(this.inner, ui.MARGIN, -scroll);
     var row = this.rowOf(this.index);
     var firstRow = Math.max(0, row - 2);
@@ -737,6 +886,8 @@
         node.classList.add('grid-card');
         node.style.left = ((i % this.cols) * this.geo.pitch) + 'px';
         node.style.top = (this.rowOf(i) * this.geo.rowPitch) + 'px';
+        // a fresh grid's first two rows rise in, row by row and left to right (capped at ~0.3 s)
+        if (item && this.entering && i < this.cols * 2) ui.enter(node, 'card-enter', this.rowOf(i) * 70 + (i % this.cols) * 28);
         node.addEventListener('click', this.onClick.bind(this, i));
         this.inner.appendChild(node);
         this.nodes[i] = node;

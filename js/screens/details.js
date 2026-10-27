@@ -32,10 +32,17 @@
     var eyebrow = '';
     if (item.type === 'episode') eyebrow = item.grandparentTitle || '';
     if (item.type === 'season') eyebrow = item.parentTitle || '';
-    if (eyebrow) h.appendChild(PL.el('div', 'hero-eyebrow', eyebrow));
     var title = item.title || '';
-    var t = PL.el('div', 'hero-title' + (title.length > 26 ? ' long' : ''), title);
-    h.appendChild(t);
+    if (item.type === 'episode' || item.type === 'season') {
+      // the show's logo stands in for its name above the episode/season title
+      var showArt = ui.titleArt(item, eyebrow, { small: true, area: 26000, minH: 44, maxH: 96, boxW: 520, textClass: 'hero-eyebrow' });
+      if (showArt) h.appendChild(showArt);
+      else if (eyebrow) h.appendChild(PL.el('div', 'hero-eyebrow', eyebrow));
+      h.appendChild(PL.el('div', 'hero-title' + (title.length > 26 ? ' long' : ''), title));
+    } else {
+      var art = ui.titleArt(item, title, { area: 72000, maxH: 190, boxW: 760 });
+      h.appendChild(art || PL.el('div', 'hero-title' + (title.length > 26 ? ' long' : ''), title));
+    }
     var meta = PL.el('div', 'hero-meta');
     meta.appendChild(document.createTextNode(ui.metaLine(item)));
     meta.appendChild(ui.badges(item));
@@ -359,6 +366,10 @@
       }));
     }
     this.stack.setZones(zones, 1);
+    if (!this.entered) {
+      this.entered = true;
+      this.stack.enter();
+    }
     if (this.visible) this.stack.focus(true);
     this.loadPluginActions(f);
   };

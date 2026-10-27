@@ -1,0 +1,106 @@
+/* Plex Lite motion (see docs/MOTION.md). PlxNative drives every user-steered value with a
+   critically-damped spring; Chrome 53 has no springs, so each is a CSS transition on the curve that
+   fits a critically-damped step response (max error 0.7%) over the spring's 98% settle time.
+   Transform/opacity only; layers exist only while something moves. Loaded after theme.css. */
+
+:root {
+  --spring: cubic-bezier(0.2, 0.06, 0.22, 0.96);   /* critically damped, from rest */
+  --glide: cubic-bezier(0.12, 0.5, 0.25, 1);       /* retarget while moving: starts at speed */
+  --t-pop: 326ms;      /* focus pop   (PlxNative K_SCALE 320) */
+  --t-scroll: 447ms;   /* rows, pages (K_SCROLL 170) */
+  --t-cap: 377ms;      /* tab capsule (K_TAB 240) */
+  --t-appear: 337ms;   /* sheets      (K_APPEAR 300) */
+  --t-out: 70ms;       /* content cross-fade: out, swap at the floor, in (PlxNative Xfade) */
+  --t-in: 140ms;
+  --t-lift: 326ms;
+}
+
+/* ---- Scrolling and focus ---------------------------------------------------------------------- */
+
+.shelf-track, .vstack, .grid-inner, .guide-inner, .chip-track { transition: transform var(--t-scroll) var(--spring); }
+.shelf-track.glide, .vstack.glide, .grid-inner.glide { transition: transform 380ms var(--glide); }
+.card-inner { transition: transform var(--t-pop) var(--spring); }
+.focus-shadow { transition: transform var(--t-scroll) var(--spring), opacity 200ms var(--spring); }
+.card-meta { transition: opacity 200ms var(--spring), transform var(--t-pop) var(--spring); }
+.btn, .key, .row, .sheet-row { transition: transform var(--t-pop) var(--spring), background-color 160ms linear, color 160ms linear; }
+
+/* artwork that arrives after its placeholder dissolves in (cached art is drawn at once) */
+.card-img { transition: opacity 240ms linear, transform 420ms var(--spring); }
+.card-img.img-wait { opacity: 0; transform: scale(1.035); }
+
+/* ---- Glass bars with one travelling capsule ----------------------------------------------------- */
+
+.tabbar-pill {
+  position: relative;
+  background: linear-gradient(180deg, rgba(26, 26, 30, 0.58) 0%, rgba(14, 14, 18, 0.72) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12); border-top-color: rgba(255, 255, 255, 0.30);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+.glide-plate, .glide-cap {
+  position: absolute; left: 0; top: 6px; height: 56px; border-radius: 28px; pointer-events: none;
+  transition: transform var(--t-cap) var(--spring), width var(--t-cap) var(--spring), opacity 300ms var(--spring);
+}
+.glide-plate { background: rgba(255, 255, 255, 0.16); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14); }
+.glide-cap {
+  background: linear-gradient(180deg, #ffffff 0%, #e9ecf1 100%);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  opacity: 0;
+}
+.glide-cap.on { opacity: 1; }
+.glide-plate.instant, .glide-cap.instant { transition: none; }
+/* the pills themselves carry no ground: the travelling capsule is the whole focus mark */
+.tabbar .tab, .tabbar .tab.selected, .tabbar .tab.focused {
+  position: relative; z-index: 1; background: transparent; transform: none;
+  transition: color 140ms linear 90ms;
+}
+.tabbar .tab.selected { color: var(--text); }
+.tabbar .tab.focused { color: var(--focus-ink); }
+
+.chip-row.sliding .glide-plate, .chip-row.sliding .glide-cap { top: 0; height: 52px; border-radius: 26px; }
+.chip-row.sliding .chip, .chip-row.sliding .chip.selected, .chip-row.sliding .chip.focused {
+  position: relative; z-index: 1; background: transparent; transform: none; transition: color 140ms linear 90ms;
+}
+.chip-row.sliding .chip.selected { color: var(--text); }
+.chip-row.sliding .chip.focused { color: var(--focus-ink); }
+
+/* ---- Content changes: out, swap, in ------------------------------------------------------------- */
+
+.screen { transition: opacity var(--t-in) linear, transform var(--t-scroll) var(--spring); }
+.screen-enter { opacity: 0; transform: translate3d(0, 14px, 0); }
+.screen-leave { opacity: 0; transition: opacity var(--t-out) linear; }
+.mode-out { opacity: 0; transition: opacity var(--t-out) linear; }
+.mode-in { animation: fadeRise var(--t-scroll) var(--spring) both; }
+
+/* the first rows of a fresh page rise in, one after another (the delay is set per zone, capped) */
+.zone-enter { animation: zoneIn 420ms var(--spring) both; }
+@keyframes zoneIn {
+  from { opacity: 0; transform: translate3d(0, 26px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fadeRise {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to { opacity: 1; transform: none; }
+}
+.card-enter { animation: zoneIn 380ms var(--spring) both; }
+
+/* hero text swaps with the art: out 70 ms, in 140 ms */
+.hero { transition: opacity var(--t-in) linear, transform var(--t-scroll) var(--spring); }
+.hero.hero-out { opacity: 0; transform: translate3d(0, 8px, 0); transition: opacity var(--t-out) linear, transform var(--t-out) linear; }
+.backdrop-img { transition: opacity 360ms linear; }
+
+/* sheets appear on the panel spring */
+.sheet { transition: opacity 200ms linear, transform var(--t-appear) var(--spring); }
+.sheet-enter { opacity: 0; transform: translate3d(0, 20px, 0); }
+
+/* ---- Title art (clearLogo) ---------------------------------------------------------------------- */
+
+/* the box is reserved before the logo loads, so nothing below it moves when it arrives */
+.title-art { position: relative; }
+.title-art img { position: absolute; left: 0; bottom: 0; opacity: 0; transition: opacity 260ms linear; }
+.title-art.loaded img { opacity: 1; }
+.title-art .title-art-text { position: absolute; left: 0; bottom: 0; opacity: 0; transition: opacity 200ms linear; }
+.title-art.fallback .title-art-text { opacity: 1; }
+.hero .title-art { width: 760px; height: 120px; }
+.details-head-zone .title-art { width: 760px; height: 200px; }
+.title-art.small { width: 520px; height: 96px; margin-bottom: 10px; }
+.title-art-text.hero-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 860px; }

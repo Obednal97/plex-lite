@@ -83,6 +83,7 @@
         });
       }));
       stack.setZones(zones, 1);
+      stack.enter();
       if (visible) stack.focus(true);
       ambient(found[0].items[0]);
     });

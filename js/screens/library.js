@@ -93,7 +93,7 @@
   function Hero(el) {
     this.el = PL.el('div', 'hero');
     this.eyebrow = PL.el('div', 'hero-eyebrow');
-    this.title = PL.el('div', 'hero-title');
+    this.title = PL.el('div', 'hero-title-host');
     this.meta = PL.el('div', 'hero-meta');
     this.summary = PL.el('div', 'hero-summary');
     [this.eyebrow, this.title, this.meta, this.summary].forEach(function (n) { this.el.appendChild(n); }, this);
@@ -101,17 +101,36 @@
     this.update = PL.debounce(this.apply.bind(this), 350);
   }
 
+  // The art cross-fades at once; the text goes out (70 ms), swaps at the floor and comes back in,
+  // so a new title never pops in over the old one. The show's clearLogo stands in for its name.
   Hero.prototype.apply = function (item) {
     if (!item || (this.isVisible && !this.isVisible())) return;
-    this.eyebrow.textContent = item.type === 'episode' ? PL.fmt.episode(item) + (item.title ? ' · ' + item.title : '') : '';
-    var title = ui.itemTitle(item) || '';
-    this.title.textContent = title;
-    this.title.classList.toggle('long', title.length > 26);
-    PL.clear(this.meta);
-    this.meta.appendChild(document.createTextNode(ui.metaLine(item, { skipEpisode: true })));
-    if (item.viewOffset && item.duration) this.meta.appendChild(document.createTextNode(' · ' + PL.fmt.remaining(item)));
-    this.summary.textContent = item.summary || '';
+    var key = item.ratingKey + ':' + (item.viewOffset || 0);
     PL.app.backdrop.set(PL.plex.image(ui.artPath(item), 1920, 1080, { quality: 72 }), 'hero');
+    if (key === this.shownKey) return;
+    this.shownKey = key;
+    var self = this;
+    var fill = function () {
+      self.eyebrow.textContent = item.type === 'episode' ? PL.fmt.episode(item) + (item.title ? ' · ' + item.title : '') : '';
+      var title = ui.itemTitle(item) || '';
+      PL.clear(self.title);
+      var art = ui.titleArt(item, title, { area: 72000, maxH: 118, boxW: 760 });
+      if (art) self.title.appendChild(art);
+      else self.title.appendChild(PL.el('div', 'hero-title' + (title.length > 26 ? ' long' : ''), title));
+      PL.clear(self.meta);
+      self.meta.appendChild(document.createTextNode(ui.metaLine(item, { skipEpisode: true })));
+      if (item.viewOffset && item.duration) self.meta.appendChild(document.createTextNode(' · ' + PL.fmt.remaining(item)));
+      self.summary.textContent = item.summary || '';
+      self.el.classList.remove('hero-out');
+    };
+    clearTimeout(this.swapTimer);
+    if (!this.filled) {
+      this.filled = true;
+      fill();
+      return;
+    }
+    this.el.classList.add('hero-out');
+    this.swapTimer = setTimeout(fill, 75);
   };
 
   function RecommendedMode(screen) {
@@ -175,6 +194,7 @@
       });
     });
     this.stack.setZones(zones, 0);
+    this.stack.enter();
     if (hubs[0] && hubs[0].Metadata[0] && this.screen.visible) this.hero.apply(hubs[0].Metadata[0]);
     if (this.focused) this.stack.focus(true);
     this.addPluginShelves(zones);
@@ -523,7 +543,10 @@
     if (this.mode) {
       this.mode.setFocused(false);
       if (this.mode.destroy) this.mode.destroy();
-      this.modeHost.removeChild(this.mode.el);
+      // the old view fades out over the new one's entrance instead of being cut away
+      var old = this.mode.el;
+      old.classList.add('mode-out');
+      setTimeout(function () { if (old.parentNode) old.parentNode.removeChild(old); }, 90);
     }
     this.shadow.hide();
     if (this.shadow.el.parentNode) this.shadow.el.parentNode.removeChild(this.shadow.el);
@@ -531,6 +554,7 @@
     sessionModes[this.section.key] = MODES[i].value;
     this.mode = MODES[i].make(this);
     this.modeHost.appendChild(this.mode.el);
+    if (this.everShown) ui.enter(this.mode.el, 'mode-in', 40);
     if (this.visible) this.mode.show();
     if (this.area === 'content' && !PL.app.tabsFocused) this.mode.setFocused(true);
     this.updateHeader();
@@ -560,6 +584,7 @@
 
   LibraryScreen.prototype.show = function () {
     this.visible = true;
+    this.everShown = true;
     if (this.mode) this.mode.show();
     if (!PL.app.tabsFocused) this.focusArea(this.area);
   };

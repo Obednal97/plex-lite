@@ -66,6 +66,7 @@
 
   TabBar.prototype.setTabs = function (tabs) {
     PL.clear(this.pill);
+    this.glider = new PL.ui.Glider(this.pill);
     this.tabs = tabs;
     var self = this;
     this.nodes = tabs.map(function (t, i) {
@@ -77,16 +78,23 @@
     this.paint();
   };
 
+  // Labels only change colour; one plate (the tab you are on, moves on OK) and one bright capsule
+  // (focus, follows Left/Right) travel underneath them.
   TabBar.prototype.paint = function () {
     var self = this;
     this.nodes.forEach(function (n, i) {
       n.classList.toggle('focused', app.tabsFocused && i === self.index);
       n.classList.toggle('selected', i === self.selected);
     });
+    var rects = this.glider && this.glider.measure(this.nodes);
+    if (!rects) return;
+    this.glider.plate(rects[this.selected]);
+    this.glider.cap(app.tabsFocused ? rects[this.index] : null);
   };
 
   TabBar.prototype.show = function (on) {
     this.el.classList.toggle('hidden', !on);
+    if (on && this.glider && !this.glider.rects) this.paint();
   };
 
   TabBar.prototype.key = function (code) {
@@ -159,12 +167,17 @@
     return true;
   };
 
+  // Tab switches cross-fade: the old page fades out (70 ms) while the new one rises in.
   app.setRoot = function (screen) {
     while (app.stack.length) {
       var s = app.stack.pop();
       if (s.hide) s.hide();
       if (s.destroy) s.destroy();
-      if (s.el.parentNode) s.el.parentNode.removeChild(s.el);
+      var old = s.el;
+      if (old.parentNode) {
+        old.classList.add('screen-leave');
+        setTimeout(function (el) { return function () { if (el.parentNode) el.parentNode.removeChild(el); }; }(old), 90);
+      }
     }
     app.stack.push(screen);
     enter(screen);
