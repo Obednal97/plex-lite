@@ -149,6 +149,19 @@ function photo(res, q) {
 
 // ---- video ---------------------------------------------------------------------------------------
 
+// Placeholder captions for the demo's sidecar subtitle stream: one cue every 10 seconds.
+function subtitles(res, streamId) {
+  let dur = 0;
+  for (const it of model.items.values()) {
+    for (const m of it.Media || []) for (const p of m.Part) if ((p.Stream || []).some((s) => String(s.id) === String(streamId))) dur = p.duration / 1000;
+  }
+  if (!dur) return send(res, 404, 'no such stream', 'text/plain');
+  const t = (sec) => new Date(sec * 1000).toISOString().slice(11, 23).replace('.', ',');
+  const cues = [];
+  for (let s = 2, n = 1; s < dur; s += 10, n++) cues.push(`${n}\n${t(s)} --> ${t(s + 4)}\nDemo captions\n(${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')})\n`);
+  return send(res, 200, cues.join('\n'), 'text/plain; charset=utf-8');
+}
+
 function partById(id) {
   for (const it of model.items.values()) {
     for (const m of it.Media || []) for (const p of m.Part) if (String(p.id) === String(id)) return { item: it, part: p };
@@ -255,6 +268,7 @@ function pms(req, res, path, q) {
   if (path === '/photo/:/transcode') return photo(res, q);
   if ((m = /^\/library\/parts\/(\d+)\/\d+\/file\.webm$/.exec(path))) return video(req, res, m[1]);
   if (method === 'PUT' && /^\/library\/parts\/\d+$/.test(path)) return send(res, 200, '');
+  if ((m = /^\/library\/streams\/(\d+)$/.exec(path))) return subtitles(res, m[1]);
   if (path === '/library/sections') {
     return send(res, 200, container({ size: 2, title1: 'Plex Library', Directory: model.sections.map((s) => ({ ...s, allowSync: false, art: '', thumb: '' })) }));
   }

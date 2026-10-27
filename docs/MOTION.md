@@ -87,6 +87,12 @@ CSS transition (`css/motion.css`):
   same frame and fade up from 25% over 140 ms, and posters dissolve in as they arrive. The jump fetches just
   the 36 titles it draws in one request (`Grid.loadWindow`) and holds the page prefetch until they're
   in, so the TV parses half the JSON before the cards show.
+- **Player.** The controls fade (250 ms) as one layer. The rail's fills are `scaleX` transforms
+  written at most four times a second (on `timeupdate`) while the controls are up, and not at all
+  while they are hidden; while scrubbing, one write per frame (`PL.rafThrottle`). The head and the
+  time bubble move by `translate3d`, the rail thickens with `scaleY`, and the skip pill and Up Next
+  rise with `translate3d` when the controls open. Values are only written when they change, so an
+  unchanged clock costs no layout.
 
 Only `transform` and `opacity` animate (plus the capsule's `width`, a single small element). Rows
 use `top` for placement so the entrance animations can own `transform`.

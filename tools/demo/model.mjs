@@ -96,6 +96,9 @@ class Model {
         Stream: [
           { id: this.nextId++, streamType: 1, codec: 'vp9', index: 0, displayTitle: `${height}p (VP9)`, selected: true },
           { id: this.nextId++, streamType: 2, codec: 'opus', index: 1, channels: 2, language: 'English', languageCode: 'eng', displayTitle: 'English (Opus Stereo)', selected: true },
+          // a sidecar text track (server.mjs serves placeholder cues), so the player's subtitle
+          // menu and drawing can be tried
+          { id: this.nextId, streamType: 3, codec: 'srt', key: `/library/streams/${this.nextId++}`, language: 'English', languageCode: 'eng', displayTitle: 'English (SRT)', title: 'Demo captions' },
         ],
       }],
     }];

@@ -1,21 +1,119 @@
-/* Player extras on top of the .player / .osd / .scrub / .upnext rules in app.css. */
-.player-status { z-index: 5; transition: opacity 200ms var(--ease); }
+/* Player: the overlay (title, seek bar, buttons), the skip pill, Up Next and subtitles.
+   Bottom-up, at 1920x1080: buttons 54-126, times 160-190, bar 210-216, title 254-342.
+   Everything that moves is transform/opacity; the bar's fills are scaleX, the head and bubble
+   translate3d (see docs/MOTION.md). Loaded before theme.css, so the shared .btn look applies. */
+
+.player-status { position: absolute; left: 0; top: 480px; width: 1920px; text-align: center; font-size: 28px; color: var(--text-2); z-index: 5; transition: opacity 200ms var(--ease); }
+.player-status .spinner { margin: 0 auto 24px; }
 .player-status-hidden { opacity: 0; visibility: hidden; }
 .player-status-hidden .spinner { display: none; animation: none; }
 .player-status-error .spinner { display: none; }
 .player-status-text { text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8); }
-.scrub-head { position: absolute; left: 0; top: 0; width: 0; height: 8px; }
-.scrub-buffer, .scrub-played { transform: scaleX(0); }
-.upnext { z-index: 6; transition: opacity 250ms var(--ease), transform 250ms var(--ease); }
-.upnext-hidden { opacity: 0; transform: translate3d(0, 24px, 0); }
-.upnext-hint { font-size: 22px; line-height: 28px; color: var(--text-3); }
-.skip-pill {
-  position: absolute; right: 96px; bottom: 180px; z-index: 6; height: 64px; line-height: 62px; padding: 0 36px; border-radius: 32px;
-  font-size: 26px; font-weight: 600; background: #fff; color: #000; border: 1px solid #fff;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
-  transition: opacity 200ms var(--ease), transform 200ms var(--ease);
+
+/* ---- Overlay ------------------------------------------------------------------------------------ */
+
+.osd { position: absolute; left: 0; bottom: 0; width: 1920px; height: 480px; transition: opacity 250ms var(--ease); }
+.osd.faded { opacity: 0; pointer-events: none; }
+.osd-shade {
+  position: absolute; left: 0; bottom: 0; width: 1920px; height: 480px;
+  background: linear-gradient(0deg, rgba(5, 5, 8, 0.9) 0%, rgba(5, 5, 8, 0.62) 40%, rgba(5, 5, 8, 0) 100%);
 }
+.osd-text { position: absolute; left: 96px; bottom: 254px; width: 1300px; transition: opacity 160ms linear; }
+.osd.scrubbing .osd-text { opacity: 0; }
+.osd-eyebrow { font-size: 24px; line-height: 30px; color: var(--text-2); font-weight: 600; letter-spacing: 0.04em; }
+.osd-title { font-size: 48px; line-height: 58px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.osd-live { display: inline-block; padding: 0 10px; height: 28px; line-height: 28px; border-radius: 6px; background: #e33; color: #fff; font-size: 18px; font-weight: 700; letter-spacing: 0.08em; margin-right: 12px; }
+
+/* ---- Seek bar: a 6 px rail that thickens and grows a head when focused ------------------------------ */
+
+.scrub { position: absolute; left: 96px; bottom: 210px; width: 1728px; height: 6px; }
+.scrub-track {
+  position: absolute; left: 0; top: 0; width: 1728px; height: 6px; border-radius: 3px;
+  background: rgba(255, 255, 255, 0.2); transform-origin: 50% 50%; transition: transform 200ms var(--spring);
+}
+.scrub-buffer, .scrub-played { position: absolute; left: 0; top: 0; width: 1728px; height: 6px; border-radius: 3px; transform-origin: 0 0; transform: scaleX(0); }
+.scrub-buffer { background: rgba(255, 255, 255, 0.28); }
+.scrub-played { background: rgba(247, 250, 252, 0.95); }
+.scrub-ticks { position: absolute; left: 0; top: 0; width: 0; height: 6px; }
+.scrub-tick { position: absolute; left: -1px; top: 0; width: 3px; height: 6px; background: rgba(5, 5, 8, 0.6); }
+.scrub-head { position: absolute; left: 0; top: 0; width: 0; height: 6px; }
+.scrub-thumb {
+  position: absolute; left: -13px; top: -10px; width: 26px; height: 26px; border-radius: 13px; background: var(--focus);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); opacity: 0; transform: scale(0.5);
+  transition: opacity 160ms linear, transform 200ms var(--spring);
+}
+.scrub.focused .scrub-track, .pointer .scrub.hovering .scrub-track { transform: scaleY(1.67); }
+.scrub.focused .scrub-thumb, .scrub.seeking .scrub-thumb { opacity: 1; transform: none; }
+.pointer .scrub.focused .scrub-track { transform: none; }
+.pointer .scrub.focused .scrub-thumb { opacity: 0; }
+.pointer .scrub.seeking .scrub-thumb { opacity: 1; transform: none; }
+.scrub-bubble {
+  position: absolute; left: 0; bottom: 22px; width: 240px; height: 52px; line-height: 50px; border-radius: 26px; text-align: center;
+  white-space: nowrap; font-size: 28px; font-weight: 700; color: var(--text);
+  background: linear-gradient(180deg, rgba(58, 58, 64, 0.97), rgba(40, 40, 46, 0.98));
+  border: 1px solid var(--rim); border-top-color: var(--rim-light); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+  opacity: 0; transition: opacity 120ms linear;
+}
+.scrub-bubble-delta { margin-left: 12px; font-size: 22px; font-weight: 600; color: var(--text-2); }
+.scrub.seeking .scrub-bubble, .scrub.hovering .scrub-bubble { opacity: 1; }
+/* the pointer's target: taller than the rail so the Magic Remote can hit it */
+.scrub-hit { position: absolute; left: 0; top: -22px; width: 1728px; height: 50px; }
+.pointer .scrub-hit { cursor: pointer; }
+
+.osd-times { position: absolute; left: 96px; bottom: 160px; width: 1728px; height: 30px; line-height: 30px; font-size: 24px; color: var(--text-2); font-weight: 500; }
+.osd-times .right { position: absolute; right: 0; top: 0; }
+
+/* ---- Buttons: the details page's dark capsules; the focused one is the white plate --------------- */
+
+.osd .osd-buttons { top: auto; bottom: 54px; height: 72px; }
+.osd .osd-buttons .btn { margin-right: 16px; padding: 0 28px; }
+.osd .osd-buttons .btn:first-child { transform-origin: 0 50%; }
+
+/* ---- Skip Intro / Skip Credits ---------------------------------------------------------------------- */
+
+/* Sits at the bottom right; rises above the bar when the overlay is open. Focused = white plate. */
+.skip-pill {
+  position: absolute; right: 96px; bottom: 96px; z-index: 6; height: 76px; line-height: 76px; padding: 0 44px 0 36px;
+  border-radius: 38px; white-space: nowrap; font-size: 30px; font-weight: 700;
+  background: var(--control); color: var(--text); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+  transform-origin: 100% 50%;
+  transition: opacity 200ms var(--ease), transform var(--t-pop) var(--spring), background-color 160ms linear, color 160ms linear;
+}
+.skip-pill .ico { display: inline-block; width: 32px; height: 32px; vertical-align: -7px; margin-right: 14px; }
+.skip-pill.focused { background: var(--focus); color: var(--focus-ink); transform: scale(1.06); }
 .skip-pill-hidden { opacity: 0; transform: translate3d(0, 16px, 0); pointer-events: none; }
+.osd-open .skip-pill { transform: translate3d(0, -190px, 0); }
+.osd-open .skip-pill.focused { transform: translate3d(0, -190px, 0) scale(1.06); }
+.osd-open .skip-pill-hidden { transform: translate3d(0, -174px, 0); }
+/* the pill keeps its white plate in pointer mode too: it is the one thing to press */
+.pointer .skip-pill { cursor: pointer; }
+.pointer .skip-pill:hover { background: var(--focus); color: var(--focus-ink); }
+
+/* ---- Up Next: a glass card whose one button is already focused -------------------------------------- */
+
+.upnext {
+  position: absolute; right: 96px; bottom: 96px; z-index: 6; width: 620px; padding: 28px 30px 26px; border-radius: 30px;
+  background: linear-gradient(180deg, rgba(58, 58, 64, 0.97), rgba(40, 40, 46, 0.98));
+  border: 1px solid var(--rim); border-top-color: var(--rim-light); box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  transition: opacity 250ms var(--ease), transform 250ms var(--ease);
+}
+.upnext-hidden { opacity: 0; transform: translate3d(0, 24px, 0); pointer-events: none; }
+.osd-open .upnext { transform: translate3d(0, -190px, 0); }
+.osd-open .upnext-hidden { transform: translate3d(0, -166px, 0); }
+.upnext-label { font-size: 24px; line-height: 30px; color: var(--text-2); font-weight: 600; }
+.upnext-title { font-size: 32px; line-height: 40px; font-weight: 700; margin: 6px 0 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upnext-btn {
+  display: inline-block; height: 68px; line-height: 68px; padding: 0 36px 0 30px; border-radius: 34px;
+  font-size: 28px; font-weight: 700; background: var(--focus); color: var(--focus-ink);
+}
+.upnext-btn { transition: background-color 160ms linear, color 160ms linear; }
+.upnext-dim .upnext-btn { background: var(--fill-hi); color: var(--text); }
+.upnext-btn .ico { display: inline-block; width: 28px; height: 28px; vertical-align: -6px; margin-right: 12px; }
+.upnext-hint { margin-top: 16px; font-size: 24px; line-height: 30px; color: var(--text-3); }
+.pointer .upnext { cursor: pointer; }
+
+/* ---- Subtitles (drawn by the app) -------------------------------------------------------------------- */
+
 .subs {
   position: absolute; left: 160px; width: 1600px; bottom: 88px; z-index: 4; display: none;
   text-align: center; white-space: pre-line;
@@ -23,6 +121,5 @@
   text-shadow: 0 0 4px #000, 0 0 4px #000, 0 2px 6px rgba(0, 0, 0, 0.9), 0 0 12px rgba(0, 0, 0, 0.6);
   transition: transform 250ms var(--ease);
 }
-.subs-raised { transform: translate3d(0, -230px, 0); }
-.scrub-ticks { position: absolute; left: 0; top: 0; width: 0; height: 8px; }
-.scrub-tick { position: absolute; left: -1px; top: 0; width: 3px; height: 8px; background: rgba(0, 0, 0, 0.55); }
+/* above the overlay's title while it is open */
+.subs-raised { transform: translate3d(0, -300px, 0); }

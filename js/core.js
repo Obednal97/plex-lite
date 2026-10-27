@@ -10,6 +10,7 @@ PL.KEY = {
   LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13,
   BACK: 461, ESC: 27, BACKSPACE: 8,
   PLAY: 415, PAUSE: 19, PLAY_PAUSE: 179, STOP: 413, FF: 417, REW: 412,
+  NEXT_TRACK: 176, PREV_TRACK: 177, // keyboard and Bluetooth media keys (MediaTrackNext/Previous)
   RED: 403, GREEN: 404, YELLOW: 405, BLUE: 406,
   CH_UP: 33, CH_DOWN: 34, INFO: 457,
   OK_LONG: -13, // synthesised by the app when OK is held (quick-actions menu)

@@ -167,27 +167,7 @@ html, body { background: var(--ground); color: var(--text); }
   border: 1px solid var(--rim); border-top-color: var(--rim-light);
 }
 
-/* ---- Player OSD: title, a hairline rail, nothing else -------------------------------------------- */
-
-.osd { height: 380px; }
-.osd-shade { height: 380px; background: linear-gradient(0deg, rgba(5, 5, 8, 0.86) 0%, rgba(5, 5, 8, 0.5) 42%, rgba(5, 5, 8, 0) 100%); }
-.osd-text { bottom: 150px; }
-.osd-eyebrow { font-size: 24px; line-height: 30px; color: var(--text-2); font-weight: 600; letter-spacing: 0.04em; }
-.osd-title { font-size: 48px; line-height: 58px; font-weight: 700; }
-.scrub { bottom: 112px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.20); }
-.scrub-buffer, .scrub-played { height: 6px; border-radius: 3px; }
-.scrub-buffer { background: rgba(255, 255, 255, 0.28); }
-.scrub-played { background: rgba(247, 250, 252, 0.95); }
-.scrub-thumb { top: -8px; width: 22px; height: 22px; border-radius: 11px; }
-.scrub-bubble { background: linear-gradient(180deg, rgba(58, 58, 64, 0.97), rgba(40, 40, 46, 0.98)); border: 1px solid var(--rim); font-size: 26px; }
-.osd-times { bottom: 64px; font-size: 24px; color: var(--text-2); }
-.upnext, .skip-pill { border-radius: 30px; }
-.upnext {
-  background: linear-gradient(180deg, rgba(58, 58, 64, 0.97), rgba(40, 40, 46, 0.98));
-  border: 1px solid var(--rim); border-top-color: var(--rim-light);
-}
-.upnext-label { font-size: 24px; color: var(--text-2); }
-.upnext-hint { font-size: 24px; color: var(--text-3); }
+/* The player overlay follows the same language (dark capsules, one white focus plate): player.css. */
 
 /* ---- Search: the query is the headline --------------------------------------------------------- */
 

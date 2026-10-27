@@ -74,7 +74,16 @@ Transform and opacity only.
 - **Live TV, Settings:** quiet rows on the ground (hairline separators), white plate on focus.
 - **Sheets, toasts, Up Next:** lit glass (gradient fill + rim + soft shadow), opaque enough that
   no live blur is needed.
-- **Player:** 48 px title, 6 px hairline rail, times at 24 px, deep bottom scrim only.
+- **Player:** nothing on screen while watching. Any key raises one bottom block over a deep scrim:
+  eyebrow + 48 px title, a 6 px rail with elapsed and remaining times (24 px), and a row of the
+  details page's dark capsules (Play/Pause, −10 s, +30 s, Subtitles, Audio, Chapters, Next
+  episode). Three focus zones: the rail (focused = it thickens and grows a white head), the
+  capsules (white plate), and the corner call to action. Scrubbing fades the title and shows a
+  glass time bubble with the jump ("7:40 +2:00") above the head; the seek happens on release.
+  Skip Intro / Skip Credits is a 76 px white pill bottom right (it is the focus while shown) and
+  rises above the rail when the controls open; Up Next is a glass card with its own white button.
+  Subtitles move up out of the way while the controls are open. Layout, bottom up: buttons 54,
+  times 160, rail 210, title 254; pill and Up Next 96 (286 with the controls).
 
 ## Performance rules (unchanged)
 

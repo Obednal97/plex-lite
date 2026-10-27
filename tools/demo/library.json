@@ -213,7 +213,8 @@
   "player": "Sintel",
   "upNextQuery": "caminandes",
   "upNextShow": "Caminandes",
-  "surpriseTab": "Movies"
+  "surpriseTab": "Movies",
+  "skipIntroEpisode": "Llamigos"
  },
  "movies": [
   {
@@ -333,7 +334,33 @@
     }
    ],
    "licence": "CC BY 3.0",
-   "licenceNote": "Blender open movie, (CC) Blender Foundation | www.blender.org"
+   "licenceNote": "Blender open movie, (CC) Blender Foundation | www.blender.org",
+   "chapters": [
+    {
+     "title": "Chapter 1",
+     "start": 0
+    },
+    {
+     "title": "Chapter 2",
+     "start": 95
+    },
+    {
+     "title": "Chapter 3",
+     "start": 230
+    },
+    {
+     "title": "Chapter 4",
+     "start": 390
+    },
+    {
+     "title": "Chapter 5",
+     "start": 560
+    },
+    {
+     "title": "Chapter 6",
+     "start": 745
+    }
+   ]
   },
   {
    "id": "tears-of-steel",
@@ -845,7 +872,14 @@
        "index": 1,
        "durationMin": 1.5,
        "thumb": "cam1-still-21",
-       "watched": true
+       "watched": true,
+       "markers": [
+        {
+         "type": "intro",
+         "start": 2,
+         "end": 14
+        }
+       ]
       },
       {
        "title": "Gran Dillama",
@@ -870,7 +904,18 @@
        "video": "cam3",
        "index": 3,
        "durationMin": 2.5,
-       "thumb": "cam3-still-12"
+       "thumb": "cam3-still-12",
+       "markers": [
+        {
+         "type": "intro",
+         "start": 3,
+         "end": 16
+        },
+        {
+         "type": "credits",
+         "start": 128
+        }
+       ]
       }
      ]
     }

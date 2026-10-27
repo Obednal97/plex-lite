@@ -150,7 +150,7 @@ async function playAndPause(page, minSec) {
     const p = PL.app.top();
     return p.video && p.state === 'playing' && p.video.currentTime > m && p.video.readyState >= 3;
   }, minSec, { timeout: 90000, polling: 250 });
-  await press(page, 'ok');
+  await press(page, 'MediaPlayPause');
   await page.waitForTimeout(1200);
 }
 
@@ -256,6 +256,34 @@ const SHOTS = {
     await press(page, 'ok');
     await playAndPause(page, (C.playerAt || 60) - 1);
     await page.waitForTimeout(600);
+  },
+  // scrubbing: Right taps move the target, the bubble shows the time and the jump
+  'player-scrub': async (page) => {
+    await openTitle(page, C.playerQuery, C.player);
+    await settle(page, 400);
+    await press(page, 'ok');
+    await playAndPause(page, (C.playerAt || 60) - 1);
+    await press(page, 'right', 'right', 'right', 'right');
+    await page.waitForTimeout(300);
+  },
+  // the button row, Subtitles focused
+  'player-buttons': async (page) => {
+    await openTitle(page, C.playerQuery, C.player);
+    await settle(page, 400);
+    await press(page, 'ok');
+    await playAndPause(page, (C.playerAt || 60) - 1);
+    await press(page, 'down', 'right', 'right', 'right');
+    await page.waitForTimeout(500);
+  },
+  // Skip Intro, a few seconds into an episode with an intro marker
+  'skip-intro': async (page) => {
+    await page.evaluate((t) => PL.plex.get('/library/sections/2/all', { type: 4 }).then((mc) => {
+      const ep = mc.Metadata.find((m) => m.title === t);
+      PL.app.push(PL.screens.player(ep, {}));
+    }), C.skipIntroEpisode);
+    await page.waitForFunction(() => PL.app.top().pillVisible, null, { timeout: 90000, polling: 200 });
+    await page.evaluate(() => PL.app.top().hideOsd());
+    await page.waitForTimeout(900);
   },
   'up-next': async (page) => {
     await openTitle(page, C.upNextQuery, C.upNextShow);
