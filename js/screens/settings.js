@@ -45,6 +45,21 @@
         { label: 'Sign out', value: '', action: signOut },
         { label: 'About', value: 'Plex Lite ' + PL.VERSION, action: function () {} },
       ];
+      // Plugins: an On/Off row per installed plugin, then the enabled plugins' own rows; all before
+      // Sign out / About.
+      var pluginToggles = PL.plugins.list().map(function (p) {
+        return {
+          label: 'Plugin · ' + p.name,
+          value: p.enabled ? 'On' : 'Off',
+          action: function () {
+            PL.plugins.setEnabled(p.id, !p.enabled);
+            PL.toast(p.name + (p.enabled ? ' turned off' : ' turned on'));
+            build();
+          },
+        };
+      });
+      defs.splice(defs.length - 2, 0, pluginToggles, PL.plugins.settingsRows(build));
+      defs = [].concat.apply([], defs);
       PL.clear(panel);
       rows = defs.map(function (d, i) {
         var n = PL.el('div', 'row', d.label);

@@ -77,6 +77,10 @@
 
     var self = this;
     this.runServer = PL.debounce(function (q) { self.serverSearch(q); }, 300);
+    // plugin shelves (e.g. Overseerr requests) come after Search's own; slower, so a longer pause
+    this.pluginRows = [];
+    this.pluginSeq = 0;
+    this.runPlugins = PL.debounce(function (q) { self.pluginSearch(q); }, 450);
     this.ambient = PL.debounce(function (item) {
       var path = item && (ui.artPath(item) || item.thumb);
       if (path) PL.app.backdrop.set(ui.ambient(path), 'ambient');
@@ -211,6 +215,9 @@
     if (!q) {
       this.runServer.cancel();
       this.abortServer();
+      this.runPlugins.cancel();
+      this.pluginSeq++;
+      this.pluginRows = [];
       this.local = [];
       this.server = { titles: [], people: [], episodes: [] };
       this.serverDone = false;
@@ -223,7 +230,22 @@
       this.serverDone = false;
       if (this.visible) this.runServer(q);
       else this.serverStale = true;
+      if (PL.plugins.hasSearch()) {
+        this.pluginSeq++;
+        if (this.visible) this.runPlugins(q);
+      }
     }
+  };
+
+  // Stale answers (the query moved on, or the screen went away) are dropped.
+  SearchScreen.prototype.pluginSearch = function (q) {
+    var self = this;
+    var seq = ++this.pluginSeq;
+    PL.plugins.searchRows(q).then(function (rows) {
+      if (!self.alive || seq !== self.pluginSeq || q !== self.query.trim()) return;
+      self.pluginRows = rows;
+      self.render();
+    });
   };
 
   SearchScreen.prototype.abortServer = function () {
@@ -310,6 +332,7 @@
       if (titles.length) sections.push({ id: 'titles', title: 'Movies & Shows', kind: 'poster', items: titles });
       if (this.server.people.length) sections.push({ id: 'people', title: 'People', kind: 'season', items: this.server.people });
       if (this.server.episodes.length) sections.push({ id: 'episodes', title: 'Episodes', kind: 'wide', items: this.server.episodes });
+      this.pluginRows.forEach(function (row) { if (row.items.length) sections.push(row); });
     }
     this.renderStatus(q, sections.length);
     this.renderZones(sections);
@@ -354,6 +377,7 @@
         kind: s.kind,
         left: RESULTS_LEFT,
         shadow: self.shadow,
+        makeCard: s.makeCard,
         onFocusItem: function (item) { self.focusedItem(item); },
         onSelect: function (item) { self.open(item); },
       });
@@ -382,6 +406,10 @@
   };
 
   SearchScreen.prototype.open = function (item) {
+    if (item.plugin) {
+      PL.plugins.select(item);
+      return;
+    }
     if (item.type === 'person') {
       var p = item.person;
       PL.app.push(screens.items(p.name, '/library/sections/' + p.section + '/all', { actor: p.id }));
@@ -451,6 +479,7 @@
       this.serverSearch(this.query.trim());
     }
     this.serverStale = false;
+    if (this.query.trim() && !this.pluginRows.length && PL.plugins.hasSearch()) this.runPlugins(this.query.trim());
   };
 
   SearchScreen.prototype.hide = function () {
@@ -459,6 +488,7 @@
     if (this.query.trim() && !this.serverDone) this.serverStale = true;
     this.runServer.cancel();
     this.abortServer();
+    this.runPlugins.cancel();
     this.stack.focus(false);
     this.shadow.hide();
     this.paintKeys();
@@ -478,6 +508,8 @@
     this.alive = false;
     this.offIndex();
     this.runServer.cancel();
+    this.runPlugins.cancel();
+    this.pluginSeq++;
     this.ambient.cancel();
     this.abortServer();
   };

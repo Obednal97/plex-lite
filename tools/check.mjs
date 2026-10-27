@@ -47,7 +47,7 @@ function files(dir, ext) {
 let problems = 0;
 const report = (file, line, msg) => { problems++; console.log(`${relative(APP, file)}:${line}  ${msg}`); };
 
-for (const file of files(join(APP, 'js'), '.js')) {
+for (const file of [...files(join(APP, 'js'), '.js'), ...files(join(APP, 'plugins'), '.js')]) {
   const src = readFileSync(file, 'utf8');
   let ast;
   try {
@@ -71,7 +71,7 @@ for (const file of files(join(APP, 'js'), '.js')) {
   if (!/^\s*(\/\/.*\n)*\s*'use strict';/m.test(src)) report(file, 1, "missing 'use strict'");
 }
 
-for (const file of files(join(APP, 'css'), '.css')) {
+for (const file of [...files(join(APP, 'css'), '.css'), ...files(join(APP, 'plugins'), '.css')]) {
   // blank out comments but keep line numbers
   const text = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '));
   text.split('\n').forEach((code, i) => {
