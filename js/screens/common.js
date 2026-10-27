@@ -103,6 +103,59 @@
     };
   };
 
+  // ---- Quick actions for a card (hold OK) -------------------------------------------------------
+
+  // Returns false for items without actions (people, extras, collections) so a normal select runs.
+  screens.itemMenu = function (item, onDone) {
+    var t = item && item.type;
+    if (['movie', 'episode', 'show', 'season'].indexOf(t) === -1) return false;
+    var rows = [];
+    var play = function (offset) {
+      return function () { PL.app.push(screens.player(item, { offset: offset })); };
+    };
+    var open = function (target) {
+      return function () { PL.app.push(screens.details(target)); };
+    };
+    if (t === 'movie' || t === 'episode') {
+      if (item.viewOffset > 0) {
+        rows.push({ label: 'Resume from ' + PL.fmt.clock(item.viewOffset / 1000), action: play(item.viewOffset) });
+        rows.push({ label: 'Play from beginning', action: play(0) });
+      } else {
+        rows.push({ label: 'Play', action: play(0) });
+      }
+    }
+    var watched = PL.ui.isWatched(item);
+    var partial = item.viewOffset > 0 || (item.viewedLeafCount > 0 && !watched);
+    var mark = function (on) {
+      return function () {
+        PL.plex.setWatched(item.ratingKey, on).then(function () {
+          if (on) {
+            item.viewCount = (item.viewCount || 0) + 1;
+            if (item.leafCount) item.viewedLeafCount = item.leafCount;
+          } else {
+            item.viewCount = 0;
+            if (item.leafCount) item.viewedLeafCount = 0;
+          }
+          delete item.viewOffset;
+          PL.toast(on ? 'Marked as watched' : 'Marked as unwatched');
+          if (onDone) onDone();
+        }, function (err) { PL.toast(PL.errorMessage(err)); });
+      };
+    };
+    if (!watched) rows.push({ label: 'Mark as watched', action: mark(true) });
+    if (watched || partial) rows.push({ label: 'Mark as unwatched', action: mark(false) });
+    if (t === 'episode' && item.grandparentRatingKey) {
+      rows.push({ label: 'Go to show', action: open({ ratingKey: item.grandparentRatingKey, type: 'show', title: item.grandparentTitle }) });
+    }
+    if (t === 'season' && item.parentRatingKey) {
+      rows.push({ label: 'Go to show', action: open({ ratingKey: item.parentRatingKey, type: 'show', title: item.parentTitle }) });
+    }
+    rows.push({ label: 'Details', action: open(item) });
+    var heading = t === 'episode' ? (item.grandparentTitle || '') + ' · ' + PL.fmt.episode(item) : (item.title || '');
+    PL.app.push(screens.sheet([{ heading: heading, rows: rows }], { focus: 0 }));
+    return true;
+  };
+
   // ---- Text entry (uses the TV's own on-screen keyboard) ---------------------------------------
 
   // onDone(value) -> true to close, false to keep editing.

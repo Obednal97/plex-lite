@@ -70,6 +70,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function pressKeys(c, list) {
   for (const k of list) {
     if (k.startsWith('ms:')) { await sleep(Number(k.slice(3))); continue; }
+    if (k.startsWith('hold:')) { // hold:<key>:<ms>
+      const [, name, ms] = k.split(':');
+      const hc = KEYS[name];
+      await c.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', windowsVirtualKeyCode: hc, nativeVirtualKeyCode: hc });
+      await sleep(Number(ms || 800));
+      await c.send('Input.dispatchKeyEvent', { type: 'keyUp', windowsVirtualKeyCode: hc, nativeVirtualKeyCode: hc });
+      await sleep(Number(process.env.KEY_GAP || 250));
+      continue;
+    }
     // named keys, single letters/digits ("a", "7"), or raw codes ("k403")
     let code = KEYS[k];
     if (!code && /^[a-z0-9]$/.test(k)) code = k.toUpperCase().charCodeAt(0);

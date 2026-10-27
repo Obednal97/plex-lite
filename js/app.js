@@ -203,7 +203,41 @@
 
   var fastTimer = null;
 
+  // OK on screens with cards acts on release, so holding it (550 ms) can open the quick-actions menu.
+  var ok = { down: false, long: false, timer: null };
+
+  function okWanted(e) {
+    var s = app.top();
+    var t = e.target;
+    return s && s.longPress && !app.tabsFocused && !(t && t.tagName === 'INPUT');
+  }
+
+  function okPress() {
+    handleKey({ keyCode: PL.KEY.ENTER, target: document.body, repeat: false, preventDefault: function () {} });
+  }
+
+  function onKeyUp(e) {
+    if (e.keyCode !== PL.KEY.ENTER || !ok.down) return;
+    ok.down = false;
+    clearTimeout(ok.timer);
+    if (!ok.long) okPress();
+    e.preventDefault();
+  }
+
   function onKey(e) {
+    if (e.keyCode === PL.KEY.ENTER && (ok.down || okWanted(e))) {
+      e.preventDefault();
+      if (e.repeat || ok.down) return;
+      ok.down = true;
+      ok.long = false;
+      ok.timer = setTimeout(function () {
+        ok.long = true;
+        var s = app.top();
+        var handled = s && s.longPress && s.key && s.key(PL.KEY.OK_LONG);
+        if (!handled) okPress();
+      }, 550);
+      return;
+    }
     var t0 = performance.now();
     handleKey(e);
     var ms = performance.now() - t0;
@@ -358,6 +392,7 @@
     app.tabs = new TabBar(root);
     app.tabs.show(false);
     document.addEventListener('keydown', onKey, true);
+    document.addEventListener('keyup', onKeyUp, true);
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden) return;
       app.stack.slice().forEach(function (s) { if (s.onHidden) s.onHidden(); });

@@ -467,6 +467,7 @@
 
   function LibraryScreen(section) {
     this.root = true;
+    this.longPress = true;
     this.section = section;
     this.el = PL.el('div', 'library');
     this.shadow = new ui.FocusShadow();
@@ -604,6 +605,7 @@
     grid.reset(0);
     return {
       el: el,
+      longPress: true,
       show: function () {
         var item = grid.items[grid.index];
         PL.app.backdrop.set(item ? ui.ambient(ui.artPath(item)) : null, 'ambient');

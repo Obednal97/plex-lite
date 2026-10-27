@@ -283,8 +283,28 @@
     return this.items[this.index];
   };
 
+  // Long-press OK on a card opens its quick actions (PL.screens.itemMenu); onDone repaints the card.
+  ui.longPress = function (item, onDone) {
+    return !!(PL.screens && PL.screens.itemMenu && PL.screens.itemMenu(item, onDone));
+  };
+
+  Shelf.prototype.refreshItem = function (ratingKey) {
+    for (var i = 0; i < this.items.length; i++) {
+      if (this.items[i] && this.items[i].ratingKey === ratingKey && this.nodes[i]) {
+        this.track.removeChild(this.nodes[i]);
+        delete this.nodes[i];
+      }
+    }
+    this.render();
+  };
+
   Shelf.prototype.key = function (code) {
     var K = PL.KEY;
+    if (code === K.OK_LONG) {
+      var held = this.items[this.index];
+      var self = this;
+      return !!held && (this.opts.onLongPress || ui.longPress)(held, function () { self.refreshItem(held.ratingKey); });
+    }
     if (code === K.LEFT || code === K.RIGHT) {
       var next = this.index + (code === K.RIGHT ? 1 : -1);
       if (next < 0 || next >= this.items.length) return false;
@@ -712,8 +732,25 @@
     return true;
   };
 
+  Grid.prototype.refreshItem = function (ratingKey) {
+    var self = this;
+    Object.keys(this.nodes).forEach(function (k) {
+      var it = self.items[Number(k)];
+      if (it && it.ratingKey === ratingKey) {
+        self.inner.removeChild(self.nodes[k]);
+        delete self.nodes[k];
+      }
+    });
+    this.render();
+  };
+
   Grid.prototype.key = function (code) {
     var K = PL.KEY;
+    if (code === K.OK_LONG) {
+      var held = this.items[this.index];
+      var self = this;
+      return !!held && (this.opts.onLongPress || ui.longPress)(held, function () { self.refreshItem(held.ratingKey); });
+    }
     var col = this.index % this.cols;
     if (code === K.LEFT) return col > 0 && this.move(this.index - 1);
     if (code === K.RIGHT) return col < this.cols - 1 && this.move(this.index + 1);

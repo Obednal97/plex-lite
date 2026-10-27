@@ -163,6 +163,7 @@
 
   function DetailsScreen(item) {
     this.item = item;
+    this.longPress = true;
     this.el = PL.el('div', 'details');
     this.shadow = new ui.FocusShadow();
     this.status = PL.el('div', 'loading');
@@ -293,6 +294,14 @@
       hint: watched ? 'Mark as unwatched' : 'Mark as watched',
       action: function () { self.toggleWatched(); },
     });
+    // part-way through: offer clearing the progress as well as finishing it
+    var partial = !watched && (f.viewOffset > 0 || (f.viewedLeafCount > 0 && f.viewedLeafCount < f.leafCount));
+    if (partial) {
+      out.push({
+        icon: 'watched', label: 'Mark ' + (f.type === 'show' ? 'show ' : '') + 'unwatched',
+        action: function () { self.setWatched(false); },
+      });
+    }
     var season = f.type === 'show' && this.seasons && this.seasons[this.seasonIndex];
     if (season) {
       var seasonWatched = ui.isWatched(season);
@@ -495,9 +504,12 @@
   };
 
   DetailsScreen.prototype.toggleWatched = function () {
+    this.setWatched(!ui.isWatched(this.full));
+  };
+
+  DetailsScreen.prototype.setWatched = function (watched) {
     var self = this;
     var f = this.full;
-    var watched = !ui.isWatched(f);
     PL.plex.setWatched(f.ratingKey, watched).then(function () {
       PL.toast(watched ? 'Marked as watched' : 'Marked as unwatched');
       self.reload();

@@ -37,6 +37,7 @@
   }
 
   function SearchScreen() {
+    this.longPress = true;
     this.root = true;
     this.alive = true;
     this.el = PL.el('div', 'search-screen');
