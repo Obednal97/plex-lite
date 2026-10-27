@@ -339,7 +339,8 @@
   // remote lands; by default the skip pill when it is showing, else the seek bar.
   Player.prototype.showOsd = function (zone) {
     var self = this;
-    if (this.osdHidden) {
+    var wasHidden = this.osdHidden;
+    if (wasHidden) {
       this.osdHidden = false;
       this.osd.classList.remove('faded');
       this.el.classList.add('osd-open');
@@ -350,7 +351,7 @@
     }
     this.paintPill();
     this.paintZone();
-    this.paintScrub();
+    if (wasHidden) this.paintScrub();
     clearTimeout(this.osdTimer);
     if (this.state === 'playing' && this.pendingSeek == null) {
       this.osdTimer = setTimeout(function () {
@@ -502,8 +503,10 @@
       var d = Math.round(at - now);
       this.setPainted('bdelta', this.bubbleDelta, 'text', hover || Math.abs(d) < 1 ? '' : (d > 0 ? '+' : '−') + PL.fmt.clock(Math.abs(d)));
     }
-    this.setPainted('el', this.elapsed, 'text', PL.fmt.clock(pos));
-    var left = Math.max(0, dur - pos);
+    // the times stay on the real position (the bubble shows the target), so a held key only
+    // rewrites the bubble's text
+    this.setPainted('el', this.elapsed, 'text', PL.fmt.clock(now));
+    var left = Math.max(0, dur - now);
     this.setPainted('rem', this.remaining, 'text', dur ? '−' + PL.fmt.clock(left) + '  ·  Ends at ' + endsAt(left) : '');
   };
 

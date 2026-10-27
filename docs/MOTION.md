@@ -92,7 +92,9 @@ CSS transition (`css/motion.css`):
   while they are hidden; while scrubbing, one write per frame (`PL.rafThrottle`). The head and the
   time bubble move by `translate3d`, the rail thickens with `scaleY`, and the skip pill and Up Next
   rise with `translate3d` when the controls open. Values are only written when they change, so an
-  unchanged clock costs no layout.
+  unchanged clock costs no layout, and while scrubbing only the bubble's text changes (the times
+  stay on the real position). Measured on the TV (webOS 4.5, direct-play HEVC): controls up and
+  idle 16.7 ms a frame; holding Right to scrub 17-20 ms average, p95 17-33 ms.
 
 Only `transform` and `opacity` animate (plus the capsule's `width`, a single small element). Rows
 use `top` for placement so the entrance animations can own `transform`.
