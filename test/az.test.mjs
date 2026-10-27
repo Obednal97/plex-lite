@@ -33,6 +33,7 @@ test('slots: letters, # for digits and symbols, accents fold, other scripts have
   assert.equal(az.slotOf('ö'), 'O');
   assert.equal(az.slotOf('Ж'), null);
   assert.equal(az.slotOf('日'), null);
+  assert.equal(az.slotOf('ß'), 'S');
   assert.equal(az.slotOf(''), null);
   assert.equal(az.slotOf(null), null);
 });

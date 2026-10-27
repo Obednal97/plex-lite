@@ -527,13 +527,14 @@
     }
     if (this.area === 'rail') {
       if (this.rail.key(code)) return true;
-      // Left (or Back) returns to the grid where it was; Up past the top letter goes to the filters
+      // Left (or Back) returns to the grid where it was. Up past the top letter goes to the filters
+      // only while the grid is at its top row (the bar shares the screen with row 0 only).
       if (code === K.LEFT || PL.isBack(code)) {
         this.focusArea('grid');
         return true;
       }
       if (code === K.UP) {
-        this.focusArea('bar');
+        if (this.grid.rowOf(this.grid.index) === 0) this.focusArea('bar');
         return true;
       }
       return code === K.RIGHT;

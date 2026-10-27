@@ -48,7 +48,7 @@ dimmed.
 | Key | What it does |
 | --- | --- |
 | Right (from the last column) | Moves into the rail, on the current letter |
-| Up / Down (in the rail) | Moves between letters that have titles; Up from the top goes to the filters |
+| Up / Down (in the rail) | Moves between letters that have titles (Up from the top letter goes to the filters when the grid is at its first row) |
 | OK (in the rail) | Jumps to the first title of that letter and focuses it |
 | Left or Back (in the rail) | Back to the grid where you were, without jumping |
 | 2–9 | Jumps like a phone keypad: 2 = A, press again for B, then C; 7 = P Q R S, 9 = W X Y Z |

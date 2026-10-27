@@ -28,7 +28,7 @@
     var c = String(title == null ? '' : title).charAt(0);
     if (!c) return null;
     if (c.normalize) c = c.normalize('NFD').charAt(0);
-    c = c.toUpperCase();
+    c = c.toUpperCase().charAt(0); // 'ß' upper-cases to 'SS'
     if (c >= 'A' && c <= 'Z') return c;
     if (c === '#' || (c >= '0' && c <= '9')) return '#';
     if (/[!-\/:-@\[-`{-~]/.test(c)) return '#';

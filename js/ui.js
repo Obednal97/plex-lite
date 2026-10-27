@@ -970,7 +970,12 @@
     if (shadow) shadow.classList.add('instant');
     this.movedAt = 0;
     this.render();
-    ui.enter(inner, 'grid-jump');
+    // the fade-up from the frames (css/az.css); cards' own entrance animations bubble here too
+    if (!this.jumpEnd) {
+      this.jumpEnd = function (e) { if (e.target === inner) inner.classList.remove('grid-jump'); };
+      inner.addEventListener('animationend', this.jumpEnd);
+    }
+    inner.classList.add('grid-jump');
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
         inner.classList.remove('instant');
