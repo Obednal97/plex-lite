@@ -956,6 +956,31 @@
     return true;
   };
 
+  // Jumps straight to item `index` (the A–Z rail). There is no scroll across the gap: the grid and the
+  // focus shadow land at once, the rows around the target appear as placeholder frames, and only the
+  // page(s) holding them are fetched (render() asks for them); posters fill in as they arrive.
+  Grid.prototype.jumpTo = function (index) {
+    if (this.total <= 0) return false;
+    index = PL.clamp(index, 0, this.total - 1);
+    if (index === this.index) return false;
+    this.index = index;
+    var inner = this.inner;
+    var shadow = this.opts.shadow && this.opts.shadow.el;
+    inner.classList.add('instant');
+    if (shadow) shadow.classList.add('instant');
+    this.movedAt = 0;
+    this.render();
+    ui.enter(inner, 'grid-jump');
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        inner.classList.remove('instant');
+        if (shadow) shadow.classList.remove('instant');
+      });
+    });
+    this.notify();
+    return true;
+  };
+
   Grid.prototype.refreshItem = function (ratingKey) {
     var self = this;
     Object.keys(this.nodes).forEach(function (k) {
