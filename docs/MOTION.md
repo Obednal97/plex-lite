@@ -84,7 +84,9 @@ CSS transition (`css/motion.css`):
   children on `opacity`; the letter underneath it fades out. A jump (`ui.Grid.jumpTo`) does *not*
   scroll across the gap, which would mean animating past hundreds of rows: the grid and the focus
   shadow land at once (`.instant` for two frames), the new rows appear as placeholder frames in the
-  same frame and fade up from 25% over 140 ms, and posters dissolve in as their page arrives.
+  same frame and fade up from 25% over 140 ms, and posters dissolve in as they arrive. The jump fetches just
+  the 36 titles it draws in one request (`Grid.loadWindow`) and holds the page prefetch until they're
+  in, so the TV parses half the JSON before the cards show.
 
 Only `transform` and `opacity` animate (plus the capsule's `width`, a single small element). Rows
 use `top` for placement so the entrance animations can own `transform`.
