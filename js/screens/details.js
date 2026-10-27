@@ -363,15 +363,9 @@
     this.loadPluginActions(f);
   };
 
+  // Their work in every library (person page); crew use the director/writer filter.
   DetailsScreen.prototype.openPerson = function (person) {
-    var section = this.full.librarySectionID;
-    if (section == null) {
-      PL.toast('Can\'t list titles for ' + person.name);
-      return;
-    }
-    var params = {};
-    params[person.filter] = person.id;
-    PL.app.push(screens.items(person.name, '/library/sections/' + section + '/all', params));
+    PL.app.push(screens.person({ id: person.id, name: person.name, thumb: person.thumb, role: person.role }, { filter: person.filter || 'actor' }));
   };
 
   // Plugin actions (e.g. "Request on Overseerr") become extra pills once they're known.
