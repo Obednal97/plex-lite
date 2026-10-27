@@ -69,10 +69,12 @@
     this.el.appendChild(clip);
     this.status = PL.el('div', 'search-status');
     this.el.appendChild(this.status);
+    var me = this;
     this.stack = new ui.VStack(this.results, {
       top: 150,
       keep: 3,
       anchor: function (i, top, zone) { return i === 0 ? top : Math.min(top, 1040 - zone.height); },
+      onFocusZone: function () { me.updateHeader(); },
     });
 
     var self = this;
@@ -283,25 +285,32 @@
 
   SearchScreen.prototype.parseServer = function (mc) {
     var out = { titles: [], people: [], episodes: [] };
-    var sectionTitle = {};
-    (PL.app.sections || []).forEach(function (s) { sectionTitle[String(s.key)] = s.title; });
     (mc.Hub || []).forEach(function (hub) {
       if ((hub.type === 'movie' || hub.type === 'show') && hub.Metadata) {
         out.titles = out.titles.concat(hub.Metadata);
       } else if (hub.type === 'episode' && hub.Metadata) {
         out.episodes = hub.Metadata.slice(0, 30);
       } else if (hub.type === 'actor' && hub.Directory) {
-        var names = {};
-        hub.Directory.forEach(function (d) { names[d.tag] = (names[d.tag] || 0) + 1; });
-        out.people = hub.Directory.map(function (d) {
-          var section = String(d.librarySectionID);
-          return {
-            ratingKey: 'actor-' + d.id + '-' + section,
+        // Plex returns one entry per library; one card per person (tag ids are global, the name is
+        // the fallback when ids differ). The person page lists their work in every library.
+        var seen = {};
+        out.people = [];
+        hub.Directory.forEach(function (d) {
+          var key = seen['id:' + d.id] || seen['name:' + d.tag];
+          if (key) {
+            if (!key.thumb && d.thumb) key.thumb = d.thumb;
+            return;
+          }
+          var item = {
+            ratingKey: 'person-' + d.id,
             type: 'person',
-            title: names[d.tag] > 1 && sectionTitle[section] ? d.tag + ' (' + sectionTitle[section] + ')' : d.tag,
+            title: d.tag,
             thumb: d.thumb,
-            person: { id: d.id, name: d.tag, section: section },
+            person: { id: d.id, name: d.tag, thumb: d.thumb },
           };
+          seen['id:' + d.id] = item;
+          seen['name:' + d.tag] = item;
+          out.people.push(item);
         });
       }
     });
@@ -415,10 +424,16 @@
     }
     if (item.type === 'person') {
       var p = item.person;
-      PL.app.push(screens.items(p.name, '/library/sections/' + p.section + '/all', { actor: p.id }));
+      PL.app.push(screens.person({ id: p.id, name: p.name, thumb: item.thumb || p.thumb }, { filter: 'actor' }));
       return;
     }
     PL.app.push(screens.details(item));
+  };
+
+  // the tab bar hides once the results are scrolled past their first row, like the library screens
+  SearchScreen.prototype.updateHeader = function () {
+    if (!this.visible || PL.app.tabsFocused) return;
+    PL.app.tabs.show(!(this.area === 'results' && this.stack.index > 0));
   };
 
   SearchScreen.prototype.focusResults = function () {
@@ -430,6 +445,7 @@
 
   SearchScreen.prototype.focusKeys = function () {
     this.area = 'keys';
+    PL.app.tabs.show(this.visible);
     this.stack.focus(false);
     this.shadow.hide();
     this.paintKeys();
