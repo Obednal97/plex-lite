@@ -51,11 +51,12 @@
 
   // The issue's Overseerr media id plus the title's open issues; started as soon as the sheet opens.
   function resolveMedia(ctx, item) {
+    var key = O.profileKey(ctx);
     return O.plexTitle(ctx, item).then(function (pt) {
       return O.tmdbFor(ctx, pt).then(function (tmdb) {
         return O.lookup(ctx, pt.type, tmdb).then(function (r) {
           if (!r.media || !r.media.mediaId) throw new Error('Overseerr doesn\'t track ' + (pt.title || 'this title') + ' yet');
-          return { pt: pt, media: r.media, title: r.title || pt.title };
+          return { pt: pt, media: r.media, title: r.title || pt.title, key: key };
         });
       });
     });
@@ -75,6 +76,11 @@
   }
 
   function send(ctx, item, reason, scope, note, r) {
+    // the report goes out as the profile that started it, or not at all
+    if (O.profileKey(ctx) !== r.key) {
+      ctx.toast('The profile changed — start the report again', 5000);
+      return;
+    }
     ctx.toast('Sending your report…');
     // the file name helps whoever fixes it pick the right file; list rows often come without it
     var plexItem = scope.plexItem;
@@ -114,7 +120,7 @@
         },
         { label: 'Cancel', action: function () {} },
       ] }], { focus: 0 });
-    }, function () {});
+    }, function (err) { ctx.toast(err.message || 'Couldn\'t find this on Overseerr', 5000); });
   }
 
   function askNote(ctx, item, reason, scope, resolved) {

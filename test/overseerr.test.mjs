@@ -162,6 +162,34 @@ await (async () => {
 })().catch((e) => { failed++; console.log('FAIL downloads', e && e.stack); });
 
 await (async () => {
+  // a profile switch never shows the previous profile's downloads, even mid-load
+  const { PL, O } = webContext();
+  PL.storage.set('plugin.overseerr.config', { url: 'https://seerr.example.com', profiles: {} });
+  const resolvers = [];
+  const ctx = makeCtx(PL, {
+    service: (m, p) => m === 'login' ? Promise.resolve({ url: 'https://seerr.example.com', user: { id: 1, displayName: 'A', permissions: 2 } })
+      : new Promise((resolve) => resolvers.push({ key: p.key, resolve })),
+  });
+  await O.signIn(ctx, 'https://seerr.example.com');
+  const a = O.downloads(ctx);
+  resolvers.shift().resolve({ items: [{ mediaType: 'movie', tmdbId: 1, title: 'Owner film', downloads: [{ status: 'downloading', size: 10, sizeLeft: 5 }] }] });
+  eq((await a).list.length, 1, 'owner list');
+  ctx.profileValue = { uuid: 'kid1', title: 'Kid' };
+  await O.signIn(ctx, 'https://seerr.example.com');
+  const b = O.downloads(ctx);
+  const b2 = O.downloads(ctx);
+  ok(b === b2, 'one request per profile while loading');
+  eq(resolvers.length, 1, 'the kid profile asks for its own list');
+  eq(resolvers[0].key, 'p-kid1', 'with its own key');
+  ctx.profileValue = null;
+  const a2 = O.downloads(ctx);
+  resolvers.shift().resolve({ items: [] });
+  eq((await b).list.length, 0, 'kid sees its own (empty) list');
+  resolvers.shift().resolve({ items: [] });
+  eq((await a2).list.length, 0, 'back on the owner: fresh fetch, not the kid answer cached under the owner');
+})().catch((e) => { failed++; console.log('FAIL profile cache', e && e.stack); });
+
+await (async () => {
   // the helper's /queue answer
   const { PL, O } = webContext();
   PL.storage.set('plugin.overseerr.config', { url: 'https://seerr.example.com', helperUrl: 'http://helper.example.com:8787', profiles: {} });
@@ -235,6 +263,7 @@ await (async () => {
         return send(200, { results: [{ id: 10, mediaType: 'movie', tmdbId: 100, status: 5, downloadStatus: [{ title: 'dup', status: 'downloading', size: 1, sizeLeft: 1 }] }] });
       }
       if (req.url === '/api/v1/movie/100') return send(200, { title: 'Film', releaseDate: '2020-01-01', posterPath: '/p.jpg', credits: { cast: new Array(50).fill({ name: 'x' }) }, mediaInfo: { id: 10, status: 3, downloadStatus: [], issues: [{ id: 4, status: 1, issueType: 2, problemSeason: 0, problemEpisode: 0, createdAt: '2026-01-01T00:00:00Z' }, { id: 5, status: 2, issueType: 1 }] } });
+      if (req.url === '/api/v1/movie/999') { res.writeHead(200); return res.end(''); }
       if (req.url === '/api/v1/tv/200') return send(200, { name: 'Show', firstAirDate: '2019-05-05', posterPath: '/s.jpg' });
       return send(404, { message: 'nope' });
     });
@@ -289,6 +318,8 @@ await (async () => {
     r = await callSvc('lookup', { key: 'o-aaaa', mediaType: 'movie', tmdbId: 100 });
     eq([r.media.mediaId, r.media.issues.length, r.media.issues[0].issueType], [10, 1, 2], 'lookup: media id + open issues only');
     ok(JSON.stringify(r).length < 1000, 'lookup answer is compact');
+    r = await callSvc('lookup', { key: 'o-aaaa', mediaType: 'movie', tmdbId: 999 });
+    eq([r.returnValue, r.errorCode], [false, 'network'], 'empty answer is an error, not a crash');
     r = await callSvc('lookup', { key: 'o-aaaa', mediaType: 'movie', tmdbId: '1; DROP' });
     eq(r.errorCode, 'bad_request', 'lookup validates the id');
 

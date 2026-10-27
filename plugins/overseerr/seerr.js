@@ -329,10 +329,13 @@
   O.downloads = function (ctx, maxAge) {
     var key = O.profileKey(ctx);
     var age = maxAge == null ? DOWNLOADS_MAX_AGE : maxAge;
-    if (cache.key === key && cache.list && Date.now() - cache.at < age) {
-      return Promise.resolve({ list: cache.list, source: cache.source, at: cache.at });
+    // another profile's list is never served, not even while this one loads
+    if (cache.key !== key) cache = { key: key, at: 0, list: null, pending: null, source: null };
+    var mine = cache;
+    if (mine.list && Date.now() - mine.at < age) {
+      return Promise.resolve({ list: mine.list, source: mine.source, at: mine.at });
     }
-    if (cache.key === key && cache.pending) return cache.pending;
+    if (mine.pending) return mine.pending;
     var cfg = O.config(ctx) || {};
     var seerr = function () {
       return O.svc(ctx, 'downloads', {}).then(function (r) { return { list: fromSeerr(r.items), source: 'overseerr' }; });
@@ -344,19 +347,22 @@
       ctx.warn('download queue helper failed, using Overseerr: ' + (err && err.message));
       return seerr();
     }) : null;
-    cache.key = key;
-    var p = (helper || seerr()).then(function (r) {
-      cache.pending = null;
-      if (cache.key !== key) return r;
-      cache.list = sortEntries(r.list);
-      cache.source = r.source;
-      cache.at = Date.now();
-      return { list: cache.list, source: cache.source, at: cache.at };
+    var p = null;
+    p = (helper || seerr()).then(function (r) {
+      var list = sortEntries(r.list);
+      if (mine.pending === p) mine.pending = null;
+      // a profile switch while this was loading replaced the cache object; keep the answer out of it
+      if (cache === mine) {
+        mine.list = list;
+        mine.source = r.source;
+        mine.at = Date.now();
+      }
+      return { list: list, source: r.source, at: Date.now() };
     }, function (err) {
-      cache.pending = null;
+      if (mine.pending === p) mine.pending = null;
       throw err;
     });
-    cache.pending = p;
+    mine.pending = p;
     return p;
   };
 

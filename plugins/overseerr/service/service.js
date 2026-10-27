@@ -258,11 +258,15 @@ function titleFor(key, mediaType, tmdbId, cb) {
       posterPath: d.posterPath || null,
       backdropPath: d.backdropPath || null,
     };
-    var keys = Object.keys(state.titles);
-    if (keys.length >= MAX_TITLES) delete state.titles[keys[0]];
-    state.titles[ck] = t;
+    cacheTitle(ck, t);
     cb(null, t);
   });
+}
+
+function cacheTitle(ck, t) {
+  var keys = Object.keys(state.titles);
+  if (!state.titles[ck] && keys.length >= MAX_TITLES) delete state.titles[keys[0]];
+  state.titles[ck] = t;
 }
 
 function trimDownload(d) {
@@ -385,9 +389,10 @@ service.register('lookup', function (msg) {
   if (!key || !type || !(id > 0) || Math.floor(id) !== id) return fail(msg, 'Bad lookup', 'bad_request');
   apiGet(key, '/' + type + '/' + id, function (err, d) {
     if (err) return respondError(msg, err);
-    var mi = d && d.mediaInfo;
+    if (!d || typeof d !== 'object') return fail(msg, 'Overseerr sent no data', 'network');
+    var mi = d.mediaInfo;
     var t = { title: d.title || d.name || '', year: String(d.releaseDate || d.firstAirDate || '').slice(0, 4), posterPath: d.posterPath || null, backdropPath: d.backdropPath || null };
-    state.titles[type + ':' + id] = t;
+    cacheTitle(type + ':' + id, t);
     msg.respond({
       returnValue: true,
       title: t.title,
