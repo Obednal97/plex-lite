@@ -104,6 +104,19 @@ await fuzzy.setRows(titles);
 check('incremental == single-slice results', () => assert.deepEqual(qs.map((q) => query(q, 10)), sliced));
 fuzzy.CHUNK = 150;
 
+// ---- a refresh of an existing index is built aside and swapped in whole ------------------------------
+fuzzy.CHUNK = 3;
+const refreshed = titles.concat([['99', 'movie', 'Interstellar Wars', 2030, '', '', '']]);
+const swap = fuzzy.setRows(refreshed);
+check('refresh keeps the old index searchable meanwhile', () => {
+  assert.equal(fuzzy.complete, true);
+  assert.equal(fuzzy.entries.length, titles.length);
+  assert.deepEqual(top('interstellar', 5), ['Interstellar']);
+});
+await swap;
+check('refresh swaps in when complete', () => assert.deepEqual(top('interstellar', 5), ['Interstellar', 'Interstellar Wars']));
+fuzzy.CHUNK = 150;
+
 // ---- reset, per-account cache, quota ----------------------------------------------------------------
 const cacheRows = titles.map((r) => r.slice());
 store['pl.fuzzy.v2'] = 'stale';

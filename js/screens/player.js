@@ -336,8 +336,21 @@
   // ---- Starting playback ---------------------------------------------------------------------
 
   Player.prototype.show = function () {
+    var self = this;
     PL.app.backdrop.set(null, 'none');
-    if (this.state === 'idle') this.begin();
+    if (this.state === 'idle') {
+      var other = PL.app.stack.some(function (sc) { return sc !== self && sc instanceof Player && sc.state !== 'stopped'; });
+      if (other) {
+        PL.warn('a player is already open: refusing to start another');
+        this.state = 'stopped';
+        setTimeout(function () { self.exit(); }, 0);
+        return;
+      }
+      this.begin();
+    } else if (this.resumeOnShow) {
+      this.resumeOnShow = false;
+      this.togglePause(true);
+    }
   };
 
   Player.prototype.begin = function () {
@@ -363,7 +376,7 @@
       else if (full.type === 'episode') self.loadQueue(full);
       // resuming from a saved position: back up 5 s so the scene is recognisable
       self.start(self.startOffset > 0 ? Math.max(0, self.startOffset - 5000) : 0);
-    }, function (err) { if (gen === self.gen) self.fail(err); });
+    }).catch(function (err) { if (gen === self.gen) self.fail(err); });
   };
 
   Player.prototype.alignQueue = function (full) {
@@ -480,7 +493,7 @@
         self.video.src = PL.plex.url(part.key);
       } else {
         self.mode = 'transcode';
-        self.base = self.live ? 0 : offsetSec;
+        self.base = self.live || !(offsetSec > 0) ? 0 : Math.floor(offsetSec);
         self.video.src = PL.plex.url('/video/:/transcode/universal/start.m3u8', params);
       }
       PL.log('play', self.mode, self.live ? 'live' : self.full.ratingKey, 'at', Math.round(offsetSec) + 's');
@@ -536,9 +549,11 @@
     clearInterval(sub.timer);
     sub.timer = null;
     sub.segs = {};
+    sub.timing = null;
     sub.audio = want.audio;
     var id = want.stream ? want.stream.id : null;
-    if (sub.id !== id || sub.kind !== want.kind) {
+    // embedded cues belong to one HLS session (their timing is decided per session)
+    if (sub.id !== id || sub.kind !== want.kind || want.kind === 'embedded') {
       sub.cues = [];
       this.showSubText('');
     }
@@ -602,9 +617,14 @@
       var cues = parseSubtitles(text);
       if (!cues.length) return; // empty until the transcoder reaches it, or a silent stretch
       st.done = true;
-      // cue times may be relative to the stream (which starts at `base`) or to the file
-      var relative = Math.abs(cues[0].start - sg.start) < Math.abs(cues[0].start - (base + sg.start));
-      var add = relative ? base : 0;
+      // Cue times are either relative to the stream (which starts at `base`) or to the file.
+      // Decided once per session, from the first segment that has cues.
+      if (self.subs.timing == null) {
+        var relative = Math.abs(cues[0].start - sg.start) < Math.abs(cues[0].start - (base + sg.start));
+        self.subs.timing = relative ? base : 0;
+        PL.log('subtitle timing', relative ? 'relative, +' + base + 's' : 'absolute');
+      }
+      var add = self.subs.timing;
       var have = {};
       self.subs.cues.forEach(function (c) { have[c.start.toFixed(2) + c.text] = 1; });
       cues.forEach(function (c) {
@@ -793,7 +813,10 @@
       req.retried = true;
       req.first = now;
       req.seekedAt = null;
-      this.video.currentTime = req.target + Math.min(12, short);
+      var dur = this.durationSec();
+      var retry = req.target + Math.min(12, short);
+      if (dur) retry = Math.max(req.target, Math.min(retry, dur - 1));
+      this.video.currentTime = retry;
       return;
     }
     if (Date.now() - req.seekedAt > 1500) {
@@ -1079,7 +1102,11 @@
   Player.prototype.onHidden = function () {
     if (!this.exited) this.exit();
   };
-  Player.prototype.hide = function () {};
+  // Parked under another full screen: pause, and resume on show if it was playing.
+  Player.prototype.hide = function () {
+    this.resumeOnShow = this.state === 'playing' && !this.video.paused;
+    if (this.resumeOnShow) this.video.pause();
+  };
   Player.prototype.destroy = function () { this.stop(); };
 
   // ---- Keys -------------------------------------------------------------------------------------

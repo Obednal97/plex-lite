@@ -209,15 +209,19 @@
 
   // ---- Index --------------------------------------------------------------------------------------
 
-  // Prepares rows in small slices so the UI keeps responding; queries meanwhile search the prepared
-  // part. Resolves when every row is prepared.
+  // Prepares rows in small slices so the UI keeps responding. With no index yet, queries search the
+  // prepared part as it grows; a refresh is built aside and swapped in whole, so results never blank.
+  // Resolves true when every row is prepared (false if superseded or reset).
   fuzzy.setRows = function (rows, builtAt) {
     var myGen = ++gen;
     var entries = [];
-    fuzzy.entries = entries;
-    fuzzy.builtAt = builtAt || Date.now();
-    fuzzy.ready = true;
-    fuzzy.complete = false;
+    var live = !fuzzy.ready || !fuzzy.complete;
+    if (live) {
+      fuzzy.entries = entries;
+      fuzzy.builtAt = builtAt || Date.now();
+      fuzzy.ready = true;
+      fuzzy.complete = false;
+    }
     var chunk = Math.max(1, fuzzy.CHUNK);
     return new Promise(function (resolve) {
       var i = 0;
@@ -229,6 +233,9 @@
           setTimeout(slice, 0);
           return;
         }
+        fuzzy.entries = entries;
+        fuzzy.builtAt = builtAt || Date.now();
+        fuzzy.ready = true;
         fuzzy.complete = true;
         listeners.slice().forEach(function (fn) { fn(); });
         resolve(true);

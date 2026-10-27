@@ -75,7 +75,9 @@
     PL.storage.del('token');
     PL.storage.del('server');
     PL.storage.del('profile');
+    PL.storage.del('manualServer');
     if (PL.fuzzy && PL.fuzzy.reset) PL.fuzzy.reset();
+    if (plex.onServerChange) plex.onServerChange();
   };
 
   plex.user = function () {
@@ -90,13 +92,22 @@
     });
   };
 
+  // All-or-nothing: the new profile's token, server and name are only kept if its server connects.
   plex.switchUser = function (user, pin) {
+    var prev = { token: plex.token, server: plex.server, profile: PL.storage.get('profile', null) };
     return plex.tvRequest('POST', '/api/v2/home/users/' + user.uuid + '/switch', pin ? { pin: pin } : null).then(function (res) {
       if (!res || !res.authToken) throw new Error('Plex did not switch to ' + user.title);
-      plex.setToken(res.authToken);
-      PL.storage.set('profile', { uuid: user.uuid, title: user.title });
-      if (PL.fuzzy && PL.fuzzy.reset) PL.fuzzy.reset();
-      return plex.ensureServer(true);
+      plex.token = res.authToken;
+      return plex.ensureServer(true).then(function (server) {
+        plex.setToken(res.authToken);
+        PL.storage.set('profile', { uuid: user.uuid, title: user.title });
+        if (PL.fuzzy && PL.fuzzy.reset) PL.fuzzy.reset();
+        return server;
+      });
+    }).then(null, function (err) {
+      plex.token = prev.token;
+      if (prev.server) plex.useServer(prev.server);
+      throw err;
     });
   };
 
@@ -160,25 +171,42 @@
     return PL.storage.get('manualServer', null) || { local: '', remote: '' };
   };
 
+  // Keeps scheme://host[:port] only (drops paths like /web/index.html); plain http without a port
+  // gets Plex's default 32400.
   plex.normalizeUri = function (raw) {
-    var s = String(raw || '').trim().replace(/\/+$/, '');
+    var s = String(raw || '').trim();
     if (!s) return '';
     if (!/^https?:\/\//i.test(s)) s = 'http://' + s;
-    if (!/^https?:\/\/[^\/\s]+$/i.test(s)) throw new Error('That doesn\'t look like a server address');
-    return s;
+    var m = /^(https?):\/\/([A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(?::(\d{1,5}))?(?:[\/?#].*)?$/i.exec(s);
+    if (!m) throw new Error('That doesn\'t look like a server address');
+    var scheme = m[1].toLowerCase();
+    var port = m[3] || (scheme === 'http' ? '32400' : '');
+    return scheme + '://' + m[2] + (port ? ':' + port : '');
   };
 
   // Connects to a typed-in address: asks the server who it is, then uses that server's access token
   // from the account (shared servers have their own) or the account token for owned ones.
+  // The account token is never sent to a server that isn't linked to the account (a typo or a stranger's
+  // server would otherwise receive it); a remote address must use https so it isn't sent in the clear.
   plex.connectUri = function (uri, kind) {
+    if (kind === 'manual-remote' && !/^https:/i.test(uri)) {
+      return Promise.reject(new Error('A remote address must start with https://'));
+    }
     return PL.http('GET', uri + '/identity', { timeout: 5000 }).then(function (res) {
       var id = res && res.MediaContainer && res.MediaContainer.machineIdentifier;
       if (!id) throw new Error('No Plex server answered at ' + uri);
+      var known = plex.server && plex.server.machineId === id ? plex.server : null;
       return plex.listServers().then(function (list) {
         var r = list.filter(function (x) { return x.clientIdentifier === id; })[0];
-        var token = (r && r.accessToken) || plex.token;
-        return probe(uri, token, 5000).then(function () {
-          return { machineId: id, name: (r && r.name) || 'Plex server', uri: uri, token: token, kind: kind };
+        if (!r) throw new Error('That server isn\'t linked to your Plex account');
+        return { id: id, name: r.name, token: r.accessToken || plex.token };
+      }, function (err) {
+        // plex.tv unreachable (LAN without internet): only reuse the token we already trust for this server
+        if (!known) throw err;
+        return { id: id, name: known.name, token: known.token };
+      }).then(function (s) {
+        return probe(uri, s.token, 5000).then(function () {
+          return { machineId: s.id, name: s.name, uri: uri, token: s.token, kind: kind };
         });
       });
     });
@@ -196,7 +224,9 @@
   }
 
   plex.useServer = function (server) {
+    var changed = !plex.server || plex.server.machineId !== server.machineId || plex.server.token !== server.token;
     plex.server = server;
+    if (changed && plex.onServerChange) plex.onServerChange();
     PL.storage.set('server', server);
     PL.log('server', server.name, server.kind, PL.redact(server.uri));
   };

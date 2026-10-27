@@ -316,6 +316,7 @@
   };
 
   app.start = function () {
+    app.ready = false;
     if (!PL.plex.token) {
       app.setRoot(PL.screens.signin(function () { app.start(); }));
       return;
@@ -427,13 +428,17 @@
       if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { p = null; } }
       if (p && p.ratingKey && /^\d+$/.test(String(p.ratingKey))) launch.pending = p;
     },
+    seq: 0,
     run: function () {
       var p = launch.pending;
-      if (!p || !app.ready) return;
+      if (!p || !app.ready || !PL.plex.server) return;
       launch.pending = null;
+      var seq = ++launch.seq;
       while (app.stack.length > 1) app.pop();
       if (p.action === 'play') {
         PL.plex.metadata(String(p.ratingKey)).then(function (item) {
+          // a newer deep link (or a restart) won the race
+          if (seq !== launch.seq || !app.ready || app.stack.length > 1) return;
           app.push(PL.screens.player(item, { offset: item.viewOffset || 0 }));
         }, function (err) { PL.toast(PL.errorMessage(err)); });
       } else {

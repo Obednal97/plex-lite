@@ -324,26 +324,30 @@
     this.status.style.display = text ? '' : 'none';
   };
 
+  // Shelves are reused per section. While the query is unchanged (the index finished, server hubs
+  // arrived) the focused zone and item stay put; a new query starts each shelf at its first item.
   SearchScreen.prototype.renderZones = function (sections) {
-    var ids = sections.map(function (s) { return s.id; }).join(',');
     var self = this;
-    if (ids === this.zoneIds) {
-      sections.forEach(function (s, i) {
-        var shelf = self.stack.zones[i];
-        shelf.index = 0;
-        shelf.replaceItems(s.items, s.items.length);
-        shelf.index = 0;
-        shelf.render();
-      });
-      if (this.area === 'results' && this.stack.current()) this.focusedItem(this.stack.current().current());
-      return;
-    }
-    var wasResults = this.area === 'results';
-    this.stack.focus(false);
-    this.shadow.hide();
-    this.zoneIds = ids;
+    var q = this.query.trim();
+    var sameQuery = q === this.renderedQuery;
+    this.renderedQuery = q;
+    var ids = sections.map(function (s) { return s.id; });
+    var old = {};
+    this.stack.zones.forEach(function (z) { old[z.sectionId] = z; });
+    var current = this.stack.current();
+    var focusedId = current ? current.sectionId : null;
     var zones = sections.map(function (s) {
-      return new ui.Shelf({
+      var shelf = old[s.id];
+      if (shelf) {
+        if (!sameQuery) shelf.index = 0;
+        shelf.replaceItems(s.items, s.items.length);
+        if (!sameQuery && shelf.index !== 0) {
+          shelf.index = 0;
+          shelf.render();
+        }
+        return shelf;
+      }
+      shelf = new ui.Shelf({
         title: s.title,
         items: s.items,
         kind: s.kind,
@@ -352,8 +356,20 @@
         onFocusItem: function (item) { self.focusedItem(item); },
         onSelect: function (item) { self.open(item); },
       });
+      shelf.sectionId = s.id;
+      return shelf;
     });
-    this.stack.setZones(zones, 0);
+    var key = ids.join(',');
+    if (key === this.zoneIds) {
+      if (this.area === 'results' && this.stack.current()) this.focusedItem(this.stack.current().current());
+      return;
+    }
+    var wasResults = this.area === 'results';
+    this.stack.focus(false);
+    this.shadow.hide();
+    this.zoneIds = key;
+    var keep = sameQuery && focusedId ? ids.indexOf(focusedId) : -1;
+    this.stack.setZones(zones, keep >= 0 ? keep : 0);
     if (wasResults) {
       if (zones.length) this.stack.focus(true);
       else this.focusKeys();

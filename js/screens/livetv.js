@@ -27,7 +27,12 @@
     },
   ];
 
-  var source = null; // {dvrKey, provider}, discovered once per session
+  var source = null; // {dvrKey, provider}, discovered once per server
+  var prevHook = PL.plex.onServerChange;
+  PL.plex.onServerChange = function () {
+    source = null;
+    if (prevHook) prevHook();
+  };
 
   function discover() {
     if (source) return Promise.resolve(source);

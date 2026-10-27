@@ -304,7 +304,7 @@
       });
     }
     if (f.type === 'movie' || f.type === 'episode') {
-      out.push({ icon: 'tracks', label: 'Audio & subtitles', hint: 'Audio and subtitles', action: function () { screens.trackSheet(f); } });
+      out.push({ icon: 'tracks', label: 'Audio & subtitles', hint: 'Audio and subtitles', action: function () { screens.trackSheet(f, null, self.mediaIndex || 0); } });
     }
     if (f.type === 'episode' && f.grandparentRatingKey) {
       out.push({
@@ -452,9 +452,12 @@
   };
 
   // A shuffled play queue of the whole show; the player gets the queue so "next" follows it.
+  // The POST returns a window of ~20 items; a GET with window=200 fetches the rest.
   DetailsScreen.prototype.shuffle = function () {
     var self = this;
     var f = this.full;
+    if (this.shuffling) return;
+    this.shuffling = true;
     PL.plex.request('POST', '/playQueues', {
       type: 'video',
       uri: 'server://' + PL.plex.server.machineId + '/com.plexapp.plugins.library/library/metadata/' + f.ratingKey,
@@ -462,11 +465,23 @@
       continuous: 0,
       own: 1,
     }).then(function (mc) {
-      if (!self.alive) return;
       var items = (mc && mc.Metadata) || [];
       if (!items.length) throw new Error('Nothing to shuffle');
-      self.play(items[0], 0, 0, { items: items, index: 0, id: mc.playQueueID });
-    }).catch(function (err) { if (self.alive) PL.toast(PL.errorMessage(err)); });
+      if (!(mc.playQueueTotalCount > items.length)) return mc;
+      return PL.plex.get('/playQueues/' + mc.playQueueID, {
+        window: 200, center: mc.playQueueSelectedItemID, own: 1,
+      }).then(function (full) { return full && full.Metadata && full.Metadata.length ? full : mc; }, function () { return mc; });
+    }).then(function (mc) {
+      self.shuffling = false;
+      if (!self.alive || PL.app.top() !== self) return;
+      var items = mc.Metadata;
+      var index = 0;
+      items.forEach(function (it, i) { if (it.playQueueItemID === mc.playQueueSelectedItemID) index = i; });
+      self.play(items[index], 0, 0, { items: items, index: index, id: mc.playQueueID });
+    }).catch(function (err) {
+      self.shuffling = false;
+      if (self.alive) PL.toast(PL.errorMessage(err));
+    });
   };
 
   DetailsScreen.prototype.toggleSeasonWatched = function (season) {
