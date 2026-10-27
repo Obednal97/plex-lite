@@ -35,7 +35,7 @@
       var defs = [
         { label: 'Profile', value: (PL.storage.get('profile', null) || { title: 'Account owner' }).title, action: pickProfile },
         { label: 'Server', value: (s.name || '—') + ' · ' + (KIND_LABEL[s.kind] || 'Unknown'), action: reconnect },
-        addressRow('Local server address', 'local', 'e.g. http://192.168.1.20:32400'),
+        addressRow('Local server address', 'local', 'e.g. http://192.168.0.10:32400'),
         addressRow('Remote server address', 'remote', 'e.g. https://plex.example.com:32400'),
         toggle('Autoplay next episode', 'autoplayNext', true),
         toggle('Skip intros automatically', 'autoSkipIntro', false),

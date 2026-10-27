@@ -166,7 +166,7 @@
 
   // ---- Manual server addresses (Settings) -------------------------------------------------------
 
-  // {local: 'http://192.168.1.20:32400', remote: 'https://plex.example.com'}; either may be empty.
+  // {local: 'http://192.168.0.10:32400', remote: 'https://plex.example.com'}; either may be empty.
   plex.manual = function () {
     return PL.storage.get('manualServer', null) || { local: '', remote: '' };
   };

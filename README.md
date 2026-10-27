@@ -87,7 +87,7 @@ Plex Lite then appears in the launcher.
    the Plex relay. With Plex Home, switch profile under **Settings → Profile** (profiles with a PIN
    are not supported yet).
 4. If the server isn't found automatically, set its address under **Settings → Local server
-   address** (for example `http://192.168.1.20:32400`) or **Remote server address**.
+   address** (for example `http://192.168.0.10:32400`) or **Remote server address**.
 
 Your Plex token stays on the TV, in the app's own storage. It is sent only to plex.tv and to
 servers linked to your account. If you set up the Overseerr plugin, it is also used once to sign in
