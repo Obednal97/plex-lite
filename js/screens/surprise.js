@@ -21,6 +21,7 @@
   var HISTORY = 15;        // recent picks remembered per library
   var SPIN_MIN_MS = 650;   // the dice rolls at least this long, even when the pick is instant
   var PRELOAD_MS = 2500;   // reveal anyway if the art is slower than this
+  var DECODE_MS = 240;     // art shown under the dice this long before the text, so its decode is done
 
   var surprise = PL.surprise = { history: {} };
 
@@ -206,7 +207,11 @@
       var art = PL.plex.image(ui.artPath(pick.item), 1280, 720, { quality: 75 });
       var logo = ui.logoPath(pick.item);
       return preload([art, logo && ui.logoUrl(logo)].filter(Boolean), PRELOAD_MS).then(function () {
-        var wait = Math.max(0, SPIN_MIN_MS - (Date.now() - started));
+        if (gen !== self.gen || !self.alive) return;
+        // The art goes up (still dimmed) while the dice rolls: decoding a 1280x720 JPEG holds the
+        // TV's frames for 60-70 ms, which is barely visible here but a hitch under the text reveal.
+        if (self.visible) PL.app.backdrop.set(art, 'detail');
+        var wait = Math.max(DECODE_MS, SPIN_MIN_MS - (Date.now() - started));
         setTimeout(function () { if (gen === self.gen && self.alive) self.reveal(pick, art); }, wait);
       });
     }).catch(function (err) {
