@@ -493,6 +493,8 @@
     { label: 'Collections', value: 'col', make: function (s) { return new CollectionsMode(s); } },
   ];
 
+  var sessionModes = {};
+
   function LibraryScreen(section) {
     this.root = true;
     this.longPress = true;
@@ -502,7 +504,8 @@
     this.modeHost = PL.el('div', 'mode-host');
     this.el.appendChild(this.modeHost);
     var self = this;
-    var saved = PL.storage.get('mode.' + section.key, 'rec');
+    // the chosen sub-tab is remembered while the app is open; every launch starts on Recommended
+    var saved = sessionModes[section.key] || 'rec';
     var selected = Math.max(0, MODES.map(function (m) { return m.value; }).indexOf(saved));
     this.subnav = new ui.ChipRow(MODES.map(function (m) { return { label: m.label, value: m.value }; }), {
       selected: selected,
@@ -525,7 +528,7 @@
     this.shadow.hide();
     if (this.shadow.el.parentNode) this.shadow.el.parentNode.removeChild(this.shadow.el);
     this.modeIndex = i;
-    PL.storage.set('mode.' + this.section.key, MODES[i].value);
+    sessionModes[this.section.key] = MODES[i].value;
     this.mode = MODES[i].make(this);
     this.modeHost.appendChild(this.mode.el);
     if (this.visible) this.mode.show();
