@@ -1,7 +1,7 @@
 # Plex Lite plugins, Phase 2: separately installed, sandboxed plugins
 
-Status: design + working implementation on branch `plugins-v2` (wired into the Phase 1 registry,
-Settings → Plugins, the tab bar and a plugin catalogue). Phase 1 (bundled, reviewed plugins in
+Status: implemented on branch `plugins-v2` (wired into the Phase 1 registry, Settings → Plugins, the
+tab bar and a plugin catalogue), verified in a desktop browser and on the TV; waiting for review. Phase 1 (bundled, reviewed plugins in
 `plugins/<id>/`, registered with `PL.plugins.register()`) ships on `main`. Phase 2 lets people install
 plugins **from a catalogue, inside Plex Lite** without trusting them with the user's Plex account.
 
@@ -263,8 +263,17 @@ reload (restored from storage, tab renders shelves) → a tampered update refuse
 Remove (tab, frame, grants and stored code gone). Earlier: the probe's escapes blocked (parent, top,
 localStorage, cookies, direct XHR).
 
-**On the TV**: frame start cost measured earlier (above). Not yet run there: the catalogue flow and
-an HBC install of a service plugin (none is published yet).
+**On the TV** (2026-10-27, LG webOS 4.5, rebased on the redesign): Settings → Browse plugins →
+Hello Shelf → Install (bundled catalogue, SHA-256 verified) → consent sheet, Allow by remote key → the
+"Hello" tab appears before Settings in the glass tab bar, the sliding plate and focus capsule move onto
+it, and it renders its shelves (18 posters) → the "Say hello" pill on a details page runs and toasts →
+"Update to …" (installed version faked older) keeps the grants and says "updated" → Remove (tab and
+frame gone, storage emptied). The bundled Overseerr plugin is unaffected (signed in; "Request on
+Overseerr" row in Search). JS heap stayed at 10 MB with the plugin frame running.
+Frame pacing, TV Shows → Recommended, same 13-key trace, warm runs: worst gap 61–98 ms with Hello
+Shelf installed vs 84–124 ms for `main` measured straight after (the TV had just rebooted, so both are
+noisy); first runs 121 ms vs 203 ms. Installed plugins add no measurable cost while browsing.
+Not yet run on the TV: an HBC install of a service plugin (none is published yet).
 
 ## Open questions
 

@@ -169,6 +169,10 @@ re-asked on every update and revocable in Settings → Plugins.
 Writing hooks that return Promises and treating `ctx` calls as asynchronous lets the same plugin code
 move from bundled to external.
 
+External plugins can add at most two tabs between them (titles up to 18 characters); they sit before
+Settings in the tab bar. Installed plugins start lazily (in their frame) and are unloaded when idle,
+so having one installed doesn't slow down browsing.
+
 ## Services (when the web app can't do it alone)
 
 Overseerr needs one because its session cookie is `HttpOnly; SameSite=Lax`: the app (a `file://`
