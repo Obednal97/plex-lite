@@ -775,9 +775,23 @@
   };
 
   // The SDK is not loaded into the app page; its source is inlined into each plugin frame.
+  // A local file: file:// requests report status 0 even when they succeed.
+  function readOwnFile(path) {
+    return new Promise(function (resolve, reject) {
+      var x = new XMLHttpRequest();
+      x.open('GET', path, true);
+      x.onload = function () {
+        if ((x.status === 200 || x.status === 0) && x.responseText) resolve(x.responseText);
+        else reject(new Error('Cannot read ' + path));
+      };
+      x.onerror = function () { reject(new Error('Cannot read ' + path)); };
+      x.send();
+    });
+  }
+
   host.boot = function (loader, opts) {
     opts = opts || {};
-    return PL.http('GET', 'js/plugin-sdk.js', { text: true }).then(function (sdk) {
+    return readOwnFile('js/plugin-sdk.js').then(function (sdk) {
       opts.sdkSource = sdk;
       return host.start(loader, opts);
     });
@@ -806,6 +820,37 @@
   };
 
   var CORE = 'luna://com.bednal.plexlite.service/';
+  var HBC_EXEC = 'luna://org.webosbrew.hbchannel.service/exec';
+  // elevate, then stop the still-jailed instance (exact process title, so the shell itself isn't hit)
+  var ELEVATE = '/media/developer/apps/usr/palm/services/org.webosbrew.hbchannel.service/elevate-service com.bednal.plexlite.service' +
+    ' && (kill $(pgrep -f "^com.bednal.plexlite.service$") 2>/dev/null; true)';
+
+  // The core service must run outside the developer jail to see other apps' packages. On a rooted TV
+  // Homebrew Channel can elevate it (a reinstall undoes that, so it's checked on every start).
+  host.ensureCoreElevated = function () {
+    return host.luna(CORE + 'whoami', {}).then(function (r) {
+      if (r.uid === 0) return true;
+      return host.luna(HBC_EXEC, { command: ELEVATE }, 20000).then(function () {
+        // the hub restarts the service after rescanning its configuration; poll for a few seconds
+        var tries = 0;
+        var check = function () {
+          return new Promise(function (res) { setTimeout(res, 1000); }).then(function () {
+            return host.luna(CORE + 'whoami', {}).then(function (r2) { return r2.uid === 0; }, function () { return false; });
+          }).then(function (ok) {
+            if (ok || ++tries >= 6) {
+              PL.log('plugin host: core service elevated', ok);
+              return ok;
+            }
+            return check();
+          });
+        };
+        return check();
+      });
+    }).then(null, function (e) {
+      PL.warn('plugin host: cannot elevate the core service (needs a rooted TV with Homebrew Channel)', e && e.message);
+      return false;
+    });
+  };
 
   // Starts the host for the app: dev examples with ?plugins=dev on a desktop, installed plugins
   // (through the core service) on the TV, nothing elsewhere. Never rejects.
@@ -814,12 +859,13 @@
     var onTv = typeof PalmServiceBridge !== 'undefined';
     if (!dev && !onTv) return Promise.resolve([]);
     var loader = dev ? host.devLoader() : host.serviceLoader(function (method, params) { return host.luna(CORE + method, params); });
-    host.booted = host.boot(loader, {
+    var ready = dev ? Promise.resolve(true) : host.ensureCoreElevated();
+    host.booted = ready.then(function () { return host.boot(loader, {
       callService: function (svc, method, params) {
         if (!svc) return Promise.reject(new Error('This plugin has no service'));
         return host.luna('luna://' + svc + '/' + method, params, 25000);
       },
-    }).then(null, function (e) {
+    }); }).then(null, function (e) {
       PL.warn('plugin host', e && e.message);
       return [];
     });

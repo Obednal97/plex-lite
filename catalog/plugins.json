@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "comment": "Plex Lite plugin catalogue. Each version pins the SHA-256 of its .ipk and of its entry file; Plex Lite refuses a plugin whose hashes don't match. Install still happens through Homebrew Channel / dev install.",
+  "plugins": [
+    {
+      "id": "com.example.plexlite.hello",
+      "title": "Hello Shelf",
+      "author": "Plex Lite examples",
+      "source": "https://github.com/Obednal97/plex-lite/tree/main/examples/plugins/hello-shelf",
+      "description": "Example: a Hello tab and shelf, and a \"Say hello\" action.",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "apiVersion": 1,
+          "permissions": ["plex:read", "tabs"],
+          "ipkUrl": null,
+          "ipkSha256": null,
+          "entrySha256": "7dc619ce4da51c114d5088a22874a15dbbce15c924cc6aa1ecdb57c15a1a4dce"
+        }
+      ]
+    }
+  ]
+}

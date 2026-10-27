@@ -403,6 +403,18 @@
       app.buildTabs();
       app.selectTab(app.startTab());
       app.ready = true;
+      // plugin discovery that finished after the 3 s wait may add tabs: rebuild, keeping the tab
+      if (PL.pluginHost && PL.pluginHost.booted) {
+        PL.pluginHost.booted.then(function () {
+          var before = app.tabs.tabs.map(function (t) { return t.id; }).join();
+          var current = app.tabs.tabs[app.tabs.selected];
+          app.buildTabs();
+          var ids = app.tabs.tabs.map(function (t) { return t.id; });
+          if (ids.join() === before) return;
+          app.tabs.selected = Math.max(0, ids.indexOf(current && current.id));
+          app.tabs.paint();
+        });
+      }
       launch.run();
       // one-time tip so the hold-OK quick actions are discoverable
       if (!PL.storage.get('tip.holdOk', false)) {

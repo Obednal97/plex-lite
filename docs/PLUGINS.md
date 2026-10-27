@@ -33,7 +33,7 @@ fork's services become `<its id>.…` automatically (README, "App id").
     version: '1.0.0',
     apiVersion: 1,              // this document
     description: 'Request movies and shows that are not in your library.',
-    services: ['com.bednal.plexlite.service'],   // optional
+    services: ['com.bednal.plexlite.overseerr'],   // optional
     // hooks below are all optional
   });
 })();
@@ -120,6 +120,44 @@ badge with `ctx.ui.badge(node, className, text)`.
 | `http(method, url, opts)` | the app's XHR helper (abortable promise) |
 | `plexToken()` | the Plex account token; explicit so it can be permissioned later |
 | `service(method, params, serviceId?)` | calls one of the plugin's own `services` over the Luna bus |
+
+## Tabs and screens (declarative)
+
+A plugin can add up to two tabs (two plugin tabs in total across all plugins). It never draws UI:
+it returns a *model* and Plex Lite renders it with its own components, so the look and performance
+stay consistent.
+
+```js
+PL.plugins.register({
+  id: 'trending', name: 'Trending', version: '1.0.0', apiVersion: 1,
+  tabs: [{ id: 'main', title: 'Trending' }],
+  screen: function (tabId, ctx) {
+    return Promise.resolve({
+      type: 'shelves',                       // or 'grid' ({items}) or 'page' (details-like)
+      shelves: [{ title: 'This week', kind: 'poster', items: [
+        { title: 'Some film', year: 2026, thumb: '/library/metadata/1/thumb/1', ratingKey: '1' },
+        { title: 'Not in Plex', thumb: 'https://…', onSelect: function () {
+          return { type: 'page', title: 'Not in Plex', summary: '…',
+                   actions: [{ label: 'Request', icon: 'check', run: function () { /* … */ } }] };
+        } },
+      ] }],
+    });
+  },
+});
+```
+
+Items with a numeric `ratingKey` open Plex Lite's details page; an `onSelect` may return another model,
+which is pushed as a new screen. Separately installed (external) plugins declare their tabs in
+`appinfo.json` (`plexlitePlugin.tabs`) and need the `tabs` permission; see
+[PLUGINS-v2-design.md](PLUGINS-v2-design.md).
+
+## Bundled vs external plugins
+
+Bundled plugins (this document) are reviewed code shipped inside Plex Lite. External plugins are
+installed as their own packages and run sandboxed with explicit permissions; Plex sign-in (the raw
+token) is a **Sensitive** permission, re-asked on every update and revocable in Settings → Plugins.
+Writing hooks that return Promises and treating `ctx` calls as asynchronous lets the same plugin code
+move from bundled to external.
 
 ## Services (when the web app can't do it alone)
 

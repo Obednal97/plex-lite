@@ -1,6 +1,7 @@
 # Plex Lite plugins, Phase 2: separately installed, sandboxed plugins
 
-Status: design + working prototype on branch `plugins-v2`. Phase 1 (bundled, reviewed plugins in
+Status: design + working implementation on branch `plugins-v2` (wired into the Phase 1 registry,
+Settings → Plugins and the tab bar; discovery verified on the TV). Phase 1 (bundled, reviewed plugins in
 `plugins/<id>/`, registered with `PL.plugins.register()`) ships on `main`. Phase 2 lets people install
 plugins **as their own packages** without trusting them with the user's Plex account.
 
@@ -15,6 +16,20 @@ plugins **as their own packages** without trusting them with the user's Plex acc
   the user isn't using.
 - Not a goal: plugins drawing arbitrary UI. They return data (shelves, actions, rows); Plex Lite
   renders it with its own components, so plugins can't spoof screens or slow rendering.
+
+## Decisions (2026-10-27)
+
+1. **The raw Plex token may be granted** (`plex:token`), but only through an explicit consent flagged
+   **Sensitive**. It is re-asked on **every** plugin update (version or code hash change), revocable in
+   Settings → Plugins ("Remove access"), and the plugins holding it are listed there ("On · Plex
+   sign-in"). Plex Lite logs *which* plugin received it, never the token. Plugin storage, results and
+   logs are scrubbed of it.
+2. **Catalogue**: our own JSON list in this repo, `catalog/plugins.json`, pinning the SHA-256 of each
+   version's `.ipk` and entry file. Installs still go through Homebrew Channel / dev install.
+3. **Plugins may add tabs and screens, declaratively.** A plugin declares tabs (`plexlitePlugin.tabs`
+   in its manifest) and returns screen *models* (shelves, grids, details-like pages, actions, sheets);
+   Plex Lite renders them with its own components (`js/screens/plugin-screen.js`). No plugin-drawn DOM
+   in the visible UI. Needs the `tabs` permission; at most **2 plugin tabs** in total.
 
 ## Threat model
 
@@ -83,7 +98,17 @@ v0.12.2 on webOS 4.5, so ES5):
 - `readPlugin {id}` → `{appinfo, source, sha256}`. Rejects bad ids and entry paths that leave the
   plugin's folder, and caps the source at 512 KB.
 
-Reference implementation: `service-lib/plugin-loader.js` (tested). The page side is
+Implemented in Plex Lite's core service, `service/` (`com.bednal.plexlite.service`;
+`service/plugin-loader.js` is unit-tested). **Developer services run jailed** (`/var/palm/jail/<id>`
+only bind-mounts the service's own folder), so the core service can't see other packages unless it is
+elevated: on rooted TVs the app runs Homebrew Channel's `elevate-service com.bednal.plexlite.service`
+(via HBC's `exec`) when `whoami` reports a non-root uid, then polls until the hub restarts it as root.
+A reinstall resets elevation, so this is checked on every start. Without root (no Homebrew Channel
+elevation) external plugins are unavailable; bundled plugins still work. The core service is
+read-only by design (fixed paths, no shell). Verified on the TV: after elevation `listPlugins` returned
+both installed example packages and `readPlugin` their code. (Note: `info` is a built-in
+`webos-service` method, hence `whoami`.) Bundled plugin services keep their own ids
+(Overseerr: `com.bednal.plexlite.overseerr`). The page side is
 `PL.pluginHost.serviceLoader(callService)`. For desktop work, `PL.pluginHost.devLoader()` reads
 unpacked plugins from `examples/plugins/` (open the app with `?plugins=dev`).
 
@@ -107,9 +132,12 @@ whose `event.source` is that plugin's frame, validates every message, and saniti
 ### Cost on this TV, and the limits that follow
 
 Without site isolation (Chrome 53), a sandboxed `srcdoc` frame lives in Plex Lite's renderer
-process. Each one is a new document plus a V8 context: estimated ~1.5–3 MB idle, plus the plugin's
-own allocations, and 50–150 ms to parse the SDK and a typical plugin on the A55. This is an
-estimate; it can't be measured on the TV without taking the foreground. To keep it negligible:
+process: a new document plus a V8 context. **Measured on the TV** (SDK + Hello Shelf, frame created
+until the plugin's `register()` reached the host): **47–53 ms for the first frame, 32–37 ms for the
+next ones** (3 rounds). Memory: WAM renderer RSS rose by +1, +8 and +15 MB for three frames across
+three rounds, i.e. roughly 0.3–5 MB per frame — noisy because other activity on the TV moved RSS by
+similar amounts (`performance.memory` is quantised to 10 MB steps on this build, so it can't resolve
+it). Budget assumption: ~3 MB per live frame. To keep it negligible:
 
 - **Lazy start**: a frame is created on a plugin's first hook call, not at boot. Discovery only
   reads manifests.
@@ -126,13 +154,18 @@ estimate; it can't be measured on the TV without taking the foreground. To keep 
 | `network:<origin>` | medium | Contact `<host>` |
 | `network:user` | medium | Contact a server address you enter |
 | `service` | medium | Run its own background service on the TV |
+| `tabs` | low | Add its own tab to Plex Lite (max 2 plugin tabs overall) |
 
 - Always allowed: scoped storage, toasts, sheets (host-rendered), settings rows.
 - **First enable** (Settings → Plugins → the plugin) shows the consent sheet, which lists the
   permissions with "Allow" / "Don't allow" (`PL.pluginHost.consent`). The decision is stored in
   `PL.storage('pluginHost.grants')` as `{version, hash, granted, origins, denied}`.
-- **Updates**: if the new version asks for nothing new, grants carry over (the new hash is recorded).
-  If it adds a permission, only the new ones are asked about; until then the plugin stays inactive.
+- **Updates**: if the new version asks for nothing new, grants carry over (the new hash is recorded),
+  except `plex:token`, which is re-asked on every update. If it adds a permission, only the new ones
+  are asked about; until then the plugin stays inactive.
+- **Settings → Plugins** shows each external plugin: status (Off / Needs permission / On / On · Plex
+  sign-in), its permissions and whether each is allowed, and Enable… (consent), Plugin settings, Turn
+  off, Remove access (revokes every grant; it asks again if re-enabled).
 - `network:user`: when the user types an address in the plugin's settings, the host records that
   origin (`PL.pluginHost.allowOrigin`). The plugin can't add origins itself.
 - Settings → Plugins lists every installed plugin with its permissions, a toggle, and "Remove
@@ -204,7 +237,9 @@ and treat `ctx` methods as async. Then the same code runs in both phases.
 - `examples/plugins/probe`: tries to escape (parent, top, localStorage, cookies, direct XHR,
   ungranted capabilities) and reports the results.
 - `examples/plugins/build-plugin-ipk.py`: builds a plugin `.ipk`.
-- `service-lib/plugin-loader.js`: reference service methods.
+- `service/` (core service: `listPlugins`, `readPlugin`, `whoami`) with `plugin-loader.js`.
+- `js/screens/plugin-screen.js`: renders declarative screen models.
+- `catalog/plugins.json`: the catalogue (pinned hashes).
 - `test/plugin-host.test.mjs`: 17 Node tests (permissions, sanitising, Plex allow-list, RPC limits,
   end-to-end SDK ↔ host runs of the example plugins, the service loader).
 
@@ -213,14 +248,22 @@ from the real library through `plex:read` with no token in anything the plugin r
 its toast shows. The probe's escape attempts are all blocked: parent/top/localStorage/cookies blocked by the
 sandbox, direct XHR blocked by CSP, and capabilities refused without grants.
 
-Not yet done: wiring into Phase 1's `PL.plugins` and the Settings → Plugins screen (after rebasing
-on main); the service methods in the real Plex Lite service; and on-TV measurements of frame cost.
+Done since the prototype: wired into the Phase 1 registry (dotted ids, async actions, `tabs()` with a
+global cap of 2, `screen()`, `unregister()`), the tab bar (plugin tabs before Settings; rebuilt when
+discovery finishes late), Settings → Plugins (consent / settings / turn off / remove access, Plex
+sign-in holders), the hold-OK menu (waits ≤600 ms for external actions), the core service +
+self-elevation, and a 22-test suite. Verified in a desktop browser: discovery → consent sheet (real key
+press) → the "Hello" tab rendered with Plex Lite's components → item → plugin page with an action.
+Verified on the TV: elevated discovery via the core service, frame start cost.
+
+Not yet done: an end-to-end run of enable → tab on the TV itself (blocked by other builds being
+tested at the time; the code path is the same as the desktop run plus the verified service calls);
+catalogue browsing/installation UI.
 
 ## Open questions
 
-1. Should `plex:token` exist at all? Overseerr's sign-in needs the raw token. An alternative is a
-   narrow host capability (`plex:signin-to <origin>`: the host posts the token to one granted origin
-   and never reveals it to the plugin). That is safer, but each such flow has to be built in.
-2. Catalogue ownership: our own catalogue JSON (with hash pinning) or the Homebrew Channel repo?
-3. Should external plugins be able to add tabs or screens (beyond shelves, actions and settings)?
-   This design deliberately says no for now.
+1. Catalogue UI: browse `catalog/plugins.json` from Settings → Plugins and install through Homebrew
+   Channel's install service (needs a hosted `.ipk` per version and `ipkSha256` pinning).
+2. Signing catalogue entries (Ed25519) on top of hash pinning.
+3. Unrooted TVs: external plugins need the elevated core service; is a "bundled-only" mode enough
+   there, or should plugins ship their code inside their own (jailed) service as an alternative?
