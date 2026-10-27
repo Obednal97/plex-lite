@@ -279,6 +279,7 @@
       self.pending = null;
       self.serverDone = true;
       PL.warn('server search failed', err && err.message);
+      if (err && err.status === 401 && PL.plex.onUnauthorized) PL.plex.onUnauthorized(err);
       self.render();
     });
   };
