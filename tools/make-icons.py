@@ -1,71 +1,70 @@
 #!/usr/bin/env python3
-"""Draws the app icons (amber chevron on dark) without any imaging library."""
-import struct
+"""Renders the app icons from assets/icon.svg to the PNG sizes webOS uses.
+
+    make-icons.py [out-dir]          default: img/
+
+appinfo.json "icon" is 80x80 and "largeIcon" is 130x130. Uses rsvg-convert if it is installed,
+otherwise headless Chrome/Chromium (set CHROME to its path if it isn't found) plus ImageMagick or
+macOS sips to scale down.
+"""
+import os
+import shutil
+import subprocess
 import sys
-import zlib
+import tempfile
 from pathlib import Path
 
-BG = (24, 24, 24)
-FG = (229, 160, 13)
-SS = 4  # supersampling per axis
+APP = Path(__file__).resolve().parent.parent
+SVG = APP / "assets" / "icon.svg"
+SIZES = (("icon.png", 80), ("largeIcon.png", 130))
+CHROMES = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "google-chrome", "chromium", "chromium-browser",
+]
 
 
-def inside(x, y, poly):
-    hit = False
-    j = len(poly) - 1
-    for i in range(len(poly)):
-        xi, yi = poly[i]
-        xj, yj = poly[j]
-        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
-            hit = not hit
-        j = i
-    return hit
+def find_chrome():
+    for c in [os.environ.get("CHROME")] + CHROMES:
+        if c and (Path(c).exists() or shutil.which(c)):
+            return c
+    return None
 
 
-def rounded(x, y, r):
-    cx = min(max(x, r), 1 - r)
-    cy = min(max(y, r), 1 - r)
-    return (x - cx) ** 2 + (y - cy) ** 2 <= r * r
+def scale(src, dst, size):
+    if shutil.which("magick"):
+        subprocess.run(["magick", str(src), "-filter", "Lanczos", "-resize", f"{size}x{size}", "-strip", str(dst)], check=True)
+    elif shutil.which("sips"):
+        shutil.copy(src, dst)
+        subprocess.run(["sips", "-z", str(size), str(size), str(dst)], check=True, stdout=subprocess.DEVNULL)
+    else:
+        sys.exit("need ImageMagick (magick) or sips to scale the rendered icon")
 
 
-CHEVRON = [(0.30, 0.18), (0.52, 0.18), (0.76, 0.50), (0.52, 0.82), (0.30, 0.82), (0.54, 0.50)]
-
-
-def render(size):
-    rows = []
-    for py in range(size):
-        row = bytearray([0])
-        for px in range(size):
-            bg = fg = 0
-            for sy in range(SS):
-                for sx in range(SS):
-                    x = (px + (sx + 0.5) / SS) / size
-                    y = (py + (sy + 0.5) / SS) / size
-                    if rounded(x, y, 0.18):
-                        if inside(x, y, CHEVRON):
-                            fg += 1
-                        else:
-                            bg += 1
-            n = SS * SS
-            a = (bg + fg) / n
-            if bg + fg:
-                col = [(BG[i] * bg + FG[i] * fg) / (bg + fg) for i in range(3)]
-            else:
-                col = [0, 0, 0]
-            row += bytes([round(col[0]), round(col[1]), round(col[2]), round(a * 255)])
-        rows.append(bytes(row))
-    raw = b"".join(rows)
-
-    def chunk(tag, data):
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
-
-    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0))
-            + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+def main():
+    out = Path(sys.argv[1]) if len(sys.argv) > 1 else APP / "img"
+    out.mkdir(parents=True, exist_ok=True)
+    if shutil.which("rsvg-convert"):
+        for name, size in SIZES:
+            subprocess.run(["rsvg-convert", "-w", str(size), "-h", str(size), "-o", str(out / name), str(SVG)], check=True)
+            print("wrote", out / name)
+        return
+    chrome = find_chrome()
+    if not chrome:
+        sys.exit("need rsvg-convert or Chrome/Chromium (set CHROME=/path/to/chrome)")
+    with tempfile.TemporaryDirectory() as tmp:
+        page = Path(tmp) / "icon.html"
+        page.write_text('<!doctype html><html><body style="margin:0;background:transparent">'
+                        f'<img src="{SVG.as_uri()}" width="1024" height="1024" style="display:block"></body></html>')
+        big = Path(tmp) / "icon-1024.png"
+        subprocess.run([chrome, "--headless", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1",
+                        "--default-background-color=00000000", "--window-size=1024,1024",
+                        f"--screenshot={big}", page.as_uri()],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for name, size in SIZES:
+            scale(big, out / name, size)
+            print("wrote", out / name)
 
 
 if __name__ == "__main__":
-    out = Path(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / "img")
-    out.mkdir(parents=True, exist_ok=True)
-    for name, size in (("icon.png", 80), ("largeIcon.png", 130)):
-        (out / name).write_bytes(render(size))
-        print("wrote", out / name)
+    main()

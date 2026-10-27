@@ -19,8 +19,8 @@
   --rim-light: rgba(255, 255, 255, 0.28);
   --focus: #f7fafc;            /* focused fill */
   --focus-ink: #08080a;        /* text on the focused fill */
-  --resume: #fab82e;           /* progress (Plex amber) */
-  --accent: #e5a00d;
+  --resume: #5ad6e2;           /* progress (brand teal, from the icon) */
+  --accent: #5ad6e2;
   --glass: rgba(255, 255, 255, 0.10);
   --glass-hi: rgba(255, 255, 255, 0.20);
   --glass-edge: rgba(255, 255, 255, 0.14);

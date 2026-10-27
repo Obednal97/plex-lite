@@ -1,17 +1,23 @@
 #!/usr/bin/env node
-// Chrome 53 (webOS 4.5) compatibility check for the app's JS and CSS.
-// Needs acorn + acorn-walk in ~/.cache/plexlite-tools (npm install there).
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+// Chrome 53 (webOS 4.5) compatibility check for the app's JS and CSS, plus a few release checks.
+// Needs acorn + acorn-walk: `npm install --prefix ~/.cache/plexlite-tools acorn acorn-walk`
+// (or set PLEXLITE_TOOLS_DIR to another folder holding them, or install them in the repo).
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const require = createRequire(join(homedir(), '.cache/plexlite-tools/package.json'));
+const APP = fileURLToPath(new URL('..', import.meta.url));
+const TOOLS_DIRS = [process.env.PLEXLITE_TOOLS_DIR, join(homedir(), '.cache/plexlite-tools'), APP].filter(Boolean);
+const toolsDir = TOOLS_DIRS.find((d) => existsSync(join(d, 'node_modules/acorn')));
+if (!toolsDir) {
+  console.error('acorn not found: npm install --prefix ~/.cache/plexlite-tools acorn acorn-walk');
+  process.exit(2);
+}
+const require = createRequire(join(toolsDir, 'package.json'));
 const acorn = require('acorn');
 const walk = require('acorn-walk');
-
-const APP = fileURLToPath(new URL('..', import.meta.url));
 
 const BAD_MEMBERS = {
   entries: 'Object.entries (Chrome 54)', values: 'Object.values (Chrome 54)', fromEntries: 'Object.fromEntries (73)',
@@ -85,6 +91,12 @@ for (const m of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
   if (ref.includes('dev-config')) continue;
   try { statSync(join(APP, ref)); } catch { report(join(APP, 'index.html'), '-', `missing file ${ref}`); }
 }
+
+// the version the app reports to Plex must match the package version (see CHANGELOG.md)
+const appinfo = JSON.parse(readFileSync(join(APP, 'appinfo.json'), 'utf8'));
+const coreVersion = (/PL\.VERSION\s*=\s*'([^']+)'/.exec(readFileSync(join(APP, 'js/core.js'), 'utf8')) || [])[1];
+if (!/^\d+\.\d+\.\d+$/.test(appinfo.version)) report(join(APP, 'appinfo.json'), '-', `version ${appinfo.version} is not x.y.z (webOS needs plain semver)`);
+if (coreVersion !== appinfo.version) report(join(APP, 'js/core.js'), '-', `PL.VERSION ${coreVersion} != appinfo.json version ${appinfo.version}`);
 
 console.log(problems ? `\n${problems} problem(s)` : 'Chrome 53 check: OK');
 process.exit(problems ? 1 : 0);

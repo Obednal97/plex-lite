@@ -6,13 +6,15 @@
 //
 // Homebrew node can't reach the LAN (macOS Local Network privacy), so the proxy uses the server's
 // remote https address from plex.tv.
+//
+// Credentials: PLEX_TOKEN and PLEX_CLIENT_ID from the environment or PLEX_ENV_FILE
+// (see tools/local.env.example).
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { plexCredentials } from './config.mjs';
 
 const APP = fileURLToPath(new URL('..', import.meta.url));
 const PORT = Number(process.env.PORT || 8920);
@@ -24,9 +26,9 @@ const SELF = `127.0.0.1:${PORT}`;
 const ALLOWED = [/^\/identity$/, /^\/library\//, /^\/hubs/, /^\/photo\//, /^\/livetv\/dvrs$/, /^\/media\/providers$/,
   /^\/tv\.plex\.providers\.epg\.[^/]+\/grid$/, /^\/video\/:\/transcode\/universal\/decision$/];
 
-const env = Object.fromEntries(readFileSync(join(homedir(), '.secrets/plex.env'), 'utf8')
-  .split('\n').filter((l) => l.includes('=')).map((l) => l.trim().split(/=(.*)/s).slice(0, 2)));
-const TOKEN = env.PLEX_TOKEN;
+const creds = plexCredentials();
+const TOKEN = creds.token;
+const env = { PLEX_CLIENT_ID: creds.clientId };
 
 async function findServer() {
   const r = await fetch(`https://plex.tv/api/v2/resources?includeHttps=1&X-Plex-Token=${TOKEN}&X-Plex-Client-Identifier=${env.PLEX_CLIENT_ID}`,

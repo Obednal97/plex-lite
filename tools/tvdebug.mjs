@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // DevTools-protocol client for web apps running on the TV (WAM listens on :9998).
-// Needs a tunnel: ssh -f -N -L 19998:127.0.0.1:9998 lgtv
+// Needs a tunnel: ssh -f -N -L 19998:127.0.0.1:9998 "$PLEXLITE_TV_SSH"   (TVDEBUG_PORT changes 19998;
+// settings: tools/local.env.example)
 //
 //   node tools/tvdebug.mjs list
 //   node tools/tvdebug.mjs eval '<js expression>'      [--match <url substring>]
@@ -12,8 +13,9 @@
 //   node tools/tvdebug.mjs reload
 
 import { writeFileSync } from 'node:fs';
+import { config } from './config.mjs';
 
-const PORT = process.env.TVDEBUG_PORT || 19998;
+const PORT = config.TVDEBUG_PORT;
 const args = process.argv.slice(2);
 const opt = (name, dflt) => {
   const i = args.indexOf(`--${name}`);

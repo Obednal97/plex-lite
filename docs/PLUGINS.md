@@ -19,7 +19,8 @@ plugins/<id>/
 Add `<script src="plugins/<id>/plugin.js">` (before `js/app.js`) and the stylesheet link to
 `index.html`. `tools/build-ipk.py` packages the web files into the app and any `service/` into
 `./usr/palm/services/<service id>`, declaring it in `packageinfo.json`. A service id must start
-with the app id (`com.bednal.plexlite.…`).
+with the app id (`com.bednal.plexlite.…`). Builds made with `--app-id` rewrite that prefix, so a
+fork's services become `<its id>.…` automatically (README, "App id").
 
 ## register()
 
