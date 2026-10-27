@@ -29,7 +29,7 @@
 .surprise-info { transition: opacity var(--t-in) linear, transform var(--t-in) var(--spring); }
 .surprise .title-art { width: 760px; height: 200px; margin-bottom: 20px; }
 .surprise-title > .hero-title { margin-bottom: 12px; }
-.surprise-eyebrow { margin-bottom: 18px; }
+.surprise-eyebrow { margin-bottom: 18px; max-width: 900px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .surprise-episode {
   margin-top: 10px; max-width: 860px; font-size: 28px; line-height: 34px; font-weight: 600; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -72,3 +72,12 @@
   position: absolute; left: 0; top: 0; width: 100%; height: 4px; background: var(--text);
   transform: scaleX(0); transform-origin: 0 50%;
 }
+
+/* ---- Collection page: the pill sits after the title ------------------------------------------- */
+
+.items-head { position: absolute; left: 96px; top: 150px; height: 56px; white-space: nowrap; }
+.items-head .page-title {
+  position: static; display: inline-block; vertical-align: middle;
+  max-width: 1180px; overflow: hidden; text-overflow: ellipsis;
+}
+.items-head .surprise-pill { vertical-align: middle; margin-left: 48px; }

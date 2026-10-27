@@ -44,8 +44,11 @@ cancels.
   Unwatched filter makes "unwatched only" strict.
 - Movies resume where they were left. Shows play their next episode (Plex's On Deck, which is S1 E1
   for a show that was never started), or the first regular episode for a finished show.
-- Watched state is the current Plex Home profile's. The last 15 picks per library are kept in memory
-  so Spin again doesn't bring them straight back.
+- A collection's page (2+ titles) has its own Surprise Me pill after the title (Up from the first
+  row). It picks among that collection's titles by the same rules.
+- Watched state is the current Plex Home profile's. The last 15 picks per library or collection and
+  profile are remembered (in the TV's local storage, so across restarts) and skipped, so neither
+  Spin again nor tomorrow's spin brings them straight back.
 - It costs one request for 12 random titles (`sort=random`), plus one for a show's next episode. The
   art (1280x720, as in the hero) and logo are preloaded so the reveal draws complete.
 

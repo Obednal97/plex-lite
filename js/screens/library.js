@@ -487,7 +487,7 @@
       onError: function (err) { self.empty.textContent = PL.errorMessage(err); },
       onFocusItem: function (item) { if (self.screen.visible) self.ambient(item); self.screen.updateHeader(); },
       onSelect: function (item) {
-        PL.app.push(screens.items(item.title, '/library/collections/' + item.ratingKey + '/children', {}));
+        PL.app.push(screens.items(item.title, '/library/collections/' + item.ratingKey + '/children', {}, { collection: item }));
       },
     });
     this.grid.el.style.top = '300px';
@@ -673,17 +673,47 @@
 
   // ---- Generic item grid (a collection, an actor's films, ...) --------------------------------
 
-  // path: list endpoint; params: extra query parameters
-  screens.items = function (title, path, params) {
+  // path: list endpoint; params: extra query parameters; opts.collection: the collection item, which
+  // adds a "Surprise Me" pill (a random pick from it) after the title when it holds 2+ titles.
+  screens.items = function (title, path, params, opts) {
+    opts = opts || {};
     var el = PL.el('div', 'items-screen');
     var shadow = new ui.FocusShadow();
     var head = PL.el('div', 'page-title fade', title);
     var count = PL.el('div', 'page-count fade');
-    el.appendChild(head);
+    var col = opts.collection || null;
+    var pill = null;
+    var area = 'grid';
+    var headHost = head;
+    if (col) {
+      headHost = PL.el('div', 'items-head fade');
+      headHost.appendChild(head);
+      pill = PL.el('div', 'surprise-pill');
+      var dice = ui.icon('dice');
+      if (dice) pill.appendChild(dice);
+      pill.appendChild(document.createTextNode('Surprise Me'));
+      pill.style.display = 'none';
+      pill.addEventListener('click', function () { surprise(); });
+      headHost.appendChild(pill);
+    }
+    el.appendChild(headHost);
     el.appendChild(count);
     var ambient = PL.debounce(function (item) {
       if (item) PL.app.backdrop.set(ui.ambient(ui.artPath(item)), 'ambient');
     }, 400);
+    var pillShown = function () { return !!pill && pill.style.display !== 'none'; };
+    var focusPill = function (on) {
+      area = on ? 'pill' : 'grid';
+      pill.classList.toggle('focused', on);
+      grid.setFocused(!on);
+    };
+    var surprise = function () {
+      PL.app.push(screens.surprise({
+        key: String(col.librarySectionID || ''),
+        type: col.subtype === 'show' ? 'show' : 'movie',
+        collection: String(col.ratingKey),
+      }, { label: title }));
+    };
     var grid = new ui.Grid({
       columns: 6,
       shadow: shadow,
@@ -697,12 +727,16 @@
           return { total: mc.totalSize != null ? mc.totalSize : (mc.size || 0), items: mc.Metadata || [] };
         });
       },
-      onLoaded: function (total) { count.textContent = total ? total + (total === 1 ? ' title' : ' titles') : 'Nothing here'; },
+      onLoaded: function (total) {
+        count.textContent = total ? total + (total === 1 ? ' title' : ' titles') : 'Nothing here';
+        if (pill) pill.style.display = total >= 2 ? '' : 'none';
+        if (area === 'pill' && !pillShown()) focusPill(false);
+      },
       onError: function (err) { count.textContent = PL.errorMessage(err); },
       onFocusItem: function (item) {
         ambient(item);
         var scrolled = grid.rowOf(grid.index) > 0;
-        head.classList.toggle('faded', scrolled);
+        headHost.classList.toggle('faded', scrolled);
         count.classList.toggle('faded', scrolled);
       },
       onSelect: function (item) { PL.app.push(screens.details(item)); },
@@ -716,11 +750,24 @@
       show: function () {
         var item = grid.items[grid.index];
         PL.app.backdrop.set(item ? ui.ambient(ui.artPath(item)) : null, 'ambient');
-        grid.setFocused(true);
+        if (area === 'pill') pill.classList.add('focused');
+        else grid.setFocused(true);
       },
       hide: function () { ambient.cancel(); grid.setFocused(false); },
       destroy: function () { ambient.cancel(); },
-      key: function (code) { return grid.key(code); },
+      key: function (code) {
+        if (area === 'pill') {
+          if (code === K.ENTER) { surprise(); return true; }
+          if (code === K.DOWN) { focusPill(false); return true; }
+          return code === K.LEFT || code === K.RIGHT || code === K.UP;
+        }
+        if (grid.key(code)) return true;
+        if (code === K.UP && pillShown()) {
+          focusPill(true);
+          return true;
+        }
+        return false;
+      },
     };
   };
 })();

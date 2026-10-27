@@ -419,7 +419,7 @@
       // one-time tip so the hold-OK quick actions are discoverable
       if (!PL.storage.get('tip.holdOk', false)) {
         setTimeout(function () {
-          if (!app.ready || !app.top() || !app.top().longPress) return;
+          if (!app.ready || !app.top() || !app.top().longPress || app.top().noHoldTip) return;
           PL.toast('Tip: hold OK on any title for more options', 6000);
           PL.storage.set('tip.holdOk', true);
         }, 5000);
