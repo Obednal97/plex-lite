@@ -27,5 +27,5 @@ releases are fixes only.
   spring-fitted motion.
 - Plugin system (Phase 1: bundled, reviewed plugins) and the Overseerr plugin.
 - Release preparation: MIT licence, third-party notices and trademark disclaimer, an original app
-  icon (`assets/icon.svg`), build-time app id (`--app-id` / `PLEXLITE_APP_ID`), and dev tools
+  icon (`assets/icon.svg`), a brand-teal accent and progress colour in place of Plex's amber, build-time app id (`--app-id` / `PLEXLITE_APP_ID`), and dev tools
   configured through `tools/local.env` instead of personal defaults.

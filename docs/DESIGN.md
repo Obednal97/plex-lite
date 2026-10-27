@@ -38,7 +38,7 @@ ideas, not the code:
 | `--control` | `rgba(34,34,36,.92)` | idle buttons over artwork |
 | `--rim` / `--rim-light` | white 14% / 28% | 1 px edges of floating glass |
 | `--focus` / `--focus-ink` | `#f7fafc` / `#08080a` | the one focused fill and its text |
-| `--resume` | `#fab82e` | progress bars (Plex amber) |
+| `--resume` | `#5ad6e2` | progress bars (brand teal, matches the icon) |
 
 **Type scale** (TV font "LG Display"): 72 hero title · 48 page/search/OSD title · 32 row headings ·
 28 meta, tabs, buttons, rows · 26 synopsis, card titles · 24 captions (floor) · 20–22 only for
