@@ -74,16 +74,24 @@ Transform and opacity only.
 - **Live TV, Settings:** quiet rows on the ground (hairline separators), white plate on focus.
 - **Sheets, toasts, Up Next:** lit glass (gradient fill + rim + soft shadow), opaque enough that
   no live blur is needed.
-- **Player:** nothing on screen while watching. Any key raises one bottom block over a deep scrim:
-  eyebrow + 48 px title, a 6 px rail with elapsed and remaining times (24 px), and a row of the
-  details page's dark capsules (Play/Pause, −10 s, +30 s, Subtitles, Audio, Chapters, Next
-  episode). Three focus zones: the rail (focused = it thickens and grows a white head), the
-  capsules (white plate), and the corner call to action. Scrubbing fades the title and shows a
-  glass time bubble with the jump ("7:40 +2:00") above the head; the seek happens on release.
-  Skip Intro / Skip Credits is a 76 px white pill bottom right (it is the focus while shown) and
-  rises above the rail when the controls open; Up Next is a glass card with its own white button.
-  Subtitles move up out of the way while the controls are open. Layout, bottom up: buttons 54,
-  times 160, rail 210, title 254; pill and Up Next 96 (286 with the controls).
+- **Player** (Apple TV app first, Netflix second; spec and remote table in
+  [PLAYER-v2-design.md](PLAYER-v2-design.md)): nothing on screen while watching. Any key raises one
+  bottom block over a 520 px ink scrim: eyebrow (year, or "Show · S1 E2") and a 64 px title, round
+  68 px icons on the right (Subtitles, Audio when there is more than one track, Next episode), the
+  bar, the times, and text tabs (Info, Cast, Chapters, Episodes). The bar is the main control: one
+  segment per chapter with 6 px gaps, 6 px at rest, 10 px with a white head when focused, filled in
+  `--resume`; Left/Right jump −10 s / +30 s at once. Paused or scrubbing: a 30% veil, a 12 px bar,
+  a teal tick at the real position, a time label riding the target (48 px time and the chapter
+  on a dark plate with a caret; Plex's index frame with a white rim instead, on servers that make
+  preview thumbnails), "Paused at 9:13 · jumping to Chapter 5" and
+  `[OK] Jump here` `[Back] Return` hints. Subtitles and Audio open a 540 px lit-glass menu over
+  their icon (with a caret) while the video plays; "Size and style" swaps in Small / Medium /
+  Large. A tab slides the block up 292 px for a row of 320×180 cards (or the Info synopsis and
+  facts). Skip Intro / Skip Credits is an 80 px white pill bottom right with a teal line for the
+  time left, over a corner scrim; the end card (Up next, title, runtime, still, Watch Credits and
+  a counting-down Next Episode) sits in the same corner. Both rise 210 px above the icons when the
+  controls open and step aside while a menu or tab is open. Layout, bottom up: tabs 44, times 112,
+  bar 165, title and icons 214, menus 306.
 
 ## Performance rules (unchanged)
 

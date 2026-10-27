@@ -257,7 +257,7 @@ const SHOTS = {
     await playAndPause(page, (C.playerAt || 60) - 1);
     await page.waitForTimeout(600);
   },
-  // scrubbing: Right taps move the target, the bubble shows the time and the jump
+  // scrubbing while paused: Right taps move the target; the preview and its time ride above it
   'player-scrub': async (page) => {
     await openTitle(page, C.playerQuery, C.player);
     await settle(page, 400);
@@ -266,14 +266,23 @@ const SHOTS = {
     await press(page, 'right', 'right', 'right', 'right');
     await page.waitForTimeout(300);
   },
-  // the button row, Subtitles focused
-  'player-buttons': async (page) => {
+  // Up from the bar to the Subtitles icon, OK: its menu opens above it
+  'player-subtitles': async (page) => {
     await openTitle(page, C.playerQuery, C.player);
     await settle(page, 400);
     await press(page, 'ok');
     await playAndPause(page, (C.playerAt || 60) - 1);
-    await press(page, 'down', 'right', 'right', 'right');
-    await page.waitForTimeout(500);
+    await press(page, 'up', 'ok');
+    await page.waitForTimeout(600);
+  },
+  // Down from the bar: the tabs; Right to Chapters, Down into its cards
+  'player-chapters': async (page) => {
+    await openTitle(page, C.playerQuery, C.player);
+    await settle(page, 400);
+    await press(page, 'ok');
+    await playAndPause(page, (C.playerAt || 60) - 1);
+    await press(page, 'down', 'right', 'down');
+    await page.waitForTimeout(900);
   },
   // Skip Intro, a few seconds into an episode with an intro marker
   'skip-intro': async (page) => {
@@ -290,7 +299,7 @@ const SHOTS = {
     await settle(page, 400);
     // resume the in-progress episode; its credits marker brings up Up Next a few seconds in
     await press(page, 'ok');
-    await page.waitForFunction(() => { const p = PL.app.top(); return p.upnext && !p.upnext.classList.contains('upnext-hidden'); }, null, { timeout: 90000 });
+    await page.waitForFunction(() => { const p = PL.app.top(); return p.cta && p.cta() === 'endcard'; }, null, { timeout: 90000 });
     await page.waitForTimeout(2500);
   },
   'live-tv': async (page) => {

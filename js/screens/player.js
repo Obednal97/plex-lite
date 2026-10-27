@@ -1,16 +1,96 @@
 // Video player: library items (direct play or server stream) and Live TV channels.
+// Layout and remote: docs/PLAYER-v2-design.md. The bar's geometry, labels and the key map are in
+// js/player-logic.js (pure, tested); this file owns the DOM, playback and timing.
 'use strict';
 
 (function () {
   var screens = PL.screens = PL.screens || {};
   var K = PL.KEY;
-  var SCRUB_W = 1728;
-  var BUBBLE_W = 240;
-  var OSD_HIDE_MS = 4000;
-  var SEEK_COMMIT_MS = 800;   // after the last tap (or key release) the seek goes to the TV
-  var SEEK_HOLD_MS = 1500;    // fallback commit while a key is down, in case its key-up never comes
-  var HOLD_GAP_MS = 600;      // key-downs closer than this without a key-up count as a held key
+  var L = PL.playerLogic;
+  var BAR_W = 1728;
+  var BAR_GAP = 6;
+  var PREVIEW_W = 464;     // preview thumbnail (with its time pill under it)
+  var TIME_ONLY_W = 400;   // no preview thumbnails (the usual case): a large time and the chapter
+  var OSD_HIDE_MS = 5000;
+  var JUMP_RESTART_MS = 400; // server streams restart per seek, so taps this close together add up
+  var HOLD_GAP_MS = 600;   // key-downs closer than this without a key-up count as a held key
   var TIMELINE_MS = 10000;
+  var CARD_STEP = 352;     // 320 px card + 32 px gap
+  var ROW_VISIBLE = 5;
+  var CAST_GEO = { w: 160, h: 160 }; // round people cards, as on the details page but smaller
+  var CAST_STEP = 200;
+  var CAST_VISIBLE = 8;
+  var showCasts = {};      // grandparentRatingKey -> Promise<show metadata>, for the session
+  var MENU_W = 540;
+  var MENU_MAX_LIST = 560; // the subtitle list scrolls beyond this
+  var SUB_SIZES = { small: 'Small', medium: 'Medium', large: 'Large' };
+
+  // Line icons drawn like the mockups (24-unit grid). [tag, attrs] lists; stroke unless fill: true.
+  var GLYPHS = {
+    subtitles: [['rect', { x: 3, y: 5, width: 18, height: 14, rx: 3 }], ['path', { d: 'M7 15h4M14 15h3M7 11h2M12 11h5' }]],
+    audio: [['path', { d: 'M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2' }]],
+    check: [['path', { d: 'M5 12.5l4.5 4.5L19 7' }]],
+    chevron: [['path', { d: 'M9 6l6 6-6 6' }]],
+    restart: [['path', { d: 'M4 12a8 8 0 1 0 2.5-5.8' }], ['path', { d: 'M4 4v4.5h4.5' }]],
+    pause: { fill: true, parts: [['rect', { x: 6, y: 5, width: 4, height: 14, rx: 1 }], ['rect', { x: 14, y: 5, width: 4, height: 14, rx: 1 }]] },
+    skip: { fill: true, parts: [['path', { d: 'M3 5.5v13l9-6.5z' }], ['path', { d: 'M12 5.5v13l9-6.5z' }]] },
+    play: { fill: true, parts: [['path', { d: 'M6 4.5v15l13-7.5z' }]] },
+    next: { fill: true, parts: [['path', { d: 'M4 5.5v13l10-6.5z' }], ['rect', { x: 16, y: 5, width: 3.2, height: 14, rx: 1 }]] },
+  };
+
+  function glyph(name, size, weight) {
+    var g = GLYPHS[name];
+    var fill = !!g.parts; // {fill: true, parts} (an array's .fill is Array.prototype.fill)
+    var parts = g.parts || g;
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', size);
+    svg.setAttribute('height', size);
+    svg.setAttribute('class', 'glyph');
+    if (fill) {
+      svg.setAttribute('fill', 'currentColor');
+    } else {
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', weight || 1.8);
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+    }
+    parts.forEach(function (p) {
+      var n = document.createElementNS('http://www.w3.org/2000/svg', p[0]);
+      Object.keys(p[1]).forEach(function (k) { n.setAttribute(k, p[1][k]); });
+      svg.appendChild(n);
+    });
+    return svg;
+  }
+
+  // "S1 E2" (Special 3 for season 0)
+  function episodeCode(it) {
+    if (it.parentIndex == null || it.index == null) return '';
+    return it.parentIndex === 0 ? 'Special ' + it.index : 'S' + it.parentIndex + ' E' + it.index;
+  }
+
+  // Hover moves the focus only while the Magic Remote's pointer is showing (rows sliding under a
+  // hidden cursor must not steal it).
+  // "Ann Lee" -> "AL" (the monogram for a person without a photo)
+  function initialsOf(name) {
+    var parts = String(name || '').split(/\s+/).filter(Boolean);
+    return ((parts[0] ? parts[0].charAt(0) : '') + (parts.length > 1 ? parts[parts.length - 1].charAt(0) : '')).toUpperCase();
+  }
+
+  function pointing() { return document.body.classList.contains('pointer'); }
+
+  // the width of an element's text (not of its box)
+  function textWidth(node) {
+    var r = document.createRange();
+    r.selectNodeContents(node);
+    return Math.min(node.clientWidth || 1100, Math.ceil(r.getBoundingClientRect().width));
+  }
+
+  function indexOfKey(list, ratingKey) {
+    for (var i = 0; i < (list || []).length; i++) if (list[i].ratingKey === ratingKey) return i;
+    return -1;
+  }
 
   // What this TV decodes in hardware. The decision call must not send hasMDE, otherwise the
   // server trusts the client and "direct plays" DTS. Only AC3/E-AC3 in the transcode target
@@ -141,6 +221,7 @@
     this.startOffset = opts.offset || 0;
     this.mediaIndex = opts.mediaIndex || 0;
     this.chapters = [];
+    this.segs = L.segments([], 0, BAR_W, BAR_GAP);
     this.subs = { kind: 'none', id: null, cues: [], shown: '', segs: {}, timer: null };
     this.gen = 0;
     this.state = 'idle';
@@ -149,16 +230,25 @@
     this.session = null;
     this.queue = opts.queue && opts.queue.items && opts.queue.items.length ? opts.queue : null;
     this.retried = false;
-    this.pendingSeek = null;
+    this.scrubState = null;   // {real, target, wasPlaying} while the paused-look scrub is on
+    this.jumpTarget = null;   // a jump not sent to the TV yet (a seek in flight, or a stream restart)
+    this.lastJump = null;     // {from, at}: where the last tap jumped from (a hold scrubs from there)
     this.seekPresses = 0;
     this.lastSeekAt = 0;
     this.lastReported = null;
     this.osdHidden = true;
-    this.zone = 'bar';        // what the remote steers while the overlay is up: 'bar' | 'buttons' | 'pill'
+    this.zone = 'bar';        // focus while the controls are up: bar | icons | cta | tabs | cards | menu
+    this.icons = [];          // [{id, node, action}]
+    this.iconIndex = 0;
+    this.tabs = [];           // [{id, label, node, pane, cards, index, first}]
+    this.tabIndex = 0;
+    this.menu = null;         // the open Subtitles / Audio menu
+    this.ecIndex = 1;         // end card: 0 Watch Credits, 1 Next Episode
     this.held = {};           // keys down without a key-up yet
     this.hold = null;         // {dir, since, last} while Left/Right is held on the bar
     this.hoverSec = null;     // pointer over the bar: the time under it
     this.painted = {};        // last values written to the DOM, so unchanged ones aren't rewritten
+    this.preview = { part: null, ok: false, want: null, loading: false, shown: null };
     this.build();
   }
 
@@ -174,72 +264,144 @@
     this.status.appendChild(this.statusText);
     el.appendChild(this.status);
 
-    // The overlay: title, the seek bar with times, and a row of buttons.
+    this.subEl = PL.el('div', 'subs');
+    this.applySubSize();
+    el.appendChild(this.subEl);
+
+    // ---- the controls: one bottom block over a scrim --------------------------------------
+    // paused / scrubbing: a 30% veil over the picture (its own layer, outside the fading block)
+    el.appendChild(PL.el('div', 'player-veil'));
+    // the end card's corner scrim sits under the controls, so they stay crisp over it
+    el.appendChild(PL.el('div', 'corner-scrim endcard-scrim'));
     var osd = this.osd = PL.el('div', 'osd faded');
-    osd.appendChild(PL.el('div', 'osd-shade'));
-    var text = this.osdText = PL.el('div', 'osd-text');
+    osd.appendChild(PL.el('div', 'osd-scrim'));
+    osd.appendChild(PL.el('div', 'osd-scrim-tall'));
+
+    // title, icons, bar and times: slide up together when a tab opens
+    var upper = this.upper = PL.el('div', 'osd-upper');
+    var text = PL.el('div', 'osd-text');
     this.eyebrow = PL.el('div', 'osd-eyebrow');
     this.title = PL.el('div', 'osd-title');
     text.appendChild(this.eyebrow);
     text.appendChild(this.title);
-    osd.appendChild(text);
+    upper.appendChild(text);
 
-    var scrub = this.scrub = PL.el('div', 'scrub');
-    var track = PL.el('div', 'scrub-track');
-    this.bufferBar = PL.el('div', 'scrub-buffer');
-    this.playedBar = PL.el('div', 'scrub-played');
-    this.ticks = PL.el('div', 'scrub-ticks');
-    [this.bufferBar, this.playedBar, this.ticks].forEach(function (n) { track.appendChild(n); });
-    scrub.appendChild(track);
-    this.head = PL.el('div', 'scrub-head');
-    this.head.appendChild(PL.el('div', 'scrub-thumb'));
-    scrub.appendChild(this.head);
-    this.bubble = PL.el('div', 'scrub-bubble');
-    this.bubbleTime = PL.el('span', 'scrub-bubble-time');
-    this.bubbleDelta = PL.el('span', 'scrub-bubble-delta');
-    this.bubble.appendChild(this.bubbleTime);
-    this.bubble.appendChild(this.bubbleDelta);
-    scrub.appendChild(this.bubble);
-    var hit = PL.el('div', 'scrub-hit');
-    scrub.appendChild(hit);
-    osd.appendChild(scrub);
+    this.iconRow = PL.el('div', 'osd-icons');
+    upper.appendChild(this.iconRow);
+
+    var bar = this.bar = PL.el('div', 'bar');
+    this.segRow = PL.el('div', 'bar-segs');
+    bar.appendChild(this.segRow);
+    this.tick = PL.el('div', 'bar-tick');
+    bar.appendChild(this.tick);
+    this.head = PL.el('div', 'bar-head');
+    this.head.appendChild(PL.el('div', 'bar-knob'));
+    bar.appendChild(this.head);
+    var pv = this.previewEl = PL.el('div', 'bar-preview');
+    this.thumbBox = PL.el('div', 'bar-thumb');
+    this.thumbImg = PL.el('img');
+    this.thumbBox.appendChild(this.thumbImg);
+    var label = PL.el('div', 'bar-label');
+    this.previewTime = PL.el('div', 'bar-time');
+    this.previewChapter = PL.el('div', 'bar-chapter');
+    label.appendChild(this.previewTime);
+    label.appendChild(this.previewChapter);
+    pv.appendChild(this.thumbBox);
+    pv.appendChild(label);
+    bar.appendChild(pv);
+    var hit = PL.el('div', 'bar-hit');
+    bar.appendChild(hit);
+    upper.appendChild(bar);
 
     var times = PL.el('div', 'osd-times');
-    this.elapsed = PL.el('span', 'left');
-    this.remaining = PL.el('span', 'right');
-    times.appendChild(this.elapsed);
+    var left = PL.el('div', 'left');
+    var pauseGlyph = PL.el('span', 'osd-glyph');
+    pauseGlyph.appendChild(glyph('pause', 26));
+    this.elapsed = PL.el('span', 'osd-elapsed');
+    this.note = PL.el('span', 'osd-note');
+    left.appendChild(pauseGlyph);
+    left.appendChild(this.elapsed);
+    left.appendChild(this.note);
+    this.remaining = PL.el('div', 'right');
+    times.appendChild(left);
     times.appendChild(this.remaining);
-    osd.appendChild(times);
+    upper.appendChild(times);
+    osd.appendChild(upper);
 
-    this.row = new PL.ui.ButtonRow([]);
-    this.row.el.classList.add('osd-buttons');
-    osd.appendChild(this.row.el);
+    // while scrubbing: what OK and Back do
+    var hints = PL.el('div', 'osd-hints');
+    var hint = function (key, label) {
+      var h = PL.el('div', 'osd-hint');
+      h.appendChild(PL.el('span', 'keycap', key));
+      var t = PL.el('span', '', label);
+      h.appendChild(t);
+      hints.appendChild(h);
+      return t;
+    };
+    hint('OK', 'Jump here');
+    this.hintBack = hint('Back', 'Return');
+    osd.appendChild(hints);
 
-    this.subEl = PL.el('div', 'subs');
-    el.appendChild(this.subEl);
+    this.tabRow = PL.el('div', 'osd-tabs');
+    osd.appendChild(this.tabRow);
+    this.panel = PL.el('div', 'osd-panel');
+    osd.appendChild(this.panel);
+
+    this.menuEl = PL.el('div', 'osd-menu');
+    osd.appendChild(this.menuEl);
     el.appendChild(osd);
 
-    this.upnext = PL.el('div', 'upnext upnext-hidden');
-    this.upnextLabel = PL.el('div', 'upnext-label');
-    this.upnextTitle = PL.el('div', 'upnext-title');
-    var upBtn = PL.el('div', 'upnext-btn');
-    upBtn.appendChild(PL.ui.icon('play'));
-    upBtn.appendChild(PL.el('span', '', 'Play next episode'));
-    this.upnextHint = PL.el('div', 'upnext-hint', 'Back to keep watching');
-    [this.upnextLabel, this.upnextTitle, upBtn, this.upnextHint].forEach(function (n) { self.upnext.appendChild(n); });
-    el.appendChild(this.upnext);
-    this.upnext.addEventListener('click', function () { if (self.upnextNext) self.playNext(); });
-
-    this.pill = PL.el('div', 'skip-pill skip-pill-hidden');
-    this.pill.appendChild(PL.ui.icon('skip'));
+    // ---- Skip Intro / Skip Credits ------------------------------------------------------------
+    this.skip = PL.el('div', 'skip skip-hidden');
+    this.skip.appendChild(PL.el('div', 'corner-scrim skip-scrim'));
+    this.pill = PL.el('div', 'skip-pill');
+    this.pill.appendChild(glyph('skip', 30));
     this.pillLabel = PL.el('span', '', '');
     this.pill.appendChild(this.pillLabel);
-    el.appendChild(this.pill);
+    this.pillLine = PL.el('div', 'cta-line');
+    this.pill.appendChild(this.pillLine);
+    this.skip.appendChild(this.pill);
+    el.appendChild(this.skip);
     this.pillVisible = false;
     this.pill.addEventListener('click', function (e) { e.stopPropagation(); self.activatePill(); });
 
-    this.paintSoon = PL.rafThrottle(function () { self.paintScrub(); });
+    // ---- End of episode ---------------------------------------------------------------------
+    var ec = this.endcard = PL.el('div', 'endcard endcard-hidden');
+    var body = this.ecBody = PL.el('div', 'endcard-body');
+    var top = PL.el('div', 'endcard-top');
+    var info = PL.el('div', 'endcard-text');
+    this.ecLabel = PL.el('div', 'endcard-label');
+    this.ecTitle = PL.el('div', 'endcard-title');
+    this.ecMeta = PL.el('div', 'endcard-meta');
+    [this.ecLabel, this.ecTitle, this.ecMeta].forEach(function (n) { info.appendChild(n); });
+    this.ecThumb = PL.el('div', 'endcard-thumb');
+    top.appendChild(info);
+    top.appendChild(this.ecThumb);
+    body.appendChild(top);
+    var btns = PL.el('div', 'endcard-btns');
+    this.ecWatch = PL.el('div', 'cta-btn', 'Watch Credits');
+    this.ecNext = PL.el('div', 'cta-btn cta-next');
+    this.ecNext.appendChild(glyph('play', 26));
+    this.ecNext.appendChild(PL.el('span', '', 'Next Episode'));
+    this.ecCount = PL.el('span', 'cta-count', '');
+    this.ecNext.appendChild(this.ecCount);
+    this.ecLine = PL.el('div', 'cta-line');
+    this.ecNext.appendChild(this.ecLine);
+    btns.appendChild(this.ecWatch);
+    btns.appendChild(this.ecNext);
+    body.appendChild(btns);
+    ec.appendChild(body);
+    el.appendChild(ec);
+    this.ecWatch.addEventListener('click', function (e) { e.stopPropagation(); self.ecIndex = 0; self.pressCta(); });
+    this.ecNext.addEventListener('click', function (e) { e.stopPropagation(); self.ecIndex = 1; self.pressCta(); });
+    [this.ecWatch, this.ecNext].forEach(function (n, i) {
+      n.addEventListener('mouseenter', function () { if (pointing()) { self.ecIndex = i; self.paintCta(); } });
+    });
+
+    this.paintSoon = PL.rafThrottle(function () { self.paintBar(); });
+    this.thumbImg.onerror = function () { self.preview.ok = false; self.preview.loading = false; self.paintBar(); };
     this.bindPointer(hit);
+    this.buildSegments();
 
     var v = this.video;
     var on = function (name, fn) { v.addEventListener(name, fn); };
@@ -255,15 +417,16 @@
       self.setStatus(null);
       self.state = 'playing';
       self.report();
-      self.paintPlayButton();
-      // a new stream or a resume brings the overlay up; recovering from a stall doesn't
+      self.paintState();
+      // a new stream or a resume brings the controls up; recovering from a stall doesn't
       if (was !== 'playing' || !self.osdHidden) self.showOsd();
     });
     on('pause', function () {
       if (v.ended || (self.state !== 'playing' && self.state !== 'paused')) return;
       self.state = 'paused';
+      if (!self.statusText.textContent) self.setStatus(null); // no buffering spinner over a paused picture
       self.report();
-      self.paintPlayButton();
+      self.paintState();
       self.showOsd();
     });
     on('waiting', function () {
@@ -271,17 +434,18 @@
     });
     on('timeupdate', function () {
       self.verifySeek();
-      if (!self.osdHidden) self.paintScrub();
+      if (!self.osdHidden) self.paintBar();
       self.renderSubs();
       self.checkMarkers();
+      self.paintCtaLine();
     });
-    on('progress', function () { if (!self.osdHidden) self.paintScrub(); });
+    on('progress', function () { if (!self.osdHidden) self.paintBar(); });
     on('ended', function () { self.onEnded(); });
     on('error', function () { self.onVideoError(); });
   };
 
-  // Magic Remote / mouse: moving wakes the overlay, the bar seeks where it is clicked and shows the
-  // time under the pointer, the buttons and the skip pill click (their hover look is CSS).
+  // Magic Remote / mouse: moving wakes the controls; hovering focuses what is under the pointer and
+  // clicking presses it; the bar shows the time (and preview) under the pointer and seeks on click.
   Player.prototype.bindPointer = function (hit) {
     var self = this;
     var lastMove = 0;
@@ -296,33 +460,41 @@
     var secAt = function (e) {
       if (!rect) rect = hit.getBoundingClientRect();
       var dur = self.durationSec();
-      return dur ? PL.clamp((e.clientX - rect.left) / rect.width, 0, 1) * dur : null;
+      if (!dur) return null;
+      return PL.clamp(L.secAt(self.segs, (e.clientX - rect.left) / rect.width * BAR_W), 0, dur);
     };
-    hit.addEventListener('mouseenter', function () { rect = hit.getBoundingClientRect(); });
+    hit.addEventListener('mouseenter', function () {
+      rect = hit.getBoundingClientRect();
+      if (pointing() && !self.osdHidden && !self.live && self.zone !== 'menu') self.setZone('bar');
+    });
     hit.addEventListener('mousemove', function (e) {
       if (self.live || self.osdHidden) return;
       self.hoverSec = secAt(e);
-      self.scrub.classList.add('hovering');
-      self.osd.classList.add('scrubbing');
+      self.osd.classList.add('hovering');
       self.paintSoon();
     });
     hit.addEventListener('mouseleave', function () {
       self.hoverSec = null;
-      self.scrub.classList.remove('hovering');
-      if (self.pendingSeek == null) self.osd.classList.remove('scrubbing');
+      self.osd.classList.remove('hovering');
       self.paintSoon();
     });
     hit.addEventListener('click', function (e) {
       e.stopPropagation();
-      if (self.live || !self.full || self.osdHidden || (self.state !== 'playing' && self.state !== 'paused')) return;
+      if (self.live || !self.canSeek() || self.osdHidden) return;
       var sec = secAt(e);
       if (sec == null) return;
-      self.pendingSeek = PL.clamp(sec, 0, Math.max(0, self.durationSec() - 5));
-      self.commitSeek();
+      sec = PL.clamp(sec, 0, Math.max(0, self.durationSec() - 5));
+      if (self.scrubState) {
+        self.scrubState.target = sec;
+        self.scrubCommit();
+      } else {
+        self.seekNow(sec);
+        self.showOsd('bar');
+      }
     });
   };
 
-  // ---- Status / OSD --------------------------------------------------------------------------
+  // ---- Status / controls ---------------------------------------------------------------------
 
   // text === null hides it; '' shows only the spinner (buffering).
   Player.prototype.setStatus = function (text, spinning) {
@@ -335,8 +507,13 @@
     this.statusText.textContent = text;
   };
 
-  // Shows the overlay (or keeps it up) and re-arms the auto-hide while playing. zone: where the
-  // remote lands; by default the skip pill when it is showing, else the seek bar.
+  // The controls stay up while paused, scrubbing, or with a menu or tab open.
+  Player.prototype.mayAutoHide = function () {
+    return this.state === 'playing' && !this.scrubState && !this.menu && !this.tabOpen();
+  };
+
+  // Shows the controls (or keeps them up) and re-arms the auto-hide. zone: where the focus lands;
+  // by default the Skip / Up Next button when one is showing (it keeps the focus), else the bar.
   Player.prototype.showOsd = function (zone) {
     var self = this;
     var wasHidden = this.osdHidden;
@@ -344,20 +521,18 @@
       this.osdHidden = false;
       this.osd.classList.remove('faded');
       this.el.classList.add('osd-open');
-      this.subEl.classList.add('subs-raised');
-      this.zone = zone || (this.ctaShown() ? 'pill' : 'bar');
+      this.zone = zone || (this.cta() ? 'cta' : 'bar');
     } else if (zone) {
       this.zone = zone;
     }
-    this.paintPill();
     this.paintZone();
-    if (wasHidden) this.paintScrub();
+    if (wasHidden) this.paintBar();
     clearTimeout(this.osdTimer);
-    if (this.state === 'playing' && this.pendingSeek == null) {
+    if (this.mayAutoHide()) {
       this.osdTimer = setTimeout(function () {
-        // a sheet (subtitles, chapters) is open over the player: keep the overlay for its return
-        if (PL.app.top() !== self && self.state !== 'stopped') self.showOsd();
-        else self.hideOsd();
+        if (self.state === 'stopped') return;
+        if (self.mayAutoHide()) self.hideOsd();
+        else self.showOsd();
       }, OSD_HIDE_MS);
     }
   };
@@ -366,63 +541,130 @@
     clearTimeout(this.osdTimer);
     if (this.osdHidden) return;
     this.osdHidden = true;
+    this.closeMenu(true);
+    this.closeTab(true);
     this.osd.classList.add('faded');
     this.el.classList.remove('osd-open');
     this.hoverSec = null;
-    this.scrub.classList.remove('hovering');
-    if (this.pendingSeek == null) this.endScrubLook();
-    this.subEl.classList.remove('subs-raised');
+    this.osd.classList.remove('hovering');
     this.zone = 'bar';
-    this.paintPill();
     this.paintZone();
   };
 
-  Player.prototype.paintZone = function () {
-    var up = !this.osdHidden;
-    this.scrub.classList.toggle('focused', up && this.zone === 'bar' && !this.live);
-    this.row.setFocused(up && this.zone === 'buttons');
+  Player.prototype.setZone = function (zone) {
+    this.showOsd(zone);
   };
 
-  // Play/Pause, Back 10 s, Forward 30 s, then Subtitles, Audio, Chapters and Next episode when the
-  // item has them. Rebuilt when the item, its play queue or its chapters change.
-  Player.prototype.buildButtons = function () {
+  // Keeps the zone valid (the thing it points at may have gone) and paints every focus state. Only
+  // classes on small elements change, so a zone move never repaints the picture area.
+  Player.prototype.paintZone = function () {
+    var z = this.zone;
+    if (z === 'cta' && !this.cta()) z = 'bar';
+    if (z === 'icons' && !this.icons.length) z = 'bar';
+    if (z === 'menu' && !this.menu) z = this.icons.length ? 'icons' : 'bar';
+    if ((z === 'tabs' || z === 'cards') && !this.tabs.length) z = 'bar';
+    if (this.live && z !== 'bar' && z !== 'cta') z = 'bar';
+    this.zone = z;
+    var up = !this.osdHidden;
+    var cls = 'zone-' + (up ? z : 'none');
+    if (this.zoneClass !== cls) {
+      if (this.zoneClass) this.osd.classList.remove(this.zoneClass);
+      this.osd.classList.add(cls);
+      this.zoneClass = cls;
+    }
+    var self = this;
+    this.icons.forEach(function (ic, i) {
+      ic.node.classList.toggle('focused', up && (z === 'icons' || (z === 'menu' && self.menu && self.menu.icon === i)) && i === self.iconIndex);
+    });
+    this.tabs.forEach(function (t, i) {
+      t.node.classList.toggle('focused', up && z === 'tabs' && i === self.tabIndex);
+      t.node.classList.toggle('selected', up && z === 'cards' && i === self.tabIndex);
+    });
+    var tab = this.tabs[this.tabIndex];
+    if (tab && tab.cards) {
+      tab.cards.forEach(function (c, i) { if (c.node) c.node.classList.toggle('focused', up && z === 'cards' && i === tab.index); });
+    }
+    this.el.classList.toggle('tab-open', up && this.tabOpen());
+    this.el.classList.toggle('menu-open', up && !!this.menu);
+    this.paintCta();
+  };
+
+  // Paused look (veil, pause glyph) and scrubbing look (taller bar, preview, hints).
+  Player.prototype.paintState = function () {
+    this.el.classList.toggle('paused', this.state === 'paused' || !!this.scrubState);
+    this.el.classList.toggle('scrubbing', !!this.scrubState);
+    if (this.scrubState) this.hintBack.textContent = 'Return to ' + PL.fmt.clock(this.scrubState.real);
+  };
+
+  // ---- Round icons, tabs and the seek bar's segments: rebuilt when the item, its queue or its
+  // chapters change -----------------------------------------------------------------------------
+
+  Player.prototype.buildControls = function () {
+    this.buildIcons();
+    this.buildTabs();
+    this.buildSegments();
+    this.paintZone();
+  };
+
+  Player.prototype.buildIcons = function () {
     var self = this;
     var list = [];
     if (!this.live && this.full) {
       var streams = streamsOf(this.full, this.mediaIndex);
       var subs = streams.filter(function (s) { return s.streamType === 3; });
       var audio = streams.filter(function (s) { return s.streamType === 2; });
-      var tracks = function (only) {
-        return function () { screens.trackSheet(self.full, function () { self.onTracksChanged(); }, self.mediaIndex, only); };
-      };
-      list.push({ id: 'play', icon: 'pause', label: 'Pause', action: function () { self.togglePause(); } });
-      list.push({ id: 'back', icon: 'back', label: '10 s', action: function () { self.scrubBy(-10, SEEK_COMMIT_MS); } });
-      list.push({ id: 'forward', icon: 'forward', label: '30 s', action: function () { self.scrubBy(30, SEEK_COMMIT_MS); } });
-      if (subs.length) list.push({ id: 'subs', icon: 'tracks', label: 'Subtitles', action: tracks('subtitles') });
-      if (audio.length > 1) list.push({ id: 'audio', icon: 'audio', label: 'Audio', action: tracks('audio') });
-      if (this.chapters.length > 1) list.push({ id: 'chapters', icon: 'chapters', label: 'Chapters', action: function () { self.openChapters(); } });
-      if (this.nextItem()) list.push({ id: 'next', icon: 'next', label: 'Next episode', action: function () { self.playNext(true); } });
+      if (subs.length) list.push({ id: 'subtitles', label: 'Subtitles', glyph: 'subtitles', action: function () { self.openMenu('subtitles'); } });
+      if (audio.length > 1) list.push({ id: 'audio', label: 'Audio', glyph: 'audio', action: function () { self.openMenu('audio'); } });
+      if (this.nextItem()) list.push({ id: 'next', label: 'Next episode', glyph: 'next', action: function () { self.playNext(true); } });
     }
-    var was = this.row.buttons && this.row.buttons[this.row.index];
-    var keep = was ? list.map(function (b) { return b.id; }).indexOf(was.id) : -1;
-    this.row.index = keep >= 0 ? keep : 0;
-    this.row.setButtons(list);
-    this.paintedPaused = null;
-    this.paintPlayButton();
-    if (!list.length && this.zone === 'buttons') this.zone = 'bar';
-    this.paintZone();
+    var was = this.icons[this.iconIndex] && this.icons[this.iconIndex].id;
+    if (list.map(function (b) { return b.id; }).join() === this.icons.map(function (b) { return b.id; }).join()) return;
+    PL.clear(this.iconRow);
+    this.icons = list.map(function (b, i) {
+      var n = PL.el('div', 'round');
+      n.setAttribute('aria-label', b.label);
+      n.appendChild(glyph(b.glyph, b.glyph === 'next' ? 28 : 32, 1.8));
+      n.addEventListener('mouseenter', function () {
+        if (!pointing() || self.osdHidden || self.menu) return;
+        self.iconIndex = i;
+        self.setZone('icons');
+      });
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        self.iconIndex = i;
+        self.setZone('icons');
+        b.action();
+      });
+      self.iconRow.appendChild(n);
+      return { id: b.id, node: n, action: b.action };
+    });
+    var keep = list.map(function (b) { return b.id; }).indexOf(was);
+    this.iconIndex = keep >= 0 ? keep : 0;
   };
 
-  Player.prototype.paintPlayButton = function () {
-    var b = this.row.buttons && this.row.buttons[0];
-    if (!b || b.id !== 'play') return;
-    var paused = this.state === 'paused';
-    if (this.paintedPaused === paused) return;
-    this.paintedPaused = paused;
-    var n = this.row.nodes[0];
-    PL.clear(n);
-    n.appendChild(PL.ui.icon(paused ? 'play' : 'pause'));
-    n.appendChild(PL.el('span', 'btn-label', paused ? 'Play' : 'Pause'));
+  Player.prototype.buildSegments = function () {
+    var self = this;
+    var dur = this.durationSec();
+    this.segs = L.segments(this.live ? [] : this.chapters, dur, BAR_W, BAR_GAP);
+    PL.clear(this.segRow);
+    this.segNodes = this.segs.map(function (s) {
+      var n = PL.el('div', 'seg');
+      n.style.left = s.left + 'px';
+      n.style.width = s.w + 'px';
+      var target = PL.el('div', 'seg-target');
+      var fill = PL.el('div', 'seg-fill');
+      n.appendChild(target);
+      n.appendChild(fill);
+      self.segRow.appendChild(n);
+      return { target: target, fill: fill };
+    });
+    Object.keys(this.painted).forEach(function (k) { if (/^s[ab]\d/.test(k)) delete self.painted[k]; });
+    this.paintBar();
+  };
+
+  Player.prototype.icon = function (id) {
+    for (var i = 0; i < this.icons.length; i++) if (this.icons[i].id === id) return i;
+    return -1;
   };
 
   Player.prototype.paintText = function () {
@@ -436,12 +678,13 @@
     }
     var f = this.full || this.item;
     if (f.type === 'episode') {
-      var ep = PL.fmt.episode(f);
+      var ep = episodeCode(f);
       this.eyebrow.textContent = (f.grandparentTitle || '') + (ep ? ' · ' + ep : '');
     } else {
       this.eyebrow.textContent = f.year ? String(f.year) : '';
     }
     this.title.textContent = f.title || '';
+    this.textRight = null; // measured again on the next scrub
   };
 
   Player.prototype.durationSec = function () {
@@ -464,6 +707,13 @@
     return this.mode === 'transcode' ? this.base + t : t;
   };
 
+  // Where the bar shows playback: a jump that hasn't reached the TV yet counts as done.
+  Player.prototype.shownPosition = function () {
+    if (this.jumpTarget != null) return this.jumpTarget;
+    if (this.seekReq && this.mode === 'direct') return this.seekReq.target;
+    return this.state === 'loading' ? this.intendedPosition() : this.position();
+  };
+
   // Writes a value to the DOM only when it changed (text changes cost a layout on the TV).
   Player.prototype.setPainted = function (key, node, prop, value) {
     if (this.painted[key] === value) return;
@@ -472,42 +722,689 @@
     else node.style[prop] = value;
   };
 
-  // The bar, at most a few times a second (timeupdate) or once a frame while scrubbing. Every
-  // moving part is a transform: scaleX for the fills, translate for the head and the bubble.
-  Player.prototype.paintScrub = function () {
+  // The bar, a few times a second (timeupdate) or once a frame while scrubbing. Every moving part
+  // is a transform: scaleX for the segment fills, translate for the head, tick and preview. Only the
+  // segments whose fill changed are touched.
+  Player.prototype.paintBar = function () {
     if (this.live) {
-      this.setPainted('vis', this.scrub, 'visibility', 'hidden');
+      this.setPainted('vis', this.bar, 'visibility', 'hidden');
       this.setPainted('el', this.elapsed, 'text', '');
+      this.setPainted('note', this.note, 'text', '');
       this.setPainted('rem', this.remaining, 'text', '');
       return;
     }
-    this.setPainted('vis', this.scrub, 'visibility', '');
+    this.setPainted('vis', this.bar, 'visibility', '');
     var dur = this.durationSec();
-    // while a stream (re)starts currentTime is 0 and base may be stale: show where it is going
-    var now = this.state === 'loading' ? this.intendedPosition() : this.position();
-    var pos = this.pendingSeek != null ? this.pendingSeek : now;
-    var frac = dur ? PL.clamp(pos / dur, 0, 1) : 0;
-    var b = this.video.buffered;
-    var bufEnd = b && b.length ? b.end(b.length - 1) + (this.mode === 'transcode' ? this.base : 0) : 0;
-    this.setPainted('played', this.playedBar, 'transform', 'scaleX(' + frac.toFixed(4) + ')');
-    this.setPainted('buf', this.bufferBar, 'transform', 'scaleX(' + (dur ? PL.clamp(bufEnd / dur, 0, 1) : 0).toFixed(3) + ')');
-    var x = Math.round(frac * SCRUB_W);
-    this.setPainted('head', this.head, 'transform', 'translate3d(' + x + 'px,0,0)');
-    var hover = this.hoverSec != null && this.pendingSeek == null;
-    if (this.pendingSeek != null || hover) {
-      var at = hover ? this.hoverSec : pos;
-      var bx = Math.round((dur ? PL.clamp(at / dur, 0, 1) : 0) * SCRUB_W);
-      bx = PL.clamp(bx, BUBBLE_W / 2, SCRUB_W - BUBBLE_W / 2) - BUBBLE_W / 2;
-      this.setPainted('bubble', this.bubble, 'transform', 'translate3d(' + bx + 'px,0,0)');
-      this.setPainted('btime', this.bubbleTime, 'text', PL.fmt.clock(at));
-      var d = Math.round(at - now);
-      this.setPainted('bdelta', this.bubbleDelta, 'text', hover || Math.abs(d) < 1 ? '' : (d > 0 ? '+' : '−') + PL.fmt.clock(Math.abs(d)));
+    var sc = this.scrubState;
+    var real = sc ? sc.real : this.shownPosition();
+    var target = sc ? sc.target : real;
+    var lo = Math.min(real, target);
+    var hi = Math.max(real, target);
+    for (var i = 0; i < this.segs.length; i++) {
+      var n = this.segNodes[i];
+      if (!n) break;
+      this.setPainted('sa' + i, n.fill, 'transform', 'scaleX(' + L.fill(this.segs[i], lo).toFixed(4) + ')');
+      this.setPainted('sb' + i, n.target, 'transform', 'scaleX(' + L.fill(this.segs[i], hi).toFixed(4) + ')');
     }
-    // the times stay on the real position (the bubble shows the target), so a held key only
-    // rewrites the bubble's text
-    this.setPainted('el', this.elapsed, 'text', PL.fmt.clock(now));
-    var left = Math.max(0, dur - now);
-    this.setPainted('rem', this.remaining, 'text', dur ? '−' + PL.fmt.clock(left) + '  ·  Ends at ' + endsAt(left) : '');
+    var x = dur ? L.xAt(this.segs, target) : 0;
+    this.setPainted('head', this.head, 'transform', 'translate3d(' + Math.round(x) + 'px,0,0)');
+    if (sc) this.setPainted('tick', this.tick, 'transform', 'translate3d(' + Math.round(dur ? L.xAt(this.segs, real) : 0) + 'px,0,0)');
+
+    // over the scrub target (or the pointer): a large time with the chapter under it, or, when the
+    // server makes preview thumbnails, the frame over a time pill
+    var at = sc ? target : this.hoverSec;
+    if (at != null && dur) {
+      var withThumb = this.preview.ok;
+      var w = withThumb ? PREVIEW_W : TIME_ONLY_W;
+      var px = PL.clamp(L.xAt(this.segs, at) - w / 2, 0, BAR_W - w);
+      if (this.painted.pvmode !== withThumb) {
+        this.painted.pvmode = withThumb;
+        this.previewEl.classList.toggle('no-thumb', !withThumb);
+      }
+      this.setPainted('pvw', this.previewEl, 'width', w + 'px');
+      this.setPainted('pv', this.previewEl, 'transform', 'translate3d(' + Math.round(px) + 'px,0,0)');
+      // the label fades the title out when it rides over it (one layout read per title)
+      if (this.textRight == null) this.textRight = Math.max(textWidth(this.title), textWidth(this.eyebrow));
+      var over = px < this.textRight + 24;
+      if (this.painted.over !== over) {
+        this.painted.over = over;
+        this.osd.classList.toggle('label-over-title', over);
+      }
+      this.setPainted('pvt', this.previewTime, 'text', PL.fmt.clock(at));
+      var atChapter = this.chapters.length > 1 ? L.chapterAt(this.chapters, at) : -1;
+      this.setPainted('pvc', this.previewChapter, 'text', !withThumb && atChapter >= 0 ? this.chapters[atChapter].title : '');
+      this.setPainted('pvthumb', this.thumbBox, 'display', withThumb && this.preview.shown != null ? '' : 'none');
+      if (withThumb) this.wantPreview(at);
+    }
+
+    var chapter = L.chapterAt(this.chapters, real);
+    if (sc) {
+      this.setPainted('el', this.elapsed, 'text', '');
+      this.setPainted('note', this.note, 'text', L.scrubLine(real, target, this.chapters));
+      this.setPainted('rem', this.remaining, 'text', dur ? '−' + PL.fmt.clock(Math.max(0, dur - target)) : '');
+    } else {
+      this.setPainted('el', this.elapsed, 'text', PL.fmt.clock(real));
+      this.setPainted('note', this.note, 'text', chapter >= 0 && this.chapters.length > 1 ? ' · ' + this.chapters[chapter].title : '');
+      var left = Math.max(0, dur - real);
+      this.setPainted('rem', this.remaining, 'text', dur ? '−' + PL.fmt.clock(left) + ' · Ends at ' + endsAt(left) : '');
+    }
+  };
+
+  // ---- Preview thumbnails: Plex's index frames for the part (only if the server makes them) --------
+
+  Player.prototype.setupPreview = function () {
+    var media = this.full && this.full.Media && (this.full.Media[this.mediaIndex] || this.full.Media[0]);
+    var part = media && media.Part && media.Part[0];
+    var has = !!part && /\bsd\b/.test(String(part.indexes || ''));
+    this.preview = { part: has ? part.id : null, ok: has, want: null, loading: false, shown: null };
+    this.thumbImg.removeAttribute('src');
+  };
+
+  // One frame at a time: while one loads, only the latest wanted time is kept, so a fast scrub asks
+  // for a frame only as often as the server answers. Frames are 2 s apart (Plex's default).
+  Player.prototype.wantPreview = function (sec) {
+    var p = this.preview;
+    if (!p.ok || !p.part) return;
+    var ms = Math.max(0, Math.round(sec / 2) * 2000);
+    if (ms === p.shown && !p.loading) return;
+    p.want = ms;
+    if (p.loading) return;
+    this.loadPreview();
+  };
+
+  Player.prototype.loadPreview = function () {
+    var self = this;
+    var p = this.preview;
+    var ms = p.want;
+    p.want = null;
+    if (ms == null || ms === p.shown) return;
+    p.loading = true;
+    var img = new Image();
+    var part = p.part;
+    img.onload = function () {
+      if (self.preview !== p) return;
+      p.loading = false;
+      p.shown = ms;
+      self.thumbImg.src = img.src;
+      self.setPainted('pvthumb', self.thumbBox, 'display', '');
+      if (p.want != null) self.loadPreview();
+    };
+    img.onerror = function () {
+      if (self.preview !== p) return;
+      p.loading = false;
+      // no frame here: if none ever loaded the server has none, so fall back to the time alone
+      if (p.shown == null) {
+        p.ok = false;
+        self.paintBar();
+      } else if (p.want != null) {
+        self.loadPreview();
+      }
+    };
+    img.src = PL.plex.url('/library/parts/' + part + '/indexes/sd/' + ms);
+  };
+
+  // ---- Subtitles / Audio menus: a popover above the icon that opened it ----------------------------
+
+  Player.prototype.openMenu = function (kind) {
+    if (!this.full) return;
+    var iconAt = this.icon(kind);
+    if (iconAt < 0) return;
+    this.iconIndex = iconAt;
+    this.menu = { kind: kind, icon: iconAt, view: 'list', index: 0, rows: [] };
+    this.renderMenu();
+    this.setZone('menu');
+    clearTimeout(this.osdTimer);
+  };
+
+  Player.prototype.menuRows = function () {
+    var self = this;
+    var m = this.menu;
+    var media = this.full.Media && (this.full.Media[this.mediaIndex] || this.full.Media[0]);
+    var part = media && media.Part && media.Part[0];
+    var streams = streamsOf(this.full, this.mediaIndex);
+    var pick = function (choice, apply) {
+      return function () {
+        self.closeMenu();
+        if (!part) return;
+        PL.plex.selectStreams(part.id, choice).then(function () {
+          apply();
+          self.onTracksChanged();
+        }, function (err) { PL.toast(PL.errorMessage(err)); });
+      };
+    };
+    if (m.view === 'size') {
+      var cur = this.subSize();
+      return Object.keys(SUB_SIZES).map(function (k) {
+        return { label: SUB_SIZES[k], checked: k === cur, run: function () {
+          PL.storage.set('subtitleSize', k);
+          self.applySubSize();
+          self.closeMenu();
+        } };
+      });
+    }
+    if (m.kind === 'audio') {
+      var audio = streams.filter(function (s) { return s.streamType === 2; });
+      return audio.map(function (s) {
+        var a = L.audioLabel(s);
+        return { label: a.label, sub: a.detail, checked: !!s.selected, run: pick({ audioStreamID: s.id }, function () {
+          audio.forEach(function (x) { x.selected = x === s; });
+        }) };
+      });
+    }
+    var subs = streams.filter(function (s) { return s.streamType === 3; });
+    var rows = [{ label: 'Off', checked: !subs.some(function (s) { return s.selected; }), run: pick({ subtitleStreamID: 0 }, function () {
+      subs.forEach(function (x) { x.selected = false; });
+    }) }];
+    subs.forEach(function (s) {
+      rows.push({
+        label: L.subtitleLabel(s), sub: L.isPictureSub(s) ? 'Picture subtitles · the server burns them in' : '', checked: !!s.selected,
+        run: pick({ subtitleStreamID: s.id }, function () { subs.forEach(function (x) { x.selected = x === s; }); }),
+      });
+    });
+    rows.push({ rule: true });
+    rows.push({ label: 'Size and style', link: true, run: function () { self.menuView('size'); } });
+    return rows;
+  };
+
+  Player.prototype.menuView = function (view) {
+    this.menu.view = view;
+    this.renderMenu();
+    this.paintZone();
+  };
+
+  Player.prototype.renderMenu = function () {
+    var self = this;
+    var m = this.menu;
+    var el = this.menuEl;
+    PL.clear(el);
+    var box = PL.el('div', 'menu-box');
+    var heading = m.view === 'size' ? 'Subtitle size' : m.kind === 'audio' ? 'Audio' : 'Subtitles';
+    box.appendChild(PL.el('div', 'menu-head', heading));
+    var clip = PL.el('div', 'menu-clip');
+    var list = m.list = PL.el('div', 'menu-list');
+    clip.appendChild(list);
+    box.appendChild(clip);
+    m.rows = this.menuRows();
+    m.nodes = [];
+    var y = 0;
+    var focus = -1;
+    m.rows.forEach(function (r) {
+      if (r.rule) {
+        list.appendChild(PL.el('div', 'menu-rule'));
+        y += 17;
+        return;
+      }
+      var n = PL.el('div', 'menu-row' + (r.sub ? ' two' : '') + (r.link ? ' link' : '') + (r.checked ? ' checked' : ''));
+      var t = PL.el('div', 'menu-text');
+      t.appendChild(PL.el('div', 'menu-label', r.label));
+      if (r.sub) t.appendChild(PL.el('div', 'menu-sub', r.sub));
+      n.appendChild(t);
+      if (r.checked) n.appendChild(glyph('check', 28, 2.4));
+      if (r.link) n.appendChild(glyph('chevron', 24, 2));
+      var i = m.nodes.length;
+      n.addEventListener('mouseenter', function () { if (pointing()) { m.index = i; self.paintMenu(); } });
+      n.addEventListener('click', function (e) { e.stopPropagation(); m.index = i; self.pressMenu(); });
+      list.appendChild(n);
+      var h = r.sub ? 76 : 64;
+      m.nodes.push({ node: n, row: r, top: y, h: h });
+      if (r.checked && focus < 0) focus = i;
+      y += h + 4;
+    });
+    m.height = y - 4;
+    if (m.backTo != null) {
+      m.index = m.backTo < 0 ? m.nodes.length - 1 : m.backTo;
+      m.backTo = null;
+    } else {
+      m.index = focus >= 0 ? focus : 0;
+    }
+    var clipH = Math.min(m.height, MENU_MAX_LIST);
+    clip.style.height = clipH + 'px';
+    m.clipH = clipH;
+    el.appendChild(box);
+    // anchored over its icon, a caret pointing at it
+    var n = this.icons.length;
+    var center = 1824 - (n - 1 - m.icon) * 88 - 34;
+    var left = PL.clamp(center - MENU_W + 58, 96, 1824 - MENU_W);
+    box.style.left = left + 'px';
+    var caret = PL.el('div', 'menu-caret');
+    caret.style.left = (center - 11) + 'px';
+    el.appendChild(caret);
+    this.paintMenu();
+  };
+
+  Player.prototype.paintMenu = function () {
+    var m = this.menu;
+    if (!m) return;
+    m.nodes.forEach(function (r, i) { r.node.classList.toggle('focused', i === m.index); });
+    var r = m.nodes[m.index];
+    if (!r || m.height <= m.clipH) return;
+    // keep the focused row near the middle, starting the view on a whole row (no half-cut row under
+    // the heading)
+    var want = PL.clamp(r.top + r.h / 2 - m.clipH / 2, 0, m.height - m.clipH);
+    var shift = 0;
+    for (var i = 0; i < m.nodes.length && m.nodes[i].top <= want; i++) shift = m.nodes[i].top;
+    if (want >= m.height - m.clipH) shift = m.height - m.clipH;
+    PL.translate(m.list, 0, -shift);
+  };
+
+  Player.prototype.moveMenu = function (d) {
+    var m = this.menu;
+    m.index = PL.clamp(m.index + d, 0, m.nodes.length - 1);
+    this.paintMenu();
+  };
+
+  Player.prototype.pressMenu = function () {
+    var r = this.menu && this.menu.nodes[this.menu.index];
+    if (r && r.row.run) r.row.run();
+  };
+
+  // Back in a menu: the size list returns to the subtitle list, else the menu closes.
+  Player.prototype.menuBack = function () {
+    if (this.menu && this.menu.view === 'size') {
+      this.menu.backTo = -1; // the "Size and style" row, last in the list
+      this.menuView('list');
+      return;
+    }
+    this.closeMenu();
+  };
+
+  Player.prototype.closeMenu = function (quiet) {
+    if (!this.menu) return;
+    this.menu = null;
+    PL.clear(this.menuEl);
+    if (!quiet) this.showOsd('icons');
+  };
+
+  Player.prototype.subSize = function () {
+    var v = PL.storage.get('subtitleSize', 'medium');
+    return SUB_SIZES[v] ? v : 'medium';
+  };
+
+  Player.prototype.applySubSize = function () {
+    var size = this.subSize();
+    this.subEl.className = 'subs subs-' + size;
+  };
+
+  // ---- Tabs under the bar: Info, Chapters, Episodes ---------------------------------------------------
+
+  Player.prototype.tabOpen = function () {
+    return this.zone === 'tabs' || this.zone === 'cards';
+  };
+
+  Player.prototype.buildTabs = function () {
+    var self = this;
+    var list = [];
+    if (!this.live && this.full) {
+      list.push({ id: 'info', label: 'Info' });
+      if (this.castFor(this.full).length) list.push({ id: 'cast', label: 'Cast' });
+      if (this.chapters.length > 1) list.push({ id: 'chapters', label: 'Chapters' });
+      if (this.full.type === 'episode' && this.full.parentRatingKey) list.push({ id: 'episodes', label: 'Episodes' });
+    }
+    if (list.map(function (t) { return t.id; }).join() === this.tabs.map(function (t) { return t.id; }).join() && this.tabsFor === this.full) return;
+    this.tabsFor = this.full;
+    PL.clear(this.tabRow);
+    PL.clear(this.panel);
+    this.tabs = list.map(function (t, i) {
+      var n = PL.el('div', 'ptab', t.label);
+      n.addEventListener('mouseenter', function () { if (pointing() && !self.osdHidden && !self.menu) self.focusTab(i); });
+      n.addEventListener('click', function (e) { e.stopPropagation(); self.focusTab(i); });
+      self.tabRow.appendChild(n);
+      var pane = PL.el('div', 'pane');
+      self.panel.appendChild(pane);
+      return { id: t.id, label: t.label, node: n, pane: pane, cards: null, index: 0, first: 0, built: false };
+    });
+    var openId = this.tabOpen() && this.tabsIds ? this.tabsIds[this.tabIndex] : null;
+    this.tabsIds = this.tabs.map(function (t) { return t.id; });
+    var keep = openId ? this.tabsIds.indexOf(openId) : -1;
+    this.tabIndex = PL.clamp(keep >= 0 ? keep : this.tabIndex, 0, Math.max(0, this.tabs.length - 1));
+    if (openId) this.focusTab(this.tabIndex);
+  };
+
+  // ---- The Cast tab: the movie's roles, or an episode's guests then the show's cast -------------
+
+  // The show's metadata (for its cast), fetched once per show per session.
+  function showMeta(grandparentKey) {
+    if (!showCasts[grandparentKey]) {
+      showCasts[grandparentKey] = PL.plex.get('/library/metadata/' + grandparentKey).then(function (mc) {
+        return (mc && mc.Metadata && mc.Metadata[0]) || null;
+      }, function () {
+        delete showCasts[grandparentKey]; // try again next time
+        return null;
+      });
+    }
+    return showCasts[grandparentKey];
+  }
+
+  Player.prototype.castFor = function (full) {
+    if (!full) return [];
+    return L.castList(full, full.type === 'episode' ? this.castShow : null);
+  };
+
+  // After playback has started: one small request for the show's cast (cached), then the tabs
+  // gain Cast if there is anyone to show.
+  Player.prototype.prefetchCast = function (full) {
+    var self = this;
+    this.castShow = null;
+    if (full.type !== 'episode' || !full.grandparentRatingKey) return;
+    showMeta(full.grandparentRatingKey).then(function (show) {
+      if (self.full !== full || !show) return;
+      self.castShow = show;
+      var tab = self.tabs.filter(function (t) { return t.id === 'cast'; })[0];
+      if (tab) {
+        tab.built = false; // the list changed: rebuild on next open
+        if (self.tabOpen() && self.tabs[self.tabIndex] === tab) self.fillTab(tab);
+      }
+      self.buildTabs();
+      self.paintZone();
+    });
+  };
+
+  Player.prototype.fillCast = function (tab) {
+    var self = this;
+    var people = this.castFor(this.full);
+    PL.clear(tab.pane);
+    var track = tab.track = PL.el('div', 'cast-track');
+    tab.step = CAST_STEP;
+    tab.visible = CAST_VISIBLE;
+    tab.index = 0;
+    tab.first = 0;
+    // cards are made when they first come near the view (a show can list dozens of people)
+    tab.cards = people.map(function (p, i) {
+      var c = { node: null, run: function () {} }; // OK does nothing for now: no leaving mid-playback
+      c.build = function () {
+        // the details page's round people card, built lean for the player (no stacking contexts or
+        // per-part transitions: those doubled the cost of a focus move on the TV)
+        var n = c.node = PL.el('div', 'ccard');
+        var art = PL.el('div', 'ccard-art');
+        art.appendChild(PL.el('div', 'ccard-initials', initialsOf(p.name)));
+        if (p.thumb) {
+          var img = PL.el('img', 'ccard-img');
+          img.onload = function () { img.classList.add('loaded'); };
+          img.onerror = function () { img.style.visibility = 'hidden'; };
+          img.src = PL.plex.image(p.thumb, CAST_GEO.w, CAST_GEO.h);
+          art.appendChild(img);
+        }
+        art.appendChild(PL.el('div', 'ccard-rim'));
+        n.appendChild(art);
+        n.appendChild(PL.el('div', 'ccard-name', p.name));
+        if (p.role) n.appendChild(PL.el('div', 'ccard-role', p.role));
+        if (p.guest) n.appendChild(PL.el('div', 'ccard-guest', 'Guest star'));
+        n.style.left = (i * CAST_STEP) + 'px';
+        n.addEventListener('mouseenter', function () {
+          if (!pointing() || self.osdHidden) return;
+          tab.index = i;
+          self.setZone('cards');
+          self.paintCards(tab);
+        });
+        track.appendChild(n);
+      };
+      return c;
+    });
+    tab.pane.appendChild(track);
+    this.paintCards(tab);
+  };
+
+  // Focus a tab: its row slides in under it (built the first time).
+  Player.prototype.focusTab = function (i) {
+    if (!this.tabs.length) return;
+    this.tabIndex = PL.clamp(i, 0, this.tabs.length - 1);
+    var self = this;
+    this.tabs.forEach(function (t, j) { t.pane.classList.toggle('shown', j === self.tabIndex); });
+    var tab = this.tabs[this.tabIndex];
+    this.fillTab(tab);
+    this.setZone('tabs');
+    clearTimeout(this.osdTimer);
+    this.prebuildTabs();
+  };
+
+  // While the tabs are up and the remote is idle, fill the other tabs' rows (hidden), so moving to
+  // one only shows it.
+  Player.prototype.prebuildTabs = function () {
+    var self = this;
+    clearTimeout(this.prebuildTimer);
+    this.prebuildTimer = setTimeout(function () {
+      if (!self.tabOpen() || self.state === 'stopped') return;
+      if (Date.now() - (self.lastKeyAt || 0) < 200) { self.prebuildTabs(); return; }
+      var next = self.tabs.filter(function (t) { return !t.built && t.id !== 'info'; })[0];
+      if (!next) return;
+      self.fillTab(next);
+      self.prebuildTabs(); // one tab per idle moment
+    }, 250);
+  };
+
+  Player.prototype.closeTab = function (quiet) {
+    if (!this.tabOpen()) return;
+    this.zone = 'bar';
+    if (!quiet) this.showOsd('bar');
+  };
+
+  Player.prototype.fillTab = function (tab) {
+    if (tab.id === 'info') {
+      this.fillInfo(tab); // facts change with tracks and stream decisions: always fresh
+      return;
+    }
+    if (tab.built) {
+      if (tab.id === 'chapters') this.markCurrentChapter(tab);
+      return;
+    }
+    tab.built = true;
+    if (tab.id === 'chapters') this.fillChapters(tab);
+    else if (tab.id === 'cast') this.fillCast(tab);
+    else if (tab.id === 'episodes') this.fillEpisodes(tab);
+  };
+
+  Player.prototype.fillInfo = function (tab) {
+    var self = this;
+    var f = this.full;
+    PL.clear(tab.pane);
+    var wrap = PL.el('div', 'info');
+    var col = PL.el('div', 'info-main');
+    col.appendChild(PL.el('p', 'info-summary', f.summary || ''));
+    var btn = PL.el('div', 'info-btn');
+    btn.appendChild(glyph('restart', 24, 2.2));
+    btn.appendChild(PL.el('span', '', 'Start from the beginning'));
+    btn.addEventListener('mouseenter', function () { if (pointing() && !self.osdHidden) { tab.index = 0; self.setZone('cards'); } });
+    btn.addEventListener('click', function (e) { e.stopPropagation(); self.restartFromBeginning(); });
+    col.appendChild(btn);
+    wrap.appendChild(col);
+    var facts = PL.el('div', 'info-facts');
+    this.infoFacts().forEach(function (row) {
+      var r = PL.el('div', 'info-fact');
+      r.appendChild(PL.el('span', 'info-key', row[0]));
+      r.appendChild(PL.el('span', 'info-val', row[1]));
+      facts.appendChild(r);
+    });
+    wrap.appendChild(facts);
+    tab.pane.appendChild(wrap);
+    tab.cards = [{ node: btn, run: function () { self.restartFromBeginning(); } }];
+    tab.index = 0;
+  };
+
+  Player.prototype.infoFacts = function () {
+    var f = this.full;
+    var media = f.Media && (f.Media[this.mediaIndex] || f.Media[0]);
+    var streams = streamsOf(f, this.mediaIndex);
+    var audio = streams.filter(function (s) { return s.streamType === 2 && s.selected; })[0] ||
+      streams.filter(function (s) { return s.streamType === 2; })[0];
+    var sub = selectedSubtitle(f, this.mediaIndex);
+    var rows = [];
+    rows.push(['Playing', this.mode === 'transcode' ? 'Converting: ' + (this.convertReason || 'the server prepares the stream') : this.mode === 'direct' ? 'Direct Play (no conversion)' : 'Starting…']);
+    var video = L.videoLabel(media);
+    if (video) rows.push(['Video', video]);
+    if (audio) {
+      var a = L.audioLabel(audio);
+      rows.push(['Audio', a.label + (a.detail ? ' · ' + a.detail : '')]);
+    }
+    rows.push(['Subtitles', sub ? L.subtitleLabel(sub) + (L.isPictureSub(sub) ? ' (picture, burned in)' : ' (text)') : 'Off']);
+    return rows;
+  };
+
+  Player.prototype.restartFromBeginning = function () {
+    this.closeTab(true);
+    if (this.scrubState) this.scrubState = null;
+    this.seekNow(0);
+    if (this.state === 'paused') this.togglePause(true);
+    this.paintState();
+    this.showOsd('bar');
+  };
+
+  // A row of 320x180 cards that scrolls; only cards near the view load their image.
+  Player.prototype.cardRow = function (tab, items) {
+    var self = this;
+    PL.clear(tab.pane);
+    var track = tab.track = PL.el('div', 'cards-track');
+    tab.cards = items.map(function (it, i) {
+      var n = PL.el('div', 'pcard' + (it.now ? ' now' : ''));
+      var art = PL.el('div', 'pcard-art');
+      if (it.fallback) art.appendChild(PL.el('div', 'pcard-fallback', it.fallback));
+      if (it.progress != null) {
+        var bar = PL.el('div', 'pcard-progress');
+        var fill = PL.el('div', 'pcard-progress-fill');
+        fill.style.transform = 'scaleX(' + PL.clamp(it.progress, 0, 1).toFixed(3) + ')';
+        bar.appendChild(fill);
+        art.appendChild(bar);
+        it.fillNode = fill;
+      }
+      art.appendChild(PL.el('div', 'pcard-rim'));
+      n.appendChild(art);
+      n.appendChild(PL.el('div', 'pcard-title', it.title));
+      n.appendChild(PL.el('div', 'pcard-sub', it.sub || ''));
+      n.addEventListener('mouseenter', function () { if (pointing() && !self.osdHidden) { tab.index = i; self.paintCards(tab); self.setZone('cards'); } });
+      n.addEventListener('click', function (e) { e.stopPropagation(); tab.index = i; it.run(); });
+      track.appendChild(n);
+      return { node: n, art: art, img: it.img, loaded: false, run: it.run, item: it };
+    });
+    tab.pane.appendChild(track);
+    tab.first = L.rowStart(Math.max(0, tab.index - 2), tab.index, tab.cards.length, ROW_VISIBLE);
+    this.paintCards(tab);
+  };
+
+  Player.prototype.paintCards = function (tab) {
+    if (!tab.cards || !tab.track) return;
+    var step = tab.step || CARD_STEP;
+    var visible = tab.visible || ROW_VISIBLE;
+    tab.first = L.rowStart(tab.first, tab.index, tab.cards.length, visible);
+    PL.translate(tab.track, -tab.first * step, 0);
+    var later = [];
+    for (var i = Math.max(0, tab.first - 1); i < Math.min(tab.cards.length, tab.first + visible + 2); i++) {
+      var c = tab.cards[i];
+      if (c.build && !c.node) {
+        // cards entering the edge of the view are made after this key's frame
+        if (tab.shownOnce) later.push(c);
+        else c.build();
+      }
+      if (c.loaded || !c.img) continue;
+      c.loaded = true;
+      var img = PL.el('img', 'pcard-img');
+      img.onload = function () { this.classList.add('loaded'); };
+      img.src = c.img;
+      c.art.insertBefore(img, c.art.firstChild);
+    }
+    var self = this;
+    tab.shownOnce = true;
+    if (later.length) {
+      setTimeout(function () {
+        later.forEach(function (c) { if (!c.node) c.build(); });
+        self.paintCards(tab);
+      }, 0);
+    }
+    tab.cards.forEach(function (c, j) {
+      if (!c.node) return;
+      c.node.classList.toggle('focused', self.zone === 'cards' && !self.osdHidden && j === tab.index);
+      c.node.classList.toggle('gone', j < tab.first);
+    });
+  };
+
+  Player.prototype.fillChapters = function (tab) {
+    var self = this;
+    var cur = L.chapterAt(this.chapters, this.shownPosition());
+    var dur = this.durationSec();
+    tab.index = Math.max(0, cur);
+    this.cardRow(tab, this.chapters.map(function (c, i) {
+      var end = self.chapters[i + 1] ? self.chapters[i + 1].start : dur;
+      return {
+        title: c.title + (i === cur ? ' · Now' : ''), sub: PL.fmt.clock(c.start), now: i === cur,
+        img: c.thumb ? PL.plex.image(c.thumb, 320, 180) : null, fallback: c.thumb ? null : PL.fmt.clock(c.start),
+        progress: i === cur && end > c.start ? (self.shownPosition() - c.start) / (end - c.start) : null,
+        run: function () { self.jumpToChapter(c); },
+      };
+    }));
+  };
+
+  // Reopening Chapters after playback moved on: rebuild if the current chapter changed.
+  Player.prototype.markCurrentChapter = function (tab) {
+    var cur = L.chapterAt(this.chapters, this.shownPosition());
+    var was = -1;
+    (tab.cards || []).forEach(function (c, i) { if (c.item.now) was = i; });
+    if (cur !== was) this.fillChapters(tab);
+    else {
+      tab.index = Math.max(0, cur);
+      this.paintCards(tab);
+    }
+  };
+
+  Player.prototype.jumpToChapter = function (c) {
+    this.closeTab(true);
+    this.seekNow(c.start);
+    if (this.state === 'paused') this.togglePause(true);
+    this.showOsd('bar');
+  };
+
+  Player.prototype.fillEpisodes = function (tab) {
+    var self = this;
+    var full = this.full;
+    tab.pane.appendChild(PL.el('div', 'pane-note', 'Loading episodes…'));
+    PL.plex.get('/library/metadata/' + full.parentRatingKey + '/children').then(function (mc) {
+      if (self.full !== full) return;
+      var eps = (mc && mc.Metadata) || [];
+      var cur = indexOfKey(eps, full.ratingKey);
+      tab.index = Math.max(0, cur);
+      self.cardRow(tab, eps.map(function (ep, i) {
+        var progress = ep.viewOffset && ep.duration ? ep.viewOffset / ep.duration : null;
+        return {
+          title: (ep.index != null ? ep.index + ' · ' : '') + (ep.title || '') + (i === cur ? ' · Now' : ''),
+          sub: L.runtime(ep.duration), now: i === cur,
+          img: ep.thumb ? PL.plex.image(ep.thumb, 320, 180) : null, fallback: ep.thumb ? null : 'E' + (ep.index != null ? ep.index : ''),
+          progress: i === cur ? self.shownPosition() / (self.durationSec() || 1) : progress,
+          run: function () { self.playEpisode(ep); },
+        };
+      }));
+      self.paintZone();
+    }, function (err) {
+      tab.built = false;
+      PL.clear(tab.pane);
+      tab.pane.appendChild(PL.el('div', 'pane-note', PL.errorMessage(err)));
+    });
+  };
+
+  Player.prototype.playEpisode = function (ep) {
+    if (this.full && ep.ratingKey === this.full.ratingKey) {
+      this.closeTab();
+      return;
+    }
+    this.playNext(true, ep);
+  };
+
+  Player.prototype.moveTab = function (d) {
+    this.focusTab(this.tabIndex + d);
+  };
+
+  Player.prototype.moveCard = function (d) {
+    var tab = this.tabs[this.tabIndex];
+    if (!tab || !tab.cards) return;
+    tab.index = PL.clamp(tab.index + d, 0, tab.cards.length - 1);
+    this.paintCards(tab);
+  };
+
+  Player.prototype.pressCard = function () {
+    var tab = this.tabs[this.tabIndex];
+    var c = tab && tab.cards && tab.cards[tab.index];
+    if (c && c.run) c.run();
+  };
+
+  Player.prototype.hasCards = function () {
+    var tab = this.tabs[this.tabIndex];
+    return !!(tab && tab.cards && tab.cards.length);
   };
 
   // ---- Starting playback ---------------------------------------------------------------------
@@ -549,11 +1446,13 @@
       if (!full.Media || !full.Media[self.mediaIndex]) self.mediaIndex = 0;
       self.loadChapters(full);
       self.paintText();
-      self.buildButtons();
+      self.setupPreview();
+      self.buildControls();
       if (self.queue) self.alignQueue(full);
       else if (full.type === 'episode') self.loadQueue(full);
       // resuming from a saved position: back up 5 s so the scene is recognisable
       self.start(self.startOffset > 0 ? Math.max(0, self.startOffset - 5000) : 0);
+      self.prefetchCast(full);
     }).catch(function (err) { if (gen === self.gen) self.fail(err); });
   };
 
@@ -565,35 +1464,12 @@
   };
 
   Player.prototype.loadChapters = function (full) {
-    var dur = (full.duration || 0) / 1000;
     this.chapters = (full.Chapter || []).map(function (c, i) {
-      return { start: (c.startTimeOffset || 0) / 1000, end: (c.endTimeOffset || 0) / 1000, title: c.tag || ('Chapter ' + (i + 1)) };
+      return {
+        start: (c.startTimeOffset || 0) / 1000, end: (c.endTimeOffset || 0) / 1000,
+        title: c.tag || ('Chapter ' + (i + 1)), thumb: c.thumb || null,
+      };
     }).sort(function (a, b) { return a.start - b.start; });
-    PL.clear(this.ticks);
-    if (!dur) return;
-    var self = this;
-    this.chapters.forEach(function (c) {
-      if (c.start < 1 || c.start >= dur) return;
-      var t = PL.el('div', 'scrub-tick');
-      t.style.transform = 'translate3d(' + Math.round(c.start / dur * SCRUB_W) + 'px,0,0)';
-      self.ticks.appendChild(t);
-    });
-  };
-
-  Player.prototype.openChapters = function () {
-    var self = this;
-    var pos = this.position();
-    var current = 0;
-    this.chapters.forEach(function (c, i) { if (pos >= c.start) current = i; });
-    PL.app.push(screens.sheet([{
-      heading: 'Chapters',
-      rows: this.chapters.map(function (c, i) {
-        return {
-          label: c.title, sub: PL.fmt.clock(c.start), checked: i === current,
-          action: function () { if (self.state !== 'stopped') self.seekTo(c.start); },
-        };
-      }),
-    }], { focus: current }));
   };
 
   Player.prototype.loadQueue = function (full) {
@@ -602,8 +1478,9 @@
       var items = mc.Metadata || [];
       var idx = mc.playQueueSelectedItemOffset || 0;
       for (var i = 0; i < items.length; i++) if (items[i].ratingKey === full.ratingKey) { idx = i; break; }
+      if (self.full !== full) return; // another episode started meanwhile
       self.queue = { items: items, index: idx };
-      if (self.full === full) self.buildButtons();
+      self.buildControls();
     }, function (err) { PL.warn('play queue failed', err && err.message); });
   };
 
@@ -675,12 +1552,28 @@
         self.base = self.live || !(offsetSec > 0) ? 0 : Math.floor(offsetSec);
         self.video.src = PL.plex.url('/video/:/transcode/universal/start.m3u8', params);
       }
+      self.convertReason = self.mode === 'transcode' && !self.live ? self.reasonFor(part) : null;
       PL.log('play', self.mode, self.live ? 'live' : self.full.ratingKey, 'at', Math.round(offsetSec) + 's');
       if (!self.live) self.setupSubs();
       var p = self.video.play();
       if (p && p.catch) p.catch(function (e) { PL.warn('play() rejected', e && e.message); });
       self.startTimeline();
     }).catch(function (err) { if (gen === self.gen) self.fail(err); });
+  };
+
+  // Why the server converts this stream, for the Info tab.
+  Player.prototype.reasonFor = function (part) {
+    var kind = subtitleKind(selectedSubtitle(this.full, this.mediaIndex));
+    if (kind === 'image') return 'picture subtitles are burned in';
+    if (kind === 'embedded') return 'subtitles';
+    if (hasAlternateAudio(this.full, this.mediaIndex)) return 'another audio track';
+    if (this.retried) return 'the TV could not play the file';
+    var streams = (part && part.Stream) || [];
+    var v = streams.filter(function (s) { return s.streamType === 1; })[0];
+    var a = streams.filter(function (s) { return s.streamType === 2; })[0];
+    if (v && v.decision === 'transcode') return 'video format';
+    if (a && a.decision === 'transcode') return 'audio format';
+    return 'the file\'s container';
   };
 
   Player.prototype.startTimeline = function () {
@@ -926,36 +1819,105 @@
     }
   };
 
+
   // ---- Seeking ---------------------------------------------------------------------------------
 
-  // Moves the seek target by delta seconds without seeking yet: the TV can only land on keyframes
-  // and a stream restart is slow, so presses add up and one seek goes out commitMs after the last.
-  Player.prototype.scrubBy = function (delta, commitMs) {
-    if (this.live || !this.full || (this.state !== 'playing' && this.state !== 'paused')) return;
+  Player.prototype.canSeek = function () {
+    return !this.live && !!this.full && (this.state === 'playing' || this.state === 'paused');
+  };
+
+  // Goes to `target` straight away. Direct play sets the video's time; while a seek is still landing
+  // the newest target waits for it (onSeeked), so quick taps add up instead of piling up seeks. A
+  // server stream restarts at the target; taps closer than JUMP_RESTART_MS share one restart
+  // (immediate: restart now, for a deliberate single seek such as OK after scrubbing).
+  Player.prototype.seekNow = function (target, immediate) {
     var self = this;
     var dur = this.durationSec();
-    var from = this.pendingSeek != null ? this.pendingSeek : this.intendedPosition();
-    this.pendingSeek = PL.clamp(from + delta, 0, Math.max(0, dur - 5));
-    this.scrub.classList.add('seeking');
-    this.osd.classList.add('scrubbing');
-    this.showOsd();
-    clearTimeout(this.seekTimer);
-    this.seekTimer = setTimeout(function () { self.commitSeek(); }, commitMs);
+    target = dur > 0 ? PL.clamp(target, 0, Math.max(0, dur - 5)) : Math.max(0, target);
+    if (this.mode === 'direct') {
+      // the bar moves first: setting the video's time stalls the TV for ~100 ms, so the seek goes
+      // out just after the next frame (and waits behind a seek that is still landing)
+      this.jumpTarget = target;
+      if (!this.flushPending) {
+        this.flushPending = true;
+        requestAnimationFrame(function () {
+          setTimeout(function () {
+            self.flushPending = false;
+            self.flushJump();
+          }, 0);
+        });
+      }
+    } else if (immediate) {
+      clearTimeout(this.jumpTimer);
+      this.jumpTarget = null;
+      this.start(target * 1000);
+    } else {
+      this.jumpTarget = target;
+      clearTimeout(this.jumpTimer);
+      this.jumpTimer = setTimeout(function () {
+        var t = self.jumpTarget;
+        self.jumpTarget = null;
+        if (t != null && self.state !== 'stopped') self.start(t * 1000);
+      }, JUMP_RESTART_MS);
+    }
     this.paintSoon();
   };
 
-  // Left/Right on the bar. A tap moves 10 s (quick taps 30 s, then 60 s). Holding the key moves at
-  // a speed that grows the longer it is held; the seek goes out when the key is released.
-  Player.prototype.scrubKey = function (code, repeat) {
-    var dir = code === K.RIGHT ? 1 : -1;
+  Player.prototype.flushJump = function () {
+    var t = this.jumpTarget;
+    if (t == null || this.mode !== 'direct' || this.state === 'stopped') return;
+    var req = this.seekReq;
+    if (req && req.seekedAt == null && Date.now() - req.at < 3000) return; // onSeeked sends it
+    this.jumpTarget = null;
+    this.directSeek(t);
+  };
+
+  Player.prototype.seekTo = function (sec) { this.seekNow(sec, true); };
+
+  // Left/Right on the bar while playing: −10 s / +30 s, at once; repeated taps add up.
+  Player.prototype.jump = function (delta) {
+    if (!this.canSeek()) return;
+    var from = this.shownPosition();
+    var now = Date.now();
+    this.lastJump = { from: from, at: now };
+    this.hold = { dir: delta > 0 ? 1 : -1, since: now, last: now };
+    this.lastSeekAt = now;
+    this.showOsd('bar');
+    this.seekNow(from + delta);
+  };
+
+  // The paused-look scrub: holding Left/Right while playing, or Left/Right while paused. The video
+  // pauses; the bar keeps the real position (teal tick) and moves a target with a preview. OK jumps
+  // there and plays, Back returns. A hold that follows a tap scrubs from before that tap.
+  Player.prototype.scrubBegin = function (held) {
+    var now = Date.now();
+    var at = this.shownPosition();
+    var lj = this.lastJump;
+    var real = held && lj && now - lj.at < 1500 ? lj.from : at;
+    if (this.mode !== 'direct' && this.jumpTarget != null) {
+      // the stream restart for that tap hasn't gone out: drop it, nothing moved yet
+      clearTimeout(this.jumpTimer);
+      this.jumpTarget = null;
+      real = this.position();
+    }
+    var playing = this.state === 'playing' && !this.video.paused;
+    this.scrubState = { real: real, target: at, wasPlaying: playing };
+    this.lastJump = null;
+    if (playing) this.video.pause();
+    this.paintState();
+    this.showOsd('bar');
+  };
+
+  // A tap moves the target 10 s (quick taps 30 s, then 60 s); a held key moves it at a speed that
+  // grows the longer it is held.
+  Player.prototype.scrubStep = function (dir, held) {
+    if (!this.canSeek()) return;
+    if (!this.scrubState) this.scrubBegin(held);
     var now = Date.now();
     var h = this.hold;
     var delta;
-    if (h && h.dir === dir && repeat && now - h.last < HOLD_GAP_MS) {
-      var held = now - h.since;
-      var dur = this.durationSec();
-      var speed = held < 1000 ? 20 : held < 3000 ? 60 : held < 5000 ? Math.max(120, dur / 40) : Math.max(240, dur / 15);
-      delta = speed * Math.min(250, now - h.last) / 1000;
+    if (held && h && h.dir === dir && now - h.last < HOLD_GAP_MS) {
+      delta = L.holdSpeed(now - h.since, this.durationSec()) * Math.min(250, now - h.last) / 1000;
       h.last = now;
     } else {
       this.seekPresses = now - this.lastSeekAt < 400 ? this.seekPresses + 1 : 0;
@@ -963,53 +1925,62 @@
       this.hold = { dir: dir, since: now, last: now };
     }
     this.lastSeekAt = now;
-    this.scrubBy(dir * delta, SEEK_HOLD_MS);
+    var s = this.scrubState;
+    s.target = PL.clamp(s.target + dir * delta, 0, Math.max(0, this.durationSec() - 5));
+    this.showOsd('bar');
+    this.paintSoon();
   };
 
-  Player.prototype.endScrubLook = function () {
-    this.scrub.classList.remove('seeking');
-    if (this.hoverSec == null) this.osd.classList.remove('scrubbing');
-  };
-
-  Player.prototype.cancelSeek = function () {
-    clearTimeout(this.seekTimer);
-    this.pendingSeek = null;
+  Player.prototype.endScrub = function () {
+    this.scrubState = null;
     this.hold = null;
-    this.endScrubLook();
-    this.showOsd();
+    this.paintState();
+    this.paintSoon();
   };
 
-  Player.prototype.commitSeek = function () {
-    clearTimeout(this.seekTimer);
-    var target = this.pendingSeek;
-    this.pendingSeek = null;
-    this.hold = null;
-    this.endScrubLook();
-    if (target == null) return;
-    if (this.mode === 'direct') {
-      this.directSeek(target);
-      this.showOsd();
-    } else {
-      this.start(target * 1000);
-    }
+  Player.prototype.scrubCommit = function () {
+    var s = this.scrubState;
+    if (!s) return;
+    this.endScrub();
+    var moved = Math.abs(s.target - this.shownPosition()) >= 1;
+    if (moved) this.seekNow(s.target, true);
+    if (!moved || this.mode === 'direct') this.togglePause(true);
+    this.showOsd('bar');
+  };
+
+  Player.prototype.scrubCancel = function () {
+    var s = this.scrubState;
+    if (!s) return;
+    this.endScrub();
+    var moved = Math.abs(this.shownPosition() - s.real) >= 1;
+    if (moved) this.seekNow(s.real, true);
+    if (s.wasPlaying && (!moved || this.mode === 'direct')) this.togglePause(true);
+    this.showOsd('bar');
   };
 
   // webOS snaps direct-play seeks back to the previous keyframe. If a seek lands more than 1 s
   // early, seek once more by the shortfall (capped) so we land on the keyframe after the target.
   Player.prototype.directSeek = function (target) {
-    this.seekReq = { target: target, retried: false, first: null };
+    this.seekReq = { target: target, retried: false, first: null, at: Date.now() };
     this.video.currentTime = target;
   };
 
   // The webOS pipeline reports the requested time on 'seeked', then resumes from the previous
   // keyframe (seen 6-10 s early). So the landing is judged on the playback that follows: if it
   // resumed more than 3 s short, seek once more, past the target by the shortfall (playbackRate
-  // trick-play freezes on this TV, so exact landing is not possible).
+  // trick-play freezes on this TV, so exact landing is not possible). A jump that arrived while
+  // this seek was landing goes out now.
   Player.prototype.onSeeked = function () {
     var req = this.seekReq;
     if (!req || this.mode !== 'direct') return;
+    if (this.jumpTarget != null) {
+      var t = this.jumpTarget;
+      this.jumpTarget = null;
+      this.directSeek(t);
+      return;
+    }
     req.seekedAt = Date.now();
-    if (!this.osdHidden) this.paintScrub();
+    if (!this.osdHidden) this.paintBar();
   };
 
   Player.prototype.verifySeek = function () {
@@ -1021,6 +1992,7 @@
       req.retried = true;
       req.first = now;
       req.seekedAt = null;
+      req.at = Date.now();
       var dur = this.durationSec();
       var retry = req.target + Math.min(12, short);
       if (dur) retry = Math.max(req.target, Math.min(retry, dur - 1));
@@ -1033,60 +2005,91 @@
     }
   };
 
-  // ---- Markers: skip intro / credits ------------------------------------------------------------
+  // ---- Markers: Skip Intro / Skip Credits ---------------------------------------------------------
 
-  // The skip pill is a real button: it takes the remote's focus when it appears (OK or Right skips),
-  // stays for PILL_MS, and comes back whenever the overlay is opened while the marker is playing.
-  // markerState.pill: {kind: 'intro' | 'credits', id, target, shownAt, timedOut}
-  Player.prototype.showPill = function (kind, label, target, id) {
+  // The skip pill is a real button: it takes the remote's focus when it appears (OK skips), stays for
+  // PILL_MS, and comes back whenever the controls are opened while the marker is playing.
+  // markerState.pill: {kind: 'intro' | 'credits', id, start, target, shownAt, timedOut}
+  Player.prototype.showPill = function (kind, label, start, target, id) {
     var st = this.markerState;
-    st.pill = { kind: kind, id: id, target: target, shownAt: Date.now(), timedOut: false };
+    st.pill = { kind: kind, id: id, start: start, target: target, shownAt: Date.now(), timedOut: false };
     this.pillLabel.textContent = label;
-    // take the focus unless the remote is busy in the button row
-    if (!this.osdHidden && this.zone !== 'buttons' && this.pendingSeek == null) this.zone = 'pill';
-    this.paintPill();
+    if (this.mayTakeFocus()) this.zone = 'cta';
     this.paintZone();
   };
 
-  // The "call to action" in the corner: Up Next during the credits, else the skip pill.
-  Player.prototype.ctaShown = function () {
-    return this.upnextNext ? 'upnext' : this.pillVisible ? 'pill' : null;
+  // Skip / Up Next take the focus from the bar, but not while the remote is in use (a tap on the bar
+  // must not land on the pill that just appeared).
+  Player.prototype.mayTakeFocus = function () {
+    return !this.osdHidden && this.zone === 'bar' && !this.scrubState && Date.now() - (this.lastKeyAt || 0) > 2000;
   };
 
-  // Paints the skip pill and the Up Next button: lit (white) while they have the remote's focus,
-  // which is always when the overlay is hidden, and in the overlay's 'pill' zone.
-  Player.prototype.paintPill = function () {
+  Player.prototype.pillShown = function () {
     var p = this.markerState && this.markerState.pill;
-    var vis = !!p && !this.upnextNext && (!p.timedOut || !this.osdHidden);
-    this.pillVisible = vis;
-    if (!this.ctaShown() && this.zone === 'pill') {
-      this.zone = 'bar';
-      this.paintZone();
-    }
-    var lit = this.osdHidden || this.zone === 'pill';
-    this.pill.classList.toggle('skip-pill-hidden', !vis);
-    this.pill.classList.toggle('focused', vis && lit);
-    this.upnext.classList.toggle('upnext-dim', !lit);
+    return !!p && !this.upnextNext && (!p.timedOut || !this.osdHidden);
   };
 
-  Player.prototype.activateCta = function () {
+  // The call to action on screen: the end card, else the skip pill.
+  Player.prototype.cta = function () {
+    return this.upnextNext ? 'endcard' : this.pillShown() ? 'pill' : null;
+  };
+
+  // Lit (white) while it has the remote's focus: always while the controls are hidden, and in the
+  // controls' 'cta' zone. Hidden while a menu or a tab is open (CSS).
+  Player.prototype.paintCta = function () {
+    var vis = this.pillShown();
+    this.pillVisible = vis;
+    var focus = this.osdHidden || this.zone === 'cta';
+    this.skip.classList.toggle('skip-hidden', !vis);
+    this.pill.classList.toggle('focused', vis && focus);
+    var ec = !!this.upnextNext;
+    this.endcard.classList.toggle('endcard-hidden', !ec);
+    this.el.classList.toggle('endcard-on', ec);
+    this.ecWatch.classList.toggle('focused', ec && focus && this.ecIndex === 0);
+    this.ecNext.classList.toggle('focused', ec && focus && this.ecIndex === 1);
+    this.paintCtaLine();
+  };
+
+  // The teal line along the pill's bottom: how much of the intro (or credits) is left.
+  Player.prototype.paintCtaLine = function () {
+    var p = this.pillVisible && this.markerState && this.markerState.pill;
+    if (!p) return;
+    var end = p.kind === 'intro' ? p.target : this.durationSec();
+    var f = end > p.start ? PL.clamp((end - this.position()) / (end - p.start), 0, 1) : 0;
+    this.setPainted('pill-line', this.pillLine, 'transform', 'scaleX(' + f.toFixed(3) + ')');
+  };
+
+  Player.prototype.pressCta = function () {
     if (this.upnextNext) {
-      this.playNext();
+      if (this.ecIndex === 1) this.playNext();
+      else this.watchCredits();
       return true;
     }
     return this.activatePill();
   };
 
-  Player.prototype.hidePill = function () {
-    if (this.markerState) this.markerState.pill = null;
-    this.paintPill();
+  // Back (or Watch Credits) on the end card: keep watching; after the video has ended, leave.
+  Player.prototype.watchCredits = function () {
+    var ended = this.state === 'ended';
+    this.hideUpNext();
+    if (ended) this.exit();
   };
 
-  // Back while only the pill is up: put it away until the overlay is opened again.
+  Player.prototype.dismissCta = function () {
+    if (this.upnextNext) this.watchCredits();
+    else this.dismissPill();
+  };
+
+  Player.prototype.hidePill = function () {
+    if (this.markerState) this.markerState.pill = null;
+    this.paintZone();
+  };
+
+  // Back while only the pill is up: put it away until the controls are opened again.
   Player.prototype.dismissPill = function () {
     var p = this.markerState && this.markerState.pill;
     if (p) p.timedOut = true;
-    this.paintPill();
+    this.paintZone();
   };
 
   Player.prototype.introAt = function (pos) {
@@ -1102,7 +2105,7 @@
   Player.prototype.checkMarkers = function () {
     var m = this.markers;
     var st = this.markerState;
-    if (this.live || !m || !st || this.state !== 'playing' || this.pendingSeek != null) return;
+    if (this.live || !m || !st || this.state !== 'playing' || this.scrubState) return;
     var pos = this.position();
     var now = Date.now();
     var pill = st.pill;
@@ -1114,8 +2117,8 @@
         PL.toast('Skipped intro', 2000);
         return;
       }
-      if (!pill || pill.kind !== 'intro' || pill.id !== intro.id) this.showPill('intro', 'Skip Intro', intro.end, intro.id);
-      else if (!pill.timedOut && now - pill.shownAt > PILL_MS) { pill.timedOut = true; this.paintPill(); }
+      if (!pill || pill.kind !== 'intro' || pill.id !== intro.id) this.showPill('intro', 'Skip Intro', intro.start, intro.end, intro.id);
+      else if (!pill.timedOut && now - pill.shownAt > PILL_MS) { pill.timedOut = true; this.paintZone(); }
       return;
     }
     if (pill && pill.kind === 'intro') this.hidePill();
@@ -1131,7 +2134,7 @@
       return;
     }
     if (st.creditsHandled) {
-      if (pill && pill.kind === 'credits' && !pill.timedOut && now - pill.shownAt > PILL_MS) { pill.timedOut = true; this.paintPill(); }
+      if (pill && pill.kind === 'credits' && !pill.timedOut && now - pill.shownAt > PILL_MS) { pill.timedOut = true; this.paintZone(); }
       return;
     }
     st.creditsHandled = true;
@@ -1144,7 +2147,7 @@
     }
     if (!m.creditsFromMarker) return;
     if (auto) this.finishCredits();
-    else this.showPill('credits', 'Skip Credits', null, 0);
+    else this.showPill('credits', 'Skip Credits', m.creditsStart, null, 0);
   };
 
   Player.prototype.finishCredits = function () {
@@ -1175,9 +2178,9 @@
   // Fast-forward (and the media "next" key): inside an intro it jumps to the intro's end, inside
   // marked end credits it does what Skip Credits does (Up Next or finish); otherwise +30 s.
   Player.prototype.skipForward = function () {
-    if (this.live || !this.full || (this.state !== 'playing' && this.state !== 'paused')) return;
+    if (!this.canSeek()) return;
     var m = this.markers;
-    if (m && this.pendingSeek == null) {
+    if (m && !this.scrubState) {
       var pos = this.intendedPosition();
       var intro = this.introAt(pos);
       if (intro) {
@@ -1193,12 +2196,8 @@
         return;
       }
     }
-    this.scrubBy(30, SEEK_COMMIT_MS);
-  };
-
-  Player.prototype.seekTo = function (sec) {
-    if (this.mode === 'direct') this.directSeek(sec);
-    else this.start(sec * 1000);
+    if (this.scrubState) this.scrubStep(1, false);
+    else this.jump(30);
   };
 
   // ---- Ending, errors, next episode -----------------------------------------------------------
@@ -1235,55 +2234,79 @@
       this.playNext();
       return;
     }
-    if (!this.upnextNext) this.showUpNext(next);
-    else this.upnextHint.textContent = 'Back to stop';
+    if (!this.upnextNext) {
+      this.showUpNext(next);
+    } else {
+      this.hideOsd();
+      this.ecWatch.textContent = 'Close';
+      this.paintZone();
+    }
   };
 
-  // Shown at the end credits (video still playing) or when the video ends.
+  // The end card: shown at the end credits (video still playing) or when the video ends. "Next
+  // Episode" has the focus and counts down (if autoplay is on); Watch Credits keeps playing.
   Player.prototype.showUpNext = function (next) {
     var self = this;
     var left = 10;
     var countdown = setting('autoplayNext', true);
     clearTimeout(this.upnextTimer);
     if (this.state === 'ended') this.hideOsd();
-    this.hidePill();
+    if (this.markerState) this.markerState.pill = null;
     this.upnextNext = next;
-    // like the skip pill, it takes the focus unless the remote is busy in the button row
-    if (!this.osdHidden && this.zone !== 'buttons' && this.pendingSeek == null) this.zone = 'pill';
-    this.paintPill();
+    this.ecIndex = 1;
+    if (this.mayTakeFocus()) this.zone = 'cta';
+    var ep = episodeCode(next);
+    this.ecLabel.textContent = 'Up next' + (ep ? ' · ' + ep : '');
+    this.ecTitle.textContent = next.title || '';
+    this.ecMeta.textContent = L.runtime(next.duration);
+    PL.clear(this.ecThumb);
+    var src = next.thumb && PL.plex.image(next.thumb, 320, 180);
+    if (src) {
+      var img = PL.el('img');
+      img.src = src;
+      this.ecThumb.appendChild(img);
+    }
+    this.ecWatch.textContent = this.state === 'ended' ? 'Close' : 'Watch Credits';
+    this.ecCount.textContent = '';
+    this.ecNext.classList.toggle('counting', countdown);
+    this.ecLine.classList.remove('run');
     this.paintZone();
-    this.upnextTitle.textContent = (PL.fmt.episode(next) ? PL.fmt.episode(next) + ' · ' : '') + (next.title || '');
-    this.upnextHint.textContent = this.state === 'ended' ? 'Back to stop' : 'Back to keep watching';
+    if (!countdown) return;
+    void this.ecLine.offsetWidth; // restart the line's transition from full
+    this.ecLine.classList.add('run');
     var tick = function () {
-      self.upnextLabel.textContent = 'Up next in ' + left;
+      self.ecCount.textContent = 'in ' + left;
       if (left-- <= 0) {
         self.playNext();
         return;
       }
       self.upnextTimer = setTimeout(tick, 1000);
     };
-    this.upnext.classList.remove('upnext-hidden');
-    if (countdown) tick();
-    else this.upnextLabel.textContent = 'Up next';
+    tick();
   };
 
   Player.prototype.hideUpNext = function () {
     clearTimeout(this.upnextTimer);
+    if (!this.upnextNext) return;
     this.upnextNext = null;
-    this.upnext.classList.add('upnext-hidden');
-    this.paintPill();
+    this.ecLine.classList.remove('run');
+    this.paintZone();
   };
 
-  // manual: the Next episode button, which can be pressed anywhere in the episode (it only counts
-  // as watched past 90%); otherwise we are in the credits and it counts as watched.
-  Player.prototype.playNext = function (manual) {
-    var next = this.upnextNext || this.nextItem();
+  // manual: the Next episode icon or an Episodes card, which can be pressed anywhere in the episode
+  // (it only counts as watched past 90%); otherwise we are in the credits and it counts as watched.
+  // pick: the episode to play (default: the next one in the queue).
+  Player.prototype.playNext = function (manual, pick) {
+    var next = pick || this.upnextNext || this.nextItem();
     this.hideUpNext();
     this.hidePill();
     if (!next) return this.exit();
-    clearTimeout(this.seekTimer);
-    this.pendingSeek = null;
-    this.endScrubLook();
+    clearTimeout(this.jumpTimer);
+    this.jumpTarget = null;
+    this.scrubState = null;
+    this.hold = null;
+    this.closeMenu(true);
+    this.closeTab(true);
     if (this.state !== 'ended') {
       var pos = this.intendedPosition();
       this.gen++;
@@ -1299,20 +2322,25 @@
     this.markerState = null;
     this.mediaIndex = 0;
     this.chapters = [];
-    PL.clear(this.ticks);
     clearInterval(this.subs.timer);
+    this.showSubText(''); // before the reset: it skips text equal to what is shown
     this.subs = { kind: 'none', id: null, cues: [], shown: '', segs: {}, timer: null };
-    this.showSubText('');
     this.everStarted = false;
+    this.mode = null;
+    this.base = 0;
     this.lastOffsetSec = 0;
-    this.queue.index++;
+    var qi = this.queue ? indexOfKey(this.queue.items, next.ratingKey) : -1;
+    if (qi >= 0) this.queue.index = qi;
+    else this.queue = null; // an episode outside the queue: begin() makes a new one
     this.item = next;
     this.full = null;
     this.retried = false;
-    this.startOffset = 0;
+    this.startOffset = pick && pick.viewOffset ? pick.viewOffset : 0;
     this.state = 'idle';
-    this.row.index = 0;
-    this.buildButtons();
+    this.iconIndex = 0;
+    this.tabIndex = 0;
+    this.buildControls();
+    this.paintState();
     this.hideOsd();
     this.begin();
   };
@@ -1332,10 +2360,9 @@
   Player.prototype.fail = function (err) {
     PL.warn('playback failed', err && err.message);
     this.state = 'error';
-    clearTimeout(this.seekTimer);
-    this.pendingSeek = null;
-    this.hold = null;
-    this.endScrubLook();
+    clearTimeout(this.jumpTimer);
+    this.jumpTarget = null;
+    this.endScrub();
     clearInterval(this.timelineTimer);
     this.teardownVideo();
     this.stopTranscode();
@@ -1367,7 +2394,7 @@
     this.gen++;
     clearInterval(this.timelineTimer);
     clearTimeout(this.osdTimer);
-    clearTimeout(this.seekTimer);
+    clearTimeout(this.jumpTimer);
     clearTimeout(this.channelTimer);
     clearInterval(this.subs.timer);
     this.showSubText('');
@@ -1420,53 +2447,62 @@
     this.showOsd();
   };
 
-  // Key map (README "Player"): see the comments on each branch.
+  var KEY_NAMES = {};
+  KEY_NAMES[K.LEFT] = 'left';
+  KEY_NAMES[K.RIGHT] = 'right';
+  KEY_NAMES[K.UP] = 'up';
+  KEY_NAMES[K.DOWN] = 'down';
+  KEY_NAMES[K.ENTER] = 'ok';
+  // actions a held key repeats; everything else happens once per press
+  var REPEATS = /^(jump-|scrub-|menu-up|menu-down|tab-|card-prev|card-next|icon-prev|icon-next|cta-prev|cta-next)/;
+
+  // The remote: media keys here, everything else through the map in js/player-logic.js
+  // (L.keyAction; the table is in docs/PLAYER-v2-design.md, "Remote").
   Player.prototype.key = function (code, e) {
     var repeat = !!(e && e.repeat);
-    // a key-down with no key-up since the last one is the key being held (in case e.repeat isn't set)
-    var held = repeat || !!this.held[code];
-    this.held[code] = true;
-    // the episode has ended and Up Next is counting down: play it now, or leave
-    if (this.upnextNext && this.state === 'ended') {
-      if (PL.isBack(code) || code === K.STOP) {
-        this.hideUpNext();
-        this.exit();
-      } else if (!repeat && (code === K.ENTER || code === K.RIGHT || code === K.PLAY || code === K.PLAY_PAUSE || code === K.FF || code === K.NEXT_TRACK)) {
-        this.playNext();
-      }
-      return true;
-    }
-    // Back: cancel a scrub, hide the overlay, dismiss Up Next or the skip pill, then leave
-    if (PL.isBack(code)) {
-      if (this.state === 'error' || this.state === 'loading') this.exit();
-      else if (this.pendingSeek != null) this.cancelSeek();
-      else if (!this.osdHidden) this.hideOsd();
-      else if (this.upnextNext) this.hideUpNext();
-      else if (this.pillVisible) this.dismissPill();
+    // a key-down with no key-up since the last one is the key being held (in case e.repeat isn't
+    // set). Only real key-downs count: the Magic Remote's wheel arrives as synthetic keys with no
+    // key-up.
+    var real = !!e && e.type === 'keydown';
+    this.lastKeyAt = Date.now();
+    var held = repeat || (real && !!this.held[code]);
+    if (real) this.held[code] = true;
+    var back = PL.isBack(code);
+    if (back && (this.state === 'error' || this.state === 'loading' || this.state === 'idle')) {
+      if (held) return true;
+      // a stream restart (seek, track change) is 'loading' too: close a menu or tab before leaving
+      if (this.menu) this.menuBack();
+      else if (this.tabOpen() && !this.osdHidden) this.closeTab();
       else this.exit();
       return true;
     }
     if (code === K.STOP) { this.exit(); return true; }
     if (this.state === 'error') return true;
 
-    // media keys work the same whether the overlay is up or not
+    // media keys work the same whether the controls are up or not
     switch (code) {
       case K.PLAY_PAUSE:
-        if (this.pendingSeek != null) this.commitSeek();
-        else if (!repeat) this.togglePause();
+        if (this.scrubState) this.scrubCommit();
+        else if (this.upnextNext && this.state === 'ended') { if (!held) this.playNext(); }
+        else if (!held) this.togglePause();
         return true;
-      case K.PLAY: this.togglePause(true); return true;
+      case K.PLAY:
+        if (this.scrubState) this.scrubCommit();
+        else if (this.upnextNext && this.state === 'ended') this.playNext();
+        else this.togglePause(true);
+        return true;
       case K.PAUSE: this.togglePause(false); return true;
       case K.FF:
       case K.NEXT_TRACK:
         if (this.live) this.showOsd();
-        else if (this.upnextNext) { if (!repeat) this.playNext(); }
+        else if (this.upnextNext) { if (!held) this.playNext(); }
         else this.skipForward();
         return true;
       case K.REW:
       case K.PREV_TRACK:
         if (this.live) this.showOsd();
-        else this.scrubBy(-10, SEEK_COMMIT_MS);
+        else if (this.scrubState || held) this.scrubStep(-1, held);
+        else this.jump(-10);
         return true;
       case K.CH_UP:
       case K.CH_DOWN:
@@ -1479,75 +2515,73 @@
       default:
         break;
     }
-    var arrow = code === K.LEFT || code === K.RIGHT || code === K.UP || code === K.DOWN;
-    if (code !== K.ENTER && !arrow) return true;
-
-    // Overlay hidden: OK or Right press the skip pill / Up Next when one is up; Left/Right start
-    // scrubbing; anything else just brings the overlay up.
-    if (this.osdHidden) {
-      if (this.ctaShown() && (code === K.ENTER || code === K.RIGHT)) {
-        if (!repeat) this.activateCta();
-        return true;
-      }
-      if ((code === K.LEFT || code === K.RIGHT) && !this.live && this.full) {
-        this.showOsd('bar');
-        this.scrubKey(code, held);
-        return true;
-      }
-      if (!repeat) this.showOsd();
+    var name = back ? 'back' : KEY_NAMES[code];
+    if (!name) return true;
+    if (this.state === 'ended' && !this.upnextNext) return true;
+    var action = L.keyAction({
+      hidden: this.osdHidden, zone: this.zone, cta: this.cta(), live: !!this.live, playable: this.canSeek(),
+      paused: this.state === 'paused', scrubbing: !!this.scrubState, held: held,
+      hasIcons: this.icons.length > 0, hasTabs: this.tabs.length > 0, hasCards: this.hasCards(),
+    }, name);
+    if (!action || (held && !REPEATS.test(action))) {
+      if (!this.osdHidden) this.showOsd();
       return true;
     }
-    this.showOsd();
-
-    // the skip pill / Up Next, above the bar on the right
-    if (this.zone === 'pill') {
-      if (code === K.ENTER || code === K.RIGHT) {
-        if (!repeat) this.activateCta();
-      } else if (code === K.DOWN || code === K.LEFT) {
-        this.showOsd('bar');
-      }
-      return true;
-    }
-    if (this.zone === 'buttons') {
-      if (code === K.UP) this.showOsd('bar');
-      else if (code === K.ENTER) { if (!repeat) this.row.press(); }
-      else if (code === K.LEFT || code === K.RIGHT) this.row.key(code);
-      return true;
-    }
-    // the seek bar
-    switch (code) {
-      case K.LEFT:
-      case K.RIGHT:
-        if (!this.live) this.scrubKey(code, held);
-        break;
-      case K.ENTER:
-        if (this.pendingSeek != null) this.commitSeek();
-        else if (!repeat) this.togglePause();
-        break;
-      case K.DOWN:
-        if (this.row.buttons.length) {
-          if (this.pendingSeek != null) this.commitSeek();
-          this.showOsd('buttons');
-        }
-        break;
-      case K.UP:
-        if (this.ctaShown()) this.showOsd('pill');
-        break;
-      default:
-        break;
-    }
+    this.act(action, held);
+    if (!this.osdHidden && action !== 'hide') this.showOsd();
     return true;
   };
 
-  // Releasing Left/Right after scrubbing sends the seek (after a short pause, so taps add up).
+  Player.prototype.act = function (action, held) {
+    var tab = this.tabs[this.tabIndex];
+    switch (action) {
+      case 'exit': this.exit(); break;
+      case 'hide': this.hideOsd(); break;
+      case 'show': this.showOsd('bar'); break;
+      case 'show-cta': this.showOsd('cta'); break;
+      case 'jump-back': this.jump(-10); break;
+      case 'jump-fwd': this.jump(30); break;
+      case 'scrub-back': this.scrubStep(-1, held); break;
+      case 'scrub-fwd': this.scrubStep(1, held); break;
+      case 'commit': this.scrubCommit(); break;
+      case 'cancel': this.scrubCancel(); break;
+      case 'pause': this.togglePause(false); break;
+      case 'play': this.togglePause(true); break;
+      case 'zone-bar': this.closeTab(true); this.showOsd('bar'); break;
+      case 'zone-icons': this.showOsd('icons'); break;
+      case 'zone-cta': this.showOsd('cta'); break;
+      case 'zone-tabs':
+        if (this.zone === 'cards') this.showOsd('tabs');
+        else this.focusTab(this.tabIndex);
+        break;
+      case 'zone-cards':
+        this.showOsd('cards');
+        if (tab) this.paintCards(tab);
+        break;
+      case 'icon-prev': this.iconIndex = Math.max(0, this.iconIndex - 1); this.showOsd('icons'); break;
+      case 'icon-next': this.iconIndex = Math.min(this.icons.length - 1, this.iconIndex + 1); this.showOsd('icons'); break;
+      case 'icon-press': if (this.icons[this.iconIndex]) this.icons[this.iconIndex].action(); break;
+      case 'menu-up': this.moveMenu(-1); break;
+      case 'menu-down': this.moveMenu(1); break;
+      case 'menu-press': this.pressMenu(); break;
+      case 'menu-back': this.menuBack(); break;
+      case 'tab-prev': this.moveTab(-1); break;
+      case 'tab-next': this.moveTab(1); break;
+      case 'card-prev': this.moveCard(-1); break;
+      case 'card-next': this.moveCard(1); break;
+      case 'card-press': this.pressCard(); break;
+      case 'cta-prev': this.ecIndex = 0; this.paintCta(); break;
+      case 'cta-next': this.ecIndex = 1; this.paintCta(); break;
+      case 'cta-press': this.pressCta(); break;
+      case 'cta-dismiss': this.dismissCta(); break;
+      default: break;
+    }
+  };
+
+  // Releasing Left/Right ends a hold (a scrub stays until OK or Back).
   Player.prototype.keyUp = function (code) {
     delete this.held[code];
-    if ((code === K.LEFT || code === K.RIGHT) && this.pendingSeek != null && this.hold) {
-      var self = this;
-      this.hold = null;
-      clearTimeout(this.seekTimer);
-      this.seekTimer = setTimeout(function () { self.commitSeek(); }, SEEK_COMMIT_MS);
-    }
+    if ((code === K.LEFT || code === K.RIGHT || code === K.REW || code === K.FF) && this.hold) this.hold = null;
   };
 
   screens.player = function (item, opts) { return new Player(item, opts); };

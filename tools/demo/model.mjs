@@ -92,6 +92,8 @@ class Model {
       videoResolution: String(height >= 1000 ? 1080 : height), videoFrameRate: '24p',
       Part: [{
         id: partId, key: `/library/parts/${partId}/1/file.webm`, duration: durationMs, container: 'webm',
+        // preview thumbnails ("sd" index frames, see server.mjs) for titles that have a video
+        indexes: src ? 'sd' : undefined,
         size: Math.round(durationMs / 1000 * 4200 * 1000 / 8), video: src || null,
         Stream: [
           { id: this.nextId++, streamType: 1, codec: 'vp9', index: 0, displayTitle: `${height}p (VP9)`, selected: true },
@@ -208,6 +210,7 @@ class Model {
         if (show.Image) ep.Image = show.Image;
         ep.Media = this.media(erk, durationMs, e.video);
         if (e.markers) ep._markers = e.markers;
+        if (e.cast) ep.Role = e.cast.map((c) => ({ ...this.person(c.name), role: c.role }));
         this.items.set(erk, ep);
         season._episodes.push(ep);
         leaf++;

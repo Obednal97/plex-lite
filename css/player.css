@@ -1,7 +1,8 @@
-/* Player: the overlay (title, seek bar, buttons), the skip pill, Up Next and subtitles.
-   Bottom-up, at 1920x1080: buttons 54-126, times 160-190, bar 210-216, title 254-342.
-   Everything that moves is transform/opacity; the bar's fills are scaleX, the head and bubble
-   translate3d (see docs/MOTION.md). Loaded before theme.css, so the shared .btn look applies. */
+/* Player (docs/PLAYER-v2-design.md): nothing on screen while watching; one bottom block when called
+   up. Bottom-up at 1920x1080: tabs 44, times 112, bar 165-177, title and round icons 214. A tab
+   slides the block up 292 px (the tabs 290) for a 260 px row of cards. Everything that moves is transform/opacity: the
+   bar's fills are scaleX, its height scaleY, the head, tick and preview translate3d (MOTION.md).
+   Loaded before theme.css. No flex gap on the TV (Chrome 53): margins instead. */
 
 .player-status { position: absolute; left: 0; top: 480px; width: 1920px; text-align: center; font-size: 28px; color: var(--text-2); z-index: 5; transition: opacity 200ms var(--ease); }
 .player-status .spinner { margin: 0 auto 24px; }
@@ -10,107 +11,286 @@
 .player-status-error .spinner { display: none; }
 .player-status-text { text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8); }
 
-/* ---- Overlay ------------------------------------------------------------------------------------ */
+.player .glyph { display: inline-block; }
 
-.osd { position: absolute; left: 0; bottom: 0; width: 1920px; height: 480px; transition: opacity 250ms var(--ease); }
+/* paused or scrubbing: a 30% ink veil over the picture */
+.player-veil { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: rgba(5, 5, 8, 0.30); opacity: 0; transition: opacity 250ms var(--ease); }
+.osd-open.paused .player-veil { opacity: 1; }
+
+/* ---- The block: a 0-size anchor at the bottom left; children sit by `bottom` --------------------- */
+
+.osd { position: absolute; left: 0; bottom: 0; width: 1920px; height: 0; transition: opacity 250ms var(--ease); }
 .osd.faded { opacity: 0; pointer-events: none; }
-.osd-shade {
-  position: absolute; left: 0; bottom: 0; width: 1920px; height: 480px;
-  background: linear-gradient(0deg, rgba(5, 5, 8, 0.9) 0%, rgba(5, 5, 8, 0.62) 40%, rgba(5, 5, 8, 0) 100%);
+.osd-scrim, .osd-scrim-tall { position: absolute; left: 0; bottom: 0; width: 1920px; }
+.osd-scrim { height: 520px; background: linear-gradient(0deg, rgba(5, 5, 8, 0.92) 0%, rgba(5, 5, 8, 0.70) 40%, rgba(5, 5, 8, 0) 100%); }
+.osd-scrim-tall {
+  height: 800px; opacity: 0; transition: opacity 300ms var(--ease);
+  background: linear-gradient(0deg, rgba(5, 5, 8, 0.95) 0%, rgba(5, 5, 8, 0.82) 55%, rgba(5, 5, 8, 0) 100%);
 }
-.osd-text { position: absolute; left: 96px; bottom: 254px; width: 1300px; transition: opacity 160ms linear; }
-.osd.scrubbing .osd-text { opacity: 0; }
-.osd-eyebrow { font-size: 24px; line-height: 30px; color: var(--text-2); font-weight: 600; letter-spacing: 0.04em; }
-.osd-title { font-size: 48px; line-height: 58px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.osd-live { display: inline-block; padding: 0 10px; height: 28px; line-height: 28px; border-radius: 6px; background: #e33; color: #fff; font-size: 18px; font-weight: 700; letter-spacing: 0.08em; margin-right: 12px; }
+.tab-open .osd-scrim-tall { opacity: 1; }
 
-/* ---- Seek bar: a 6 px rail that thickens and grows a head when focused ------------------------------ */
+.osd-upper { position: absolute; left: 0; bottom: 0; width: 1920px; height: 0; transition: transform var(--t-scroll) var(--spring); }
+.tab-open .osd-upper { transform: translate3d(0, -292px, 0); }
 
-.scrub { position: absolute; left: 96px; bottom: 210px; width: 1728px; height: 6px; }
-.scrub-track {
-  position: absolute; left: 0; top: 0; width: 1728px; height: 6px; border-radius: 3px;
-  background: rgba(255, 255, 255, 0.2); transform-origin: 50% 50%; transition: transform 200ms var(--spring);
+.osd-text { position: absolute; left: 96px; bottom: 214px; width: 1100px; transition: opacity 160ms linear; }
+.scrubbing .label-over-title .osd-text, .hovering.label-over-title .osd-text { opacity: 0; }
+.osd-eyebrow { font-size: 26px; line-height: 32px; font-weight: 500; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.osd-title { margin-top: 6px; font-size: 64px; line-height: 68px; font-weight: 700; letter-spacing: -0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.osd-live { display: inline-block; padding: 0 10px; height: 28px; line-height: 28px; border-radius: 6px; background: #e33; color: #fff; font-size: 18px; font-weight: 700; letter-spacing: 0.08em; margin-right: 12px; vertical-align: 2px; }
+
+/* ---- Round icons: Subtitles, Audio, Next episode ------------------------------------------------- */
+
+.osd-icons { position: absolute; right: 96px; bottom: 214px; height: 68px; white-space: nowrap; font-size: 0; transition: opacity 200ms linear; }
+.round {
+  display: inline-block; position: relative; width: 68px; height: 68px; margin-left: 20px; border-radius: 34px; box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.22); color: var(--text);
+  transition: transform var(--t-pop) var(--spring), background-color 160ms linear, color 160ms linear;
 }
-.scrub-buffer, .scrub-played { position: absolute; left: 0; top: 0; width: 1728px; height: 6px; border-radius: 3px; transform-origin: 0 0; transform: scaleX(0); }
-.scrub-buffer { background: rgba(255, 255, 255, 0.28); }
-.scrub-played { background: rgba(247, 250, 252, 0.95); }
-.scrub-ticks { position: absolute; left: 0; top: 0; width: 0; height: 6px; }
-.scrub-tick { position: absolute; left: -1px; top: 0; width: 3px; height: 6px; background: rgba(5, 5, 8, 0.6); }
-.scrub-head { position: absolute; left: 0; top: 0; width: 0; height: 6px; }
-.scrub-thumb {
-  position: absolute; left: -13px; top: -10px; width: 26px; height: 26px; border-radius: 13px; background: var(--focus);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); opacity: 0; transform: scale(0.5);
+.round:first-child { margin-left: 0; }
+.round .glyph { position: absolute; left: 50%; top: 50%; margin: -16px 0 0 -16px; }
+.round .glyph[width="28"] { margin: -14px 0 0 -14px; }
+.round.focused { background: var(--focus); color: var(--focus-ink); border-color: var(--focus); transform: scale(1.08); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); }
+.scrubbing .osd-icons, .tab-open .osd-icons { opacity: 0; }
+.pointer .round { cursor: pointer; }
+
+/* ---- The bar: a segment per chapter; 6 px at rest, 10 px focused (with a head), 12 px scrubbing --- */
+
+.bar { position: absolute; left: 96px; bottom: 165px; width: 1728px; height: 12px; }
+.bar-segs {
+  position: absolute; left: 0; top: 0; width: 1728px; height: 12px;
+  transform: scaleY(0.5); transition: transform 200ms var(--spring);
+}
+.zone-bar .bar-segs { transform: scaleY(0.8333); }
+.scrubbing .bar-segs { transform: none; }
+.seg { position: absolute; top: 0; height: 12px; border-radius: 6px; overflow: hidden; background: rgba(255, 255, 255, 0.30); }
+.seg-target, .seg-fill { position: absolute; left: 0; top: 0; width: 100%; height: 12px; transform-origin: 0 0; transform: scaleX(0); }
+.seg-target { background: rgba(247, 250, 252, 0.75); }
+.seg-fill { background: var(--resume); }
+.bar-head, .bar-tick { position: absolute; left: 0; top: 0; width: 0; height: 12px; }
+.bar-knob {
+  position: absolute; left: -14px; top: -8px; width: 28px; height: 28px; border-radius: 14px; background: var(--focus);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5); opacity: 0; transform: scale(0.5);
   transition: opacity 160ms linear, transform 200ms var(--spring);
 }
-.scrub.focused .scrub-track, .pointer .scrub.hovering .scrub-track { transform: scaleY(1.67); }
-.scrub.focused .scrub-thumb, .scrub.seeking .scrub-thumb { opacity: 1; transform: none; }
-.pointer .scrub.focused .scrub-track { transform: none; }
-.pointer .scrub.focused .scrub-thumb { opacity: 0; }
-.pointer .scrub.seeking .scrub-thumb { opacity: 1; transform: none; }
-.scrub-bubble {
-  position: absolute; left: 0; bottom: 22px; width: 240px; height: 52px; line-height: 50px; border-radius: 26px; text-align: center;
-  white-space: nowrap; font-size: 28px; font-weight: 700; color: var(--text);
-  background: linear-gradient(180deg, rgba(58, 58, 64, 0.97), rgba(40, 40, 46, 0.98));
-  border: 1px solid var(--rim); border-top-color: var(--rim-light); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
-  opacity: 0; transition: opacity 120ms linear;
+.zone-bar .bar-knob, .scrubbing .bar-knob { opacity: 1; transform: none; }
+.bar-tick::after { content: ""; position: absolute; left: -2px; top: -10px; width: 4px; height: 32px; border-radius: 2px; background: var(--resume); opacity: 0; transition: opacity 160ms linear; }
+.scrubbing .bar-tick::after { opacity: 1; }
+
+/* the preview: a thumbnail from the server's index (when it has one) over the time, above the target */
+.bar-preview { position: absolute; left: 0; bottom: 41px; width: 464px; text-align: center; opacity: 0; transition: opacity 120ms linear; pointer-events: none; }
+.scrubbing .bar-preview, .hovering .bar-preview { opacity: 1; }
+.bar-thumb {
+  width: 464px; height: 261px; margin-bottom: 14px; border-radius: 16px; overflow: hidden; box-sizing: border-box;
+  border: 3px solid var(--focus); background: #1f2129; box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5);
 }
-.scrub-bubble-delta { margin-left: 12px; font-size: 22px; font-weight: 600; color: var(--text-2); }
-.scrub.seeking .scrub-bubble, .scrub.hovering .scrub-bubble { opacity: 1; }
-/* the pointer's target: taller than the rail so the Magic Remote can hit it */
-.scrub-hit { position: absolute; left: 0; top: -22px; width: 1728px; height: 50px; }
-.pointer .scrub-hit { cursor: pointer; }
+.bar-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.bar-label { display: inline-block; position: relative; padding: 0 18px; border-radius: 22px; background: rgba(5, 5, 8, 0.75); color: var(--text); white-space: nowrap; }
+.bar-time { height: 44px; line-height: 44px; font-size: 30px; font-weight: 700; }
+.bar-chapter { display: none; }
+/* no thumbnails (the owner's server, and the usual case): a large time with the chapter under it
+   on a dark plate, and a small caret pointing at the head */
+.no-thumb .bar-thumb { display: none; }
+.no-thumb .bar-label { padding: 12px 28px 14px; border-radius: 20px; background: rgba(5, 5, 8, 0.84); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 14px 34px rgba(0, 0, 0, 0.45); }
+.no-thumb .bar-label::after {
+  content: ""; position: absolute; left: 50%; bottom: -10px; margin-left: -10px; width: 0; height: 0;
+  border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 10px solid rgba(5, 5, 8, 0.84);
+}
+.no-thumb .bar-time { height: auto; font-size: 48px; line-height: 56px; letter-spacing: -0.5px; }
+.no-thumb .bar-chapter { display: block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; font-size: 24px; line-height: 30px; font-weight: 600; color: var(--text-2); }
+.no-thumb .bar-chapter:empty { display: none; }
+.bar-hit { position: absolute; left: 0; top: -22px; width: 1728px; height: 56px; }
+.pointer .bar-hit { cursor: pointer; }
 
-.osd-times { position: absolute; left: 96px; bottom: 160px; width: 1728px; height: 30px; line-height: 30px; font-size: 24px; color: var(--text-2); font-weight: 500; }
-.osd-times .right { position: absolute; right: 0; top: 0; }
+.osd-times { position: absolute; left: 96px; bottom: 112px; width: 1728px; height: 34px; line-height: 34px; font-size: 26px; font-weight: 500; white-space: nowrap; }
+.osd-times .left { position: absolute; left: 0; top: 0; color: var(--text); }
+.osd-times .right { position: absolute; right: 0; top: 0; color: var(--text-2); }
+.osd-note { color: var(--text-2); }
+.osd-glyph { display: none; margin-right: 14px; vertical-align: -5px; color: var(--text); }
+.paused .osd-glyph { display: inline-block; }
+.paused .osd-glyph .glyph { display: block; }
 
-/* ---- Buttons: the details page's dark capsules; the focused one is the white plate --------------- */
+/* while scrubbing: what OK and Back do */
+.osd-hints { position: absolute; right: 96px; bottom: 44px; height: 34px; line-height: 34px; white-space: nowrap; font-size: 24px; font-weight: 500; color: var(--text-2); opacity: 0; transition: opacity 160ms linear; }
+.scrubbing .osd-hints { opacity: 1; }
+.osd-hint { display: inline-block; margin-left: 36px; }
+.keycap { display: inline-block; height: 30px; line-height: 28px; padding: 0 12px; margin-right: 10px; border-radius: 8px; box-sizing: border-box; border: 1px solid rgba(255, 255, 255, 0.4); color: var(--text); font-weight: 600; }
 
-.osd .osd-buttons { top: auto; bottom: 54px; height: 72px; }
-.osd .osd-buttons .btn { margin-right: 16px; padding: 0 28px; }
-.osd .osd-buttons .btn:first-child { transform-origin: 0 50%; }
+/* ---- Tabs and their row of cards -------------------------------------------------------------------- */
 
-/* ---- Skip Intro / Skip Credits ---------------------------------------------------------------------- */
+.osd-tabs { position: absolute; left: 74px; bottom: 44px; height: 52px; white-space: nowrap; font-size: 0; transition: transform var(--t-scroll) var(--spring), opacity 160ms linear; }
+.tab-open .osd-tabs { transform: translate3d(0, -290px, 0); }
+.scrubbing .osd-tabs { opacity: 0; }
+.ptab {
+  display: inline-block; height: 52px; line-height: 52px; padding: 0 22px; margin-right: 4px; border-radius: 26px;
+  font-size: 26px; font-weight: 600; color: var(--text-3);
+  transition: transform var(--t-pop) var(--spring), background-color 160ms linear, color 160ms linear;
+}
+.ptab.selected { background: var(--fill-hi); color: var(--text); }
+.ptab.focused { background: var(--focus); color: var(--focus-ink); transform: scale(1.05); }
+.pointer .ptab { cursor: pointer; }
 
-/* Sits at the bottom right; rises above the bar when the overlay is open. Focused = white plate. */
+.osd-panel {
+  position: absolute; left: 96px; bottom: 54px; width: 1728px; height: 260px;
+  opacity: 0; transform: translate3d(0, 40px, 0); pointer-events: none;
+  transition: opacity 200ms linear, transform var(--t-appear) var(--spring);
+}
+.tab-open .osd-panel { opacity: 1; transform: none; pointer-events: auto; }
+.pane { display: none; position: absolute; left: 0; top: 0; width: 1728px; height: 260px; }
+.pane.shown { display: block; }
+.pane-note { font-size: 26px; line-height: 180px; color: var(--text-3); }
+
+.cards-track { position: absolute; left: 0; top: 0; white-space: nowrap; transition: transform var(--t-scroll) var(--spring); }
+.pcard {
+  display: inline-block; vertical-align: top; width: 320px; margin-right: 32px; white-space: normal;
+  transform-origin: 50% 0; transition: transform var(--t-pop) var(--spring), opacity 200ms linear;
+}
+.pcard.gone { opacity: 0; }
+.pcard.focused { transform: scale(1.08); }
+.pcard-art { position: relative; width: 320px; height: 180px; border-radius: 14px; overflow: hidden; background: #1f2129; }
+.pcard.focused .pcard-art { box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5); }
+.pcard-img { position: absolute; left: 0; top: 0; width: 320px; height: 180px; object-fit: cover; opacity: 0; transition: opacity 240ms linear; }
+.pcard-img.loaded { opacity: 1; }
+.pcard-fallback { position: absolute; left: 0; top: 0; width: 320px; height: 180px; line-height: 180px; text-align: center; font-size: 44px; font-weight: 700; color: var(--text-2); }
+.pcard-progress { position: absolute; left: 0; bottom: 0; width: 320px; height: 6px; background: rgba(255, 255, 255, 0.30); }
+.pcard-progress-fill { width: 320px; height: 6px; background: var(--resume); transform-origin: 0 0; }
+.pcard-rim { position: absolute; left: 0; top: 0; width: 320px; height: 180px; border-radius: 14px; box-sizing: border-box; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
+.pcard.focused .pcard-rim { box-shadow: inset 0 0 0 3px var(--focus); }
+.pcard-title { margin-top: 12px; font-size: 26px; line-height: 32px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pcard.now .pcard-title { font-weight: 700; }
+.pcard-sub { margin-top: 4px; font-size: 24px; line-height: 30px; font-weight: 500; color: var(--text-3); }
+.pcard.now .pcard-sub { color: var(--text-2); }
+.pointer .pcard { cursor: pointer; }
+
+/* Cast: the details page's round people cards (photo or monogram, lit edge, 1.13 pop), 160 px here
+   so a name, a character and "Guest star" fit under them. Placed with `left`, one transform each, and
+   no overflow clip on the scaling circle (the image is rounded itself): the shared .card-person
+   styles and a clipped scaling circle each cost about twice as much per focus move on the TV. */
+.cast-track { position: absolute; left: 0; top: 12px; height: 250px; transition: transform var(--t-scroll) var(--spring); }
+.ccard { position: absolute; top: 0; width: 160px; text-align: center; transition: opacity 200ms linear; }
+.ccard.gone { opacity: 0; }
+.ccard-art {
+  position: relative; width: 160px; height: 160px; border-radius: 80px; background: var(--glass);
+  transition: transform var(--t-pop) var(--spring);
+}
+.ccard.focused .ccard-art { transform: scale(1.13); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5); }
+.ccard-initials { position: absolute; left: 0; top: 0; width: 160px; height: 160px; line-height: 160px; font-size: 48px; font-weight: 600; color: var(--text-2); }
+.ccard-img { position: absolute; left: 0; top: 0; width: 160px; height: 160px; border-radius: 80px; object-fit: cover; object-position: 50% 30%; opacity: 0; transition: opacity 240ms linear; }
+.ccard-img.loaded { opacity: 1; }
+.ccard-rim { position: absolute; left: 0; top: 0; width: 160px; height: 160px; border-radius: 80px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.10); }
+.ccard.focused .ccard-rim { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5), inset 0 3px 0 -1px rgba(255, 255, 255, 0.45); }
+.ccard-name, .ccard-role, .ccard-guest { margin-left: -12px; width: 184px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ccard-name { margin-top: 20px; font-size: 24px; line-height: 30px; font-weight: 600; }
+.ccard-role { font-size: 21px; line-height: 28px; color: var(--text-2); }
+.ccard-guest { font-size: 19px; line-height: 26px; font-weight: 600; letter-spacing: 0.5px; color: var(--resume); }
+
+/* Info: synopsis, Start from the beginning, and what is playing */
+.info { position: absolute; left: 0; top: 50px; width: 1728px; height: 210px; }
+.info-main { position: absolute; left: 0; top: 0; width: 922px; }
+.info-summary {
+  margin: 0 0 24px; max-width: 922px; font-size: 28px; line-height: 40px; font-weight: 400; color: var(--reading);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; max-height: 120px;
+}
+.info-btn {
+  display: inline-block; height: 64px; line-height: 64px; padding: 0 32px 0 26px; border-radius: 32px; white-space: nowrap;
+  font-size: 26px; font-weight: 700; color: var(--text); background: rgba(255, 255, 255, 0.14); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  transition: transform var(--t-pop) var(--spring), background-color 160ms linear, color 160ms linear;
+}
+.info-btn .glyph { vertical-align: -5px; margin-right: 12px; }
+.info-btn.focused { background: var(--focus); color: var(--focus-ink); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); transform: scale(1.05); }
+.pointer .info-btn { cursor: pointer; }
+.info-facts { position: absolute; left: 1018px; top: 0; width: 710px; font-size: 24px; line-height: 30px; font-weight: 500; }
+.info-fact { margin-bottom: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.info-key { display: inline-block; width: 180px; margin-right: 24px; color: var(--text-3); }
+
+/* ---- Subtitles / Audio menu: lit glass over its icon ------------------------------------------------ */
+
+.osd-menu { position: absolute; left: 0; bottom: 0; width: 0; height: 0; }
+.menu-box {
+  position: absolute; bottom: 306px; width: 540px; box-sizing: border-box; padding: 22px 16px 16px; border-radius: 26px;
+  background: linear-gradient(180deg, rgba(54, 54, 58, 0.97), rgba(40, 40, 44, 0.97));
+  border: 1px solid var(--rim); border-top-color: var(--rim-light); box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5);
+  -webkit-animation: menuIn var(--t-appear) var(--spring) both; animation: menuIn var(--t-appear) var(--spring) both;
+}
+.menu-caret {
+  position: absolute; bottom: 296px; width: 22px; height: 22px; transform: rotate(45deg);
+  background: rgba(40, 40, 44, 0.97); border-right: 1px solid var(--rim); border-bottom: 1px solid var(--rim);
+  -webkit-animation: caretIn var(--t-appear) var(--spring) both; animation: caretIn var(--t-appear) var(--spring) both;
+}
+@-webkit-keyframes menuIn { from { opacity: 0; -webkit-transform: translate3d(0, 20px, 0); } to { opacity: 1; -webkit-transform: none; } }
+@keyframes menuIn { from { opacity: 0; transform: translate3d(0, 20px, 0); } to { opacity: 1; transform: none; } }
+@-webkit-keyframes caretIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes caretIn { from { opacity: 0; } to { opacity: 1; } }
+.menu-head { padding: 0 20px 8px; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-3); }
+.menu-clip { position: relative; overflow: hidden; }
+.menu-list { transition: transform 200ms var(--spring); }
+.menu-row {
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: space-between; justify-content: space-between;
+  height: 64px; margin-bottom: 4px; padding: 0 20px; border-radius: 16px; box-sizing: border-box; font-size: 28px; font-weight: 500; color: var(--text);
+}
+.menu-row.two { height: 76px; }
+.menu-text { min-width: 0; overflow: hidden; }
+.menu-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 34px; }
+.menu-sub { margin-top: 2px; font-size: 20px; line-height: 24px; font-weight: 500; color: var(--text-3); white-space: nowrap; }
+.menu-row .glyph { -webkit-flex: none; flex: none; margin-left: 16px; }
+.menu-row.link { font-size: 26px; color: var(--text-2); }
+.menu-row.focused { background: var(--focus); color: var(--focus-ink); }
+.menu-row.focused .menu-sub { color: #3a3f48; }
+.menu-row.checked .menu-label { font-weight: 600; }
+.menu-rule { height: 1px; margin: 8px 20px; background: rgba(255, 255, 255, 0.14); }
+.pointer .menu-row { cursor: pointer; }
+
+/* ---- Skip Intro / Skip Credits and the end card: bottom right, focused, above the icons with the
+   controls up; out of the way while a menu or tab is open ---------------------------------------- */
+
+.skip, .endcard { position: absolute; right: 0; bottom: 0; width: 0; height: 0; z-index: 6; transition: opacity 200ms linear; }
+.corner-scrim { position: absolute; right: 0; bottom: 0; pointer-events: none; transition: opacity 250ms var(--ease), transform var(--t-scroll) var(--spring); }
+.skip-scrim { width: 900px; height: 420px; background: radial-gradient(ellipse at 100% 100%, rgba(5, 5, 8, 0.55) 0%, rgba(5, 5, 8, 0) 70%); }
+.osd-open .skip-scrim, .skip-hidden .skip-scrim { opacity: 0; }
 .skip-pill {
-  position: absolute; right: 96px; bottom: 96px; z-index: 6; height: 76px; line-height: 76px; padding: 0 44px 0 36px;
-  border-radius: 38px; white-space: nowrap; font-size: 30px; font-weight: 700;
-  background: var(--control); color: var(--text); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
-  transform-origin: 100% 50%;
-  transition: opacity 200ms var(--ease), transform var(--t-pop) var(--spring), background-color 160ms linear, color 160ms linear;
+  position: absolute; right: 96px; bottom: 96px; height: 80px; line-height: 80px; padding: 0 40px 0 34px; border-radius: 40px; overflow: hidden;
+  white-space: nowrap; font-size: 30px; font-weight: 700; background: var(--control); color: var(--text); box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5);
+  transition: opacity 200ms var(--ease), transform var(--t-scroll) var(--spring), background-color 160ms linear, color 160ms linear;
 }
-.skip-pill .ico { display: inline-block; width: 32px; height: 32px; vertical-align: -7px; margin-right: 14px; }
-.skip-pill.focused { background: var(--focus); color: var(--focus-ink); transform: scale(1.06); }
-.skip-pill-hidden { opacity: 0; transform: translate3d(0, 16px, 0); pointer-events: none; }
-.osd-open .skip-pill { transform: translate3d(0, -190px, 0); }
-.osd-open .skip-pill.focused { transform: translate3d(0, -190px, 0) scale(1.06); }
-.osd-open .skip-pill-hidden { transform: translate3d(0, -174px, 0); }
-/* the pill keeps its white plate in pointer mode too: it is the one thing to press */
+.skip-pill .glyph { vertical-align: -5px; margin-right: 16px; }
+.skip-pill.focused { background: var(--focus); color: var(--focus-ink); }
+.cta-line { position: absolute; left: 0; bottom: 0; width: 100%; height: 5px; background: var(--resume); transform-origin: 0 0; }
+.skip-hidden .skip-pill { opacity: 0; transform: translate3d(0, 16px, 0); pointer-events: none; }
+.osd-open .skip-pill { transform: translate3d(0, -210px, 0); }
+.osd-open .skip-hidden .skip-pill { transform: translate3d(0, -194px, 0); }
 .pointer .skip-pill { cursor: pointer; }
-.pointer .skip-pill:hover { background: var(--focus); color: var(--focus-ink); }
 
-/* ---- Up Next: a glass card whose one button is already focused -------------------------------------- */
+.endcard-scrim { width: 1300px; height: 640px; background: radial-gradient(ellipse at 100% 100%, rgba(5, 5, 8, 0.92) 0%, rgba(5, 5, 8, 0.65) 45%, rgba(5, 5, 8, 0) 75%); }
+.endcard-body { position: absolute; right: 96px; bottom: 96px; white-space: nowrap; text-align: right; transition: opacity 250ms var(--ease), transform var(--t-scroll) var(--spring); }
+.endcard-hidden .endcard-body { opacity: 0; transform: translate3d(0, 24px, 0); pointer-events: none; }
+.endcard-scrim { opacity: 0; }
+.endcard-on .endcard-scrim { opacity: 1; }
+.osd-open.tab-open .endcard-scrim, .osd-open.menu-open .endcard-scrim { opacity: 0; }
+.osd-open .endcard-body, .osd-open .endcard-scrim { transform: translate3d(0, -210px, 0); }
+.osd-open .endcard-hidden .endcard-body { transform: translate3d(0, -186px, 0); }
+.endcard-text { display: inline-block; vertical-align: middle; margin-right: 28px; text-align: right; }
+.endcard-label { font-size: 24px; line-height: 30px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-2); }
+.endcard-title { margin-top: 6px; max-width: 640px; font-size: 40px; line-height: 48px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.endcard-meta { margin-top: 6px; font-size: 24px; line-height: 30px; font-weight: 500; color: var(--text-2); }
+.endcard-thumb { display: inline-block; vertical-align: middle; width: 320px; height: 180px; border-radius: 14px; overflow: hidden; box-sizing: border-box; border: 1px solid rgba(255, 255, 255, 0.22); background: #1f2129; }
+.endcard-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.endcard-btns { margin-top: 32px; font-size: 0; }
+.cta-btn {
+  display: inline-block; position: relative; overflow: hidden; height: 72px; line-height: 72px; margin-left: 20px; padding: 0 36px; border-radius: 36px;
+  font-size: 28px; font-weight: 600; color: var(--text); background: rgba(255, 255, 255, 0.14); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  transition: background-color 160ms linear, color 160ms linear;
+}
+.cta-next { padding: 0 36px 0 30px; font-weight: 700; }
+.cta-next .glyph { vertical-align: -4px; margin-right: 14px; }
+.cta-count { margin-left: 10px; font-weight: 500; color: var(--text-2); }
+.cta-btn.focused { background: var(--focus); color: var(--focus-ink); box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5); }
+.cta-btn.focused .cta-count { color: #3a3f48; }
+.cta-next .cta-line { display: none; }
+.cta-next.counting .cta-line { display: block; }
+.cta-line.run { transform: scaleX(0); transition: transform 10s linear; }
+.pointer .cta-btn { cursor: pointer; }
 
-.upnext {
-  position: absolute; right: 96px; bottom: 96px; z-index: 6; width: 620px; padding: 28px 30px 26px; border-radius: 30px;
-  background: linear-gradient(180deg, rgba(58, 58, 64, 0.97), rgba(40, 40, 46, 0.98));
-  border: 1px solid var(--rim); border-top-color: var(--rim-light); box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
-  transition: opacity 250ms var(--ease), transform 250ms var(--ease);
-}
-.upnext-hidden { opacity: 0; transform: translate3d(0, 24px, 0); pointer-events: none; }
-.osd-open .upnext { transform: translate3d(0, -190px, 0); }
-.osd-open .upnext-hidden { transform: translate3d(0, -166px, 0); }
-.upnext-label { font-size: 24px; line-height: 30px; color: var(--text-2); font-weight: 600; }
-.upnext-title { font-size: 32px; line-height: 40px; font-weight: 700; margin: 6px 0 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.upnext-btn {
-  display: inline-block; height: 68px; line-height: 68px; padding: 0 36px 0 30px; border-radius: 34px;
-  font-size: 28px; font-weight: 700; background: var(--focus); color: var(--focus-ink);
-}
-.upnext-btn { transition: background-color 160ms linear, color 160ms linear; }
-.upnext-dim .upnext-btn { background: var(--fill-hi); color: var(--text); }
-.upnext-btn .ico { display: inline-block; width: 28px; height: 28px; vertical-align: -6px; margin-right: 12px; }
-.upnext-hint { margin-top: 16px; font-size: 24px; line-height: 30px; color: var(--text-3); }
-.pointer .upnext { cursor: pointer; }
+.osd-open.tab-open .skip, .osd-open.menu-open .skip, .scrubbing .skip,
+.osd-open.tab-open .endcard, .osd-open.menu-open .endcard { opacity: 0; pointer-events: none; }
 
 /* ---- Subtitles (drawn by the app) -------------------------------------------------------------------- */
 
@@ -121,5 +301,8 @@
   text-shadow: 0 0 4px #000, 0 0 4px #000, 0 2px 6px rgba(0, 0, 0, 0.9), 0 0 12px rgba(0, 0, 0, 0.6);
   transition: transform 250ms var(--ease);
 }
-/* above the overlay's title while it is open */
-.subs-raised { transform: translate3d(0, -300px, 0); }
+.subs-small { font-size: 36px; line-height: 46px; }
+.subs-large { font-size: 56px; line-height: 70px; }
+/* above the controls' title while they are open, above the cards with a tab open */
+.osd-open .subs { transform: translate3d(0, -300px, 0); }
+.osd-open.tab-open .subs { transform: translate3d(0, -580px, 0); }

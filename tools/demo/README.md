@@ -33,8 +33,12 @@ without artwork get generated posters until `fetch-media.mjs` has run.
 Settings: `PORT` (8930), `PLEXLITE_DEMO_MEDIA`, `PLEXLITE_DEMO_LIVETV=0` (no Live TV tab) and
 `PLEXLITE_DEMO_SEED` (repeatable `sort=random`, for Surprise Me and Shuffle).
 
+Titles with a video advertise preview thumbnails: the server answers Plex's index-frame requests
+(`/library/parts/<id>/indexes/sd/<ms>`) with frames from `PLEXLITE_DEMO_MEDIA/previews/<video>/<seconds>.jpg`
+if you put some there, else with the title's backdrop for every time.
+
 Each title has one placeholder subtitle track (timed "Demo captions" cues), and two Caminandes
-episodes and Sintel carry intro markers and chapters, so Skip Intro and the Chapters menu can be
+episodes and Sintel carry intro markers and chapters, so Skip Intro and the Chapters tab can be
 tried.
 
 What it doesn't do: transcoding (everything direct plays), real subtitles, Live TV playback (the guide
