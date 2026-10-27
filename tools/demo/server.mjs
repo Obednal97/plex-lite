@@ -7,15 +7,18 @@
 //
 // It serves the app, plus:
 //   a mock Plex Media Server at the root (/identity, /library, /hubs, /photo, ...): sections, hubs,
-//              metadata, search, collections, Live TV guide, play queues, photo transcoding and
-//              direct play (the WebM files on Wikimedia Commons), with watched state in memory.
+//              metadata, search, collections, Live TV (lineup, guide, tuning; live playback is the
+//              airing title's WebM), play queues, photo transcoding and direct play (the WebM files
+//              on Wikimedia Commons), with watched state in memory.
 //              The app's own files never collide with Plex paths, so one origin serves both.
 //   /plextv/*  a mock plex.tv: user, Home users, resources (this server) and link-code pins
 // The page gets window.PL_DEV pointing the app at both, the same hook tools/devserver.mjs uses.
 //
 // Settings (environment): PORT (8930), PLEXLITE_DEMO_MEDIA (artwork cache, default
-// ~/.cache/plexlite/demo-media), PLEXLITE_DEMO_LIVETV=0 to hide Live TV.
+// ~/.cache/plexlite/demo-media), PLEXLITE_DEMO_LIVETV=0 to hide Live TV, PLEXLITE_DEMO_TUNE_DELAY
+// (ms before a tune answers, 600; 0 for none).
 // Content and licences: tools/demo/library.json and docs/screenshots/CREDITS.md.
+import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -256,6 +259,50 @@ function playQueue(q, items, selected) {
   return mc;
 }
 
+// ---- Live TV ---------------------------------------------------------------------------------------
+// Channels come from library.json "channels" (n = index there, channelID = n + 1, identifier and
+// number = vcn). A channel with no items has no guide data: it is in the lineup but not the grid.
+
+const CHANNELS = LIVETV ? lib.channels || [] : [];
+const TUNE_DELAY_MS = Number(process.env.PLEXLITE_DEMO_TUNE_DELAY ?? 600);
+const liveSessions = new Map(); // transcode session uuid -> { uuid, consumer, n, startedAt }
+
+const channelThumb = (n) => model.imagePath(`/library/channels/${n + 1}/thumb`, `gen:channel/${n}`);
+const channelByIdentifier = (s) => CHANNELS.findIndex((ch) => String(ch.vcn) === String(s));
+
+function airing(n, slot, t) {
+  const ch = CHANNELS[n];
+  return { channelIdentifier: String(ch.vcn), channelID: n + 1, channelVcn: String(ch.vcn), channelTitle: `${ch.vcn} ${ch.title}`,
+    channelCallSign: ch.title, channelThumb: channelThumb(n), beginsAt: slot.beginsAt, endsAt: slot.endsAt,
+    onAir: slot.beginsAt <= t && t < slot.endsAt ? true : undefined };
+}
+
+// A grid programme: one per programme and channel, with a Media entry for each of its airings.
+function programme(n, slots, opts = {}) {
+  const ch = CHANNELS[n];
+  const { item: it, key } = slots[0];
+  const t = Math.floor(Date.now() / 1000);
+  const prog = it.type === 'episode'
+    ? { type: 'episode', title: it.title, grandparentTitle: it.grandparentTitle, parentIndex: it.parentIndex, index: it.index,
+      thumb: it.thumb, grandparentThumb: it.grandparentThumb }
+    : { type: 'movie', title: it.title, year: it.year, thumb: it.art };
+  prog.ratingKey = `live-${n + 1}-${key}`;
+  prog.key = `/${PROVIDER}/metadata/${prog.ratingKey}`;
+  prog.duration = (slots[0].endsAt - slots[0].beginsAt) * 1000;
+  if (opts.summary) {
+    const show = model.items.get(it.grandparentRatingKey);
+    prog.summary = it.summary || (show && show.summary) || `${prog.grandparentTitle || prog.title} on ${ch.title}.`;
+  }
+  const genres = (ch.genres || []).concat((it.Genre || (model.items.get(it.grandparentRatingKey) || {}).Genre || []).map((g) => g.tag));
+  prog.Genre = [...new Set(genres)].map((g) => ({ tag: g }));
+  prog.Media = slots.map((s) => airing(n, s, t));
+  return prog;
+}
+
+const currentSlot = (n, t = Math.floor(Date.now() / 1000)) => model.schedule(CHANNELS[n]).find((s) => s.beginsAt <= t && t < s.endsAt) || null;
+
+// /{provider}/grid?beginsAt<=T1&endsAt>=T0[&beginsAt>=X][&channel=<channelID>]: the URL keys are
+// literally "beginsAt<", "endsAt>" and "beginsAt>". excludeFields/excludeElements are ignored.
 function guide(q) {
   if (!LIVETV) return container({});
   const before = Number(q.get('beginsAt<') || Infinity);
@@ -263,25 +310,81 @@ function guide(q) {
   const startAfter = Number(q.get('beginsAt>') || -Infinity);
   const channelId = q.get('channel');
   const out = [];
-  (lib.channels || []).forEach((ch, n) => {
-    const id = n + 1;
-    if (channelId && String(channelId) !== String(id)) return;
+  CHANNELS.forEach((ch, n) => {
+    if (channelId && String(channelId) !== String(n + 1) && String(channelId) !== String(ch.vcn)) return;
+    const groups = new Map();
     for (const slot of model.schedule(ch)) {
       if (!(slot.beginsAt < before && slot.endsAt > after && slot.beginsAt > startAfter)) continue;
-      const it = slot.item;
-      const prog = it.type === 'episode'
-        ? { type: 'episode', title: it.title, grandparentTitle: it.grandparentTitle, parentIndex: it.parentIndex, index: it.index,
-          thumb: it.thumb, grandparentThumb: it.grandparentThumb }
-        : { type: 'movie', title: it.title, year: it.year, thumb: it.art };
-      prog.ratingKey = `live-${id}-${slot.beginsAt}`;
-      prog.key = `/${PROVIDER}/metadata/${prog.ratingKey}`;
-      prog.Genre = (ch.genres || []).map((g) => ({ tag: g })).concat((it.Genre || (model.items.get(it.grandparentRatingKey) || {}).Genre || []).map((g) => ({ tag: g.tag })));
-      prog.Media = [{ channelIdentifier: `demo-${id}`, channelID: id, channelVcn: String(ch.vcn), channelTitle: ch.title,
-        channelThumb: model.imagePath(`/library/channels/${id}/thumb`, `gen:channel/${n}`), beginsAt: slot.beginsAt, endsAt: slot.endsAt }];
-      out.push(prog);
+      if (!groups.has(slot.key)) groups.set(slot.key, []);
+      groups.get(slot.key).push(slot);
     }
+    for (const slots of groups.values()) out.push(programme(n, slots));
   });
   return page(out, q, (x) => x);
+}
+
+// /{provider}/metadata/live-<channelID>-<key>: the programme with its summary and coming airings.
+function liveMetadata(res, ratingKey) {
+  const m = /^live-(\d+)-(.+)$/.exec(ratingKey);
+  const n = m ? Number(m[1]) - 1 : -1;
+  const slots = n >= 0 && n < CHANNELS.length ? model.schedule(CHANNELS[n]).filter((s) => s.key === m[2]) : [];
+  if (!slots.length) return send(res, 404, 'no such programme', 'text/plain');
+  const t = Math.floor(Date.now() / 1000);
+  const coming = slots.filter((s) => s.endsAt > t).slice(0, 20);
+  return send(res, 200, container({ size: 1, Metadata: [programme(n, coming.length ? coming : slots.slice(-1), { summary: true })] }));
+}
+
+function lineup() {
+  const list = CHANNELS.map((ch, n) => ({ id: String(ch.vcn), gridKey: String(ch.vcn), vcn: String(ch.vcn), title: ch.title, callSign: ch.title, thumb: channelThumb(n) }));
+  return container({ size: list.length, Channel: list });
+}
+
+// POST /livetv/dvrs/<dvr>/channels/<identifier>/tune. Plex binds the stream to the
+// X-Plex-Session-Identifier sent with the tune: it comes back as the consumer in the stream path.
+function tune(req, res, q, identifier) {
+  const n = channelByIdentifier(identifier);
+  const answer = (status, body, type) => (TUNE_DELAY_MS > 0 ? setTimeout(() => send(res, status, body, type), TUNE_DELAY_MS) : send(res, status, body, type));
+  if (n < 0) return answer(404, `no channel ${identifier} in the demo lineup`, 'text/plain');
+  const ch = CHANNELS[n];
+  if (ch.tuneFails) return answer(503, `Could not tune channel ${ch.vcn} (${ch.title}): no signal. The demo always fails this channel, to show the error.`, 'text/plain');
+  const uuid = randomUUID();
+  const consumer = q.get('X-Plex-Session-Identifier') || req.headers['x-plex-session-identifier'] || randomUUID();
+  liveSessions.set(uuid, { uuid, consumer, n, startedAt: Date.now() });
+  while (liveSessions.size > 50) liveSessions.delete(liveSessions.keys().next().value);
+  const slot = currentSlot(n);
+  const now = slot && programme(n, [slot]);
+  const key = `/livetv/sessions/${uuid}/${consumer}/index.m3u8`;
+  const meta = { ratingKey: now ? now.ratingKey : `live-${n + 1}`, key, type: now ? now.type : 'episode',
+    title: now ? now.title : ch.title, grandparentTitle: now ? now.grandparentTitle : undefined,
+    Media: [{ uuid, channelIdentifier: String(ch.vcn), Part: [{ key: `${key}?offset=-1.000000` }] }] };
+  const timeline = now ? [{ ratingKey: now.ratingKey, type: now.type, title: now.title, grandparentTitle: now.grandparentTitle, beginsAt: slot.beginsAt, endsAt: slot.endsAt }] : [];
+  return answer(200, container({ size: 1, MediaSubscription: [{ key: '1', channelIdentifier: String(ch.vcn),
+    MediaGrabOperation: [{ Metadata: meta }], Timeline: { Metadata: timeline } }] }));
+}
+
+// The live session a /livetv/sessions/<uuid>/<consumer>/... path names, if it is still open.
+function liveSessionFor(path) {
+  const m = /^\/livetv\/sessions\/([^/]+)\//.exec(path || '');
+  return m ? liveSessions.get(m[1]) || null : null;
+}
+
+// Desktop Chrome can't play HLS, so a live stream is the WebM of whatever the channel airs now, or
+// (for a generated programme) of the channel's first library title with a video, else any video.
+function liveVideoPart(n) {
+  const partOf = (it) => { const p = it && it.Media && it.Media[0] && it.Media[0].Part[0]; return p && p.video && lib.videos[p.video] ? p : null; };
+  const slot = currentSlot(n);
+  const own = (slot && partOf(slot.item)) || model.programmes(CHANNELS[n]).map((p) => partOf(p.item)).find(Boolean);
+  if (own) return own;
+  const all = model.movies.concat(...model.shows.map((s) => model.episodesOf(s))).map(partOf).filter(Boolean);
+  return all[n % all.length];
+}
+
+function liveStream(res, session, token) {
+  if (!session) return send(res, 404, 'no such live TV session (tune the channel again)', 'text/plain');
+  const part = liveVideoPart(session.n);
+  const local = existsSync(join(MEDIA_DIR, 'videos', part.video + '.webm'));
+  res.writeHead(302, { Location: local ? `${part.key}?X-Plex-Token=${encodeURIComponent(token)}` : lib.videos[part.video].url, 'Cache-Control': 'no-store' });
+  return res.end();
 }
 
 function pms(req, res, path, q) {
@@ -372,6 +475,21 @@ function pms(req, res, path, q) {
   if ((m = /^\/playQueues\/(\d+)$/.exec(path))) {
     return queues.has(m[1]) ? send(res, 200, queues.get(m[1])) : send(res, 404, 'no such queue', 'text/plain');
   }
+  if (path === '/video/:/transcode/universal/decision' && /^\/livetv\/sessions\//.test(q.get('path') || '')) {
+    const session = liveSessionFor(q.get('path'));
+    if (!session) return send(res, 200, container({ generalDecisionCode: 2000, generalDecisionText: 'This live TV session has ended. Tune the channel again.' }));
+    const slot = currentSlot(session.n);
+    const now = slot ? programme(session.n, [slot]) : { type: 'episode', title: CHANNELS[session.n].title };
+    delete now.Media;
+    return send(res, 200, container({ size: 1, generalDecisionCode: 1001, generalDecisionText: 'Direct play not available; Conversion OK.',
+      Metadata: [{ ...now, Media: [{ container: 'mpegts', videoCodec: 'h264', audioCodec: 'aac', Part: [{ decision: 'transcode',
+        key: `/video/:/transcode/universal/session/${session.consumer}/base/index.m3u8` }] }] }] }));
+  }
+  // start.webm: the same, for desktop Chromium builds that hand any .m3u8 URL to their own HLS
+  // player (the screenshot scripts rewrite the video's src to it)
+  if (/^\/video\/:\/transcode\/universal\/start\.(m3u8|webm)$/.test(path) && /^\/livetv\/sessions\//.test(q.get('path') || '')) {
+    return liveStream(res, liveSessionFor(q.get('path')), token);
+  }
   if (path === '/video/:/transcode/universal/decision') {
     const rk = (/\/library\/metadata\/(\d+)/.exec(q.get('path') || '') || [])[1];
     const item = model.items.get(rk);
@@ -383,6 +501,7 @@ function pms(req, res, path, q) {
     return send(res, 200, container({ generalDecisionCode: 1000, generalDecisionText: 'Direct play OK.',
       Metadata: [{ ...clean(item, { list: true }), Media: [{ ...media, Part: [{ ...part, decision: 'directplay' }] }] }] }));
   }
+  if ((m = /^\/transcode\/sessions\/([^/]+)$/.exec(path)) && method === 'DELETE') liveSessions.delete(m[1]);
   if (path === '/video/:/transcode/universal/stop' || /^\/transcode\/sessions\//.test(path)) return send(res, 200, '');
   if (path === '/livetv/dvrs') {
     return send(res, 200, container(LIVETV ? { size: 1, Dvr: [{ key: '1', uuid: 'demo-dvr', title: 'Demo tuner', lineupTitle: 'Demo channels' }] } : {}));
@@ -392,9 +511,21 @@ function pms(req, res, path, q) {
       .concat(LIVETV ? [{ identifier: PROVIDER, protocols: 'livetv', title: 'Live TV & DVR' }] : []) }));
   }
   if (path === `/${PROVIDER}/grid`) return send(res, 200, guide(q));
-  if (/^\/livetv\/dvrs\/\d+\/channels\/.+\/tune$/.test(path)) {
-    return send(res, 503, 'Live TV playback is not available in the demo', 'text/plain');
+  if (path === `/${PROVIDER}/lineups/dvr/channels`) return send(res, 200, lineup());
+  if (path.startsWith(`/${PROVIDER}/metadata/`)) return liveMetadata(res, path.slice(PROVIDER.length + 11));
+  if (LIVETV && (m = /^\/livetv\/dvrs\/\d+\/channels\/(.+)\/tune$/.exec(path))) return tune(req, res, q, m[1]);
+  if (path === '/livetv/sessions') {
+    const list = [...liveSessions.values()].map((s) => {
+      const ch = CHANNELS[s.n];
+      const slot = currentSlot(s.n);
+      return { key: `/livetv/sessions/${s.uuid}/${s.consumer}/index.m3u8`, sessionKey: s.uuid, type: slot ? (slot.item.type === 'episode' ? 'episode' : 'movie') : 'episode',
+        title: slot ? slot.item.title : ch.title, grandparentTitle: slot ? slot.item.grandparentTitle : undefined,
+        Media: [{ uuid: s.uuid, channelIdentifier: String(ch.vcn), channelTitle: `${ch.vcn} ${ch.title}` }],
+        Session: { id: s.consumer, startedAt: Math.floor(s.startedAt / 1000) } };
+    });
+    return send(res, 200, container({ size: list.length, Metadata: list }));
   }
+  if (/^\/livetv\/sessions\/[^/]+\/[^/]+\/index\.m3u8$/.test(path)) return liveStream(res, liveSessionFor(path), token);
   return send(res, 404, `the demo server does not implement ${method} ${path}`, 'text/plain');
 }
 

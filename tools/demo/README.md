@@ -18,8 +18,8 @@ plex.tv/link screen; the demo "approves" the code after 30 seconds.
 
 | File | |
 | --- | --- |
-| `server.mjs` | Serves the app and answers the Plex endpoints the app calls: sections, hubs, metadata (extras, On Deck, markers, chapters), children, related, search, collections, genre/decade lists, first-letter counts (`firstCharacter`, for the A–Z rail), play queues, timeline and scrobble (watched state is kept in memory until restart), the Live TV guide, `/photo/:/transcode` and direct play. `/plextv/*` mocks plex.tv: user, Home users, resources and link-code pins. The page gets `window.PL_DEV` pointing the app at both. |
-| `model.mjs` | Builds Plex-shaped metadata (`MediaContainer`, rating keys, tag ids, image paths, hubs, a repeating Live TV schedule) from `library.json`. |
+| `server.mjs` | Serves the app and answers the Plex endpoints the app calls: sections, hubs, metadata (extras, On Deck, markers, chapters), children, related, search, collections, genre/decade lists, first-letter counts (`firstCharacter`, for the A–Z rail), play queues, timeline and scrobble (watched state is kept in memory until restart), Live TV (below), `/photo/:/transcode` and direct play. `/plextv/*` mocks plex.tv: user, Home users, resources and link-code pins. The page gets `window.PL_DEV` pointing the app at both. |
+| `model.mjs` | Builds Plex-shaped metadata (`MediaContainer`, rating keys, tag ids, image paths, hubs, a repeating three-day Live TV schedule) from `library.json`. |
 | `library.json` | The content: titles, credits, summaries, collections, channels, which file each image and video comes from (with licence and author), and which titles `shots.mjs` uses. Generated from Wikimedia Commons metadata, then hand-edited. |
 | `art.mjs` | SVG artwork for what has no free image: typographic posters, wordmark logos, channel badges, collection collages, and the blurred "ambient" backdrops Plex's transcoder would make. |
 | `fetch-media.mjs` | Downloads the artwork (Commons thumbnails and video frames) into `~/.cache/plexlite/demo-media` (`PLEXLITE_DEMO_MEDIA`). Files are checked to be JPEG/PNG. `--videos` also keeps local copies of the videos (large). |
@@ -30,8 +30,9 @@ Video plays straight from Wikimedia Commons (the server redirects to its VP9 Web
 the player needs a browser with VP9 (any recent Chrome or Chromium) and internet access. Titles
 without artwork get generated posters until `fetch-media.mjs` has run.
 
-Settings: `PORT` (8930), `PLEXLITE_DEMO_MEDIA`, `PLEXLITE_DEMO_LIVETV=0` (no Live TV tab) and
-`PLEXLITE_DEMO_SEED` (repeatable `sort=random`, for Surprise Me and Shuffle).
+Settings: `PORT` (8930), `PLEXLITE_DEMO_MEDIA`, `PLEXLITE_DEMO_LIVETV=0` (no Live TV tab),
+`PLEXLITE_DEMO_TUNE_DELAY` (milliseconds before a tune answers, default 600 so "Tuning…" shows; 0 for
+none) and `PLEXLITE_DEMO_SEED` (repeatable `sort=random`, for Surprise Me and Shuffle).
 
 Titles with a video advertise preview thumbnails: the server answers Plex's index-frame requests
 (`/library/parts/<id>/indexes/sd/<ms>`) with frames from `PLEXLITE_DEMO_MEDIA/previews/<video>/<seconds>.jpg`
@@ -41,8 +42,33 @@ Each title has one placeholder subtitle track (timed "Demo captions" cues), and 
 episodes and Sintel carry intro markers and chapters, so Skip Intro and the Chapters tab can be
 tried.
 
-What it doesn't do: transcoding (everything direct plays), real subtitles, Live TV playback (the guide
-works; tuning a channel fails), PIN-protected profiles, and the Overseerr plugin.
+What it doesn't do: transcoding (library titles direct play; Live TV plays whole WebM files from the
+start), real subtitles, recording (DVR), PIN-protected profiles, and the Overseerr plugin.
+
+## Live TV
+
+`library.json` `channels` lists 24 channels (101–122, 130 and 140). Each one airs, in a loop over
+three days aligned to local midnight, library titles (a show airs all its episodes; `{"id", "minutes"}`
+puts a title in a fixed-length slot) and generated guide-only programmes such as news bulletins
+(`{"title", "minutes", "genre", "summary"}`). Channels with no items (122 Shopping Now, 140 Local
+Access) have no guide data: they are in the lineup but not the grid.
+
+| Endpoint | |
+| --- | --- |
+| `GET /tv.plex.providers.epg.demo/lineups/dvr/channels` | every channel, with or without guide data |
+| `GET /tv.plex.providers.epg.demo/grid?beginsAt<=&endsAt>=[&beginsAt>=][&channel=]` | programmes in a window, one per programme and channel, with a `Media` entry per airing (`onAir` for the one on now) |
+| `GET /tv.plex.providers.epg.demo/metadata/<ratingKey>` | one programme with its summary and coming airings |
+| `POST /livetv/dvrs/1/channels/<number>/tune` | starts a session bound to `X-Plex-Session-Identifier`; channel 112 (Racing Live, `"tuneFails": true`) always answers 503 |
+| `GET /video/:/transcode/universal/decision?path=/livetv/sessions/...` | "Conversion OK" (1001) |
+| `GET /video/:/transcode/universal/start.m3u8?path=/livetv/sessions/...` | 302 to a WebM (see below) |
+| `GET /livetv/sessions` | the open demo sessions; `DELETE /transcode/sessions/<uuid>` closes one |
+
+Live playback isn't HLS (desktop Chrome can't play it): `start.m3u8` redirects to the WebM of the
+title airing on that channel now (the local copy if `fetch-media.mjs --videos` made one, else
+Wikimedia Commons), from its start. A generated programme plays the channel's first title with a
+video, or another demo title. Recent desktop Chromium builds send any `.m3u8` URL to their own HLS
+player, which can't read a WebM; `start.webm` answers the same way, so a test script can rewrite the
+video's `src` to it.
 
 ## Screenshots
 

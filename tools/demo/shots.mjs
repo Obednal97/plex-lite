@@ -304,8 +304,9 @@ const SHOTS = {
   },
   'live-tv': async (page) => {
     await tab(page, 'Live TV');
-    await press(page, 'down');
-    await settle(page, 2000);
+    await page.waitForSelector('.lg-cell.focused');
+    await press(page, 'down', 'down');
+    await settle(page, 2500);
   },
   settings: async (page) => {
     await tab(page, 'Settings');

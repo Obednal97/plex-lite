@@ -19,6 +19,21 @@ releases are fixes only.
 
 ### Changed
 
+- Live TV rebuilt (docs/LIVETV-v2-design.md). The tab is a two-hour guide grid of every channel in
+  the DVR's lineup (channels without guide data too), with the focused programme's details, synopsis
+  and artwork above it, filters (All, Favourites, Movies, Sports, News), number keys to jump to a
+  channel, Favourites (hold OK or Yellow; the guide opens on Favourites once there are some), and
+  Back to return to now. Programmes load in three-hour blocks for all channels, so moving never
+  waits on the network.
+- The live player has its own controls: a channel banner on every zap (logo, number, programme,
+  progress, time left, what's next), a mini guide over the picture (Up/Down), number entry, last
+  channel (an icon, or Red), and Favourite. Pausing shows how far behind live you are, with Go live.
+  Changing channel releases the old tuner session before tuning the next (one-tuner setups), tries
+  again while the server frees the tuner, and a refused tune says so in words. Channel keys, numbers and the mini guide also work while tuning or
+  after a failed tune.
+- The demo server's Live TV has 24 channels with realistic schedules, the lineup, programme details
+  and playable tuning (one channel always fails, two have no guide data).
+
 - Player rebuilt after the Apple TV app (with some Netflix): nothing on screen while watching;
   any key brings up the title, a seek bar split into chapters, the times ("−5:35 · Ends at 21:14"),
   round Subtitles / Audio / Next episode icons and Info / Chapters / Episodes tabs. They hide after
