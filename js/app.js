@@ -167,6 +167,17 @@
     return true;
   };
 
+  // Swaps the top screen for another without waking the one underneath (the Surprise Me reveal
+  // hands over to the player this way, so Back from the player returns to the library).
+  app.replaceTop = function (screen) {
+    if (app.stack.length <= 1) return app.push(screen);
+    var old = app.stack.pop();
+    if (old.hide) old.hide();
+    if (old.destroy) old.destroy();
+    if (old.el.parentNode) old.el.parentNode.removeChild(old.el);
+    app.push(screen);
+  };
+
   // Tab switches cross-fade: the old page fades out (70 ms) while the new one rises in.
   app.setRoot = function (screen) {
     while (app.stack.length) {

@@ -361,6 +361,7 @@
   AllMode.prototype.apply = function () {
     PL.storage.set(filtersKey(this.section), this.filters);
     this.paintBar();
+    this.screen.paintSurprise();
     this.count.textContent = '';
     this.empty.textContent = '';
     this.grid.reset(0);
@@ -403,6 +404,13 @@
       });
       PL.app.push(screens.sheet([{ heading: kind === 'genre' ? 'Genre' : 'Decade', rows: rows }]));
     }, function (err) { self.picking = false; PL.toast(PL.errorMessage(err)); });
+  };
+
+  // Surprise Me picks within the active genre/decade; the Unwatched filter makes it strict.
+  AllMode.prototype.surpriseFilters = function () {
+    var f = this.filters;
+    var label = [f.genre && f.genre.title, f.decade && f.decade.title].filter(Boolean).join(' · ');
+    return { genre: f.genre, decade: f.decade, unwatched: f.unwatched, label: label };
   };
 
   AllMode.prototype.setFocused = function (on) {
@@ -534,6 +542,15 @@
     this.subnav.el.classList.add('subnav-row', 'fade');
     this.subnav.el.style.top = '136px';
     this.el.appendChild(this.subnav.el);
+    // Surprise Me: an action pill after the mode chips (Right from the last chip)
+    this.surpriseBtn = PL.el('div', 'surprise-pill');
+    var dice = ui.icon('dice');
+    if (dice) this.surpriseBtn.appendChild(dice);
+    this.surpriseBtn.appendChild(document.createTextNode('Surprise Me'));
+    this.surpriseValue = PL.el('span', 'chip-value');
+    this.surpriseBtn.appendChild(this.surpriseValue);
+    this.surpriseBtn.addEventListener('click', function () { self.surprise(); });
+    this.subnav.track.appendChild(this.surpriseBtn);
     this.area = 'content';
     this.mode = null;
     this.setMode(selected);
@@ -557,7 +574,21 @@
     if (this.everShown) ui.enter(this.mode.el, 'mode-in', 40);
     if (this.visible) this.mode.show();
     if (this.area === 'content' && !PL.app.tabsFocused) this.mode.setFocused(true);
+    this.paintSurprise();
     this.updateHeader();
+  };
+
+  LibraryScreen.prototype.surpriseFilters = function () {
+    return this.mode && this.mode.surpriseFilters ? this.mode.surpriseFilters() : {};
+  };
+
+  // the pill names the filters it will honour (Library view), e.g. "Surprise Me  Comedy · 1990s"
+  LibraryScreen.prototype.paintSurprise = function () {
+    this.surpriseValue.textContent = this.surpriseFilters().label || '';
+  };
+
+  LibraryScreen.prototype.surprise = function () {
+    PL.app.push(screens.surprise(this.section, this.surpriseFilters()));
   };
 
   LibraryScreen.prototype.updateHeader = function () {
@@ -570,6 +601,7 @@
   LibraryScreen.prototype.focusArea = function (area) {
     this.area = area;
     this.subnav.setFocused(area === 'subnav');
+    this.surpriseBtn.classList.toggle('focused', area === 'surprise');
     if (this.mode) this.mode.setFocused(area === 'content');
     this.updateHeader();
   };
@@ -578,6 +610,7 @@
 
   LibraryScreen.prototype.onTabsFocus = function () {
     this.subnav.setFocused(false);
+    this.surpriseBtn.classList.remove('focused');
     if (this.mode) this.mode.setFocused(false);
     this.updateHeader();
   };
@@ -600,7 +633,25 @@
   };
 
   LibraryScreen.prototype.key = function (code) {
+    if (this.area === 'surprise') {
+      if (code === K.ENTER) { this.surprise(); return true; }
+      if (code === K.LEFT) {
+        this.subnav.index = this.subnav.chips.length - 1;
+        this.focusArea('subnav');
+        return true;
+      }
+      if (code === K.DOWN) { this.focusArea('content'); return true; }
+      if (code === K.UP) {
+        this.surpriseBtn.classList.remove('focused');
+        return PL.app.focusTabs();
+      }
+      return code === K.RIGHT;
+    }
     if (this.area === 'subnav') {
+      if (code === K.RIGHT && this.subnav.index === this.subnav.chips.length - 1) {
+        this.focusArea('surprise');
+        return true;
+      }
       if (code === K.DOWN) {
         this.subnav.choose();
         this.focusArea('content');

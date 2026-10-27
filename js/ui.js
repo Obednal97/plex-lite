@@ -501,9 +501,14 @@
     };
     img.onerror = fallback;
     setTimeout(fallback, 2500);
-    img.src = PL.plex.image(path, 800, 300, { format: 'png', minSize: 0, upscale: 0 });
+    img.src = ui.logoUrl(path);
     box.appendChild(img);
     return box;
+  };
+
+  // The clearLogo as a transparent PNG, never upscaled (also used to preload a logo).
+  ui.logoUrl = function (path) {
+    return PL.plex.image(path, 800, 300, { format: 'png', minSize: 0, upscale: 0 });
   };
 
   // ---- Icons: Phosphor (js/icons.js, generated) as inline SVG -------------------------------

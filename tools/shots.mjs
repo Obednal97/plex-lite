@@ -36,6 +36,8 @@ const goTab = (sectionExpr) => `PL.app.blurTabs(true);PL.app.selectTab(PL.app.ta
 const goSection = (sec) => goTab(`'section.'+${sec}`);
 const goNamed = (id) => goTab(JSON.stringify(id));
 const goMode = (sec, m) => goSection(sec) + `var s=PL.app.top();s.subnav.selected=s.subnav.index=${m};s.subnav.paint();s.setMode(${m});s.focusArea('content');`;
+const surprise = "var lib=PL.app.top();var r=PL.screens.surprise(lib.section,lib.surpriseFilters());" +
+  "r.play=function(){r.stopCountdown();};PL.app.push(r);";
 const run = (body, ret) => `(function(){${body}return ${ret || "'ok'"};})()`;
 // Opens the details page of the section's most recently watched item (Plex type 1 movie, 2 show),
 // or of PLEXLITE_SHOTS_MOVIE; `after` runs with the screen as d.
@@ -60,6 +62,11 @@ const PAGES = {
   'livetv': run(goNamed('livetv')),
   'settings': run(goNamed('settings')),
   'sort-sheet': run(goMode(MOVIES, 1) + 'PL.app.top().mode.pickSort();'),
+  'shows-surprise-pill': run(goMode(SHOWS, 0) + "s.focusArea('surprise');"),
+  'movies-library-surprise-pill': run(goMode(MOVIES, 1) + "s.focusArea('surprise');"),
+  // the reveal's countdown runs to the end (10 s shot) but its play() is stubbed, so nothing plays
+  'surprise-shows': run(goSection(SHOWS) + surprise),
+  'surprise-movies': run(goSection(MOVIES) + surprise),
 };
 
 const pages = only.length ? only : Object.keys(PAGES);
