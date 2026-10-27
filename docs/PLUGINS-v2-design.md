@@ -85,7 +85,7 @@ the consent sheet.
 - Plex Lite fetches it from a configurable URL (Settings → Plugins → Browse plugins → Catalogue
   address; default `https://raw.githubusercontent.com/Obednal97/plex-lite/main/catalog/plugins.json`),
   caches the last good copy (`plugins.catalogCache`), and falls back to the copy bundled in the app
-  (`catalog/` is in the IPK). The repo is private for now, so the bundled copy is what works today.
+  (`catalog/` is in the IPK). The repo is public; the default URL resolves once `catalog/` is on `main`.
   When offline, the newer of the cache and the bundled copy (by `updated`) wins.
 - **Publishing a web plugin**: `node tools/build-plugin.mjs examples/plugins/hello-shelf` copies the
   plugin's `plugin.js` to `catalog/bundles/<id>-<version>.js`, pins its SHA-256 and writes the entry
@@ -205,9 +205,9 @@ Without `plex:read`, a plugin only learns the item's type.
 
 ## Distribution
 
-1. **Now**: `catalog/plugins.json` + `catalog/bundles/` in this repo, a copy bundled in the app.
-2. **When the repo is public**: the default URL starts working; the bundled copy remains the offline
-   fallback.
+1. **Now**: `catalog/plugins.json` + `catalog/bundles/` in this (public) repo, served from raw GitHub
+   once on `main`; a copy is bundled in the app as the offline fallback.
+2. Publishing a plugin = a PR adding its bundle and entry (`tools/build-plugin.mjs`).
 3. **Signing** (later): catalogue entries signed with a key embedded in Plex Lite (Ed25519 via a
    small JS implementation, since WebCrypto Ed25519 isn't in Chrome 53), so a compromised catalogue
    host can't push code even to users who accept its consent sheet.
@@ -269,6 +269,6 @@ an HBC install of a service plugin (none is published yet).
 ## Open questions
 
 1. Signing catalogue entries (Ed25519) on top of hash pinning.
-2. Hosting: raw GitHub for the catalogue and bundles once the repo is public; GitHub Releases for
+2. Hosting: raw GitHub for the catalogue and bundles (now that the repo is public); GitHub Releases for
    service IPKs.
 3. Unrooted TVs: web plugins work everywhere; service plugins need Homebrew Channel.

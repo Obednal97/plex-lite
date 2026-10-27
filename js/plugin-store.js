@@ -1,6 +1,6 @@
 // Plugin catalogue and installs (Phase 2). The catalogue is a JSON list kept in the plex-lite repo
 // (catalog/plugins.json) and fetched from a configurable URL; the last good copy is cached and a
-// copy also ships inside the app (the repo is private for now, so that copy is what works today).
+// copy also ships inside the app as the offline fallback (and until catalog/ is on the repo's main).
 // "web" plugins are one JS bundle: downloaded, checked against the catalogue's pinned SHA-256 and
 // kept in localStorage, then run in the sandboxed frame (js/plugin-host.js) once the user consents.
 // "service" plugins also install an IPK with a background service through Homebrew Channel.
