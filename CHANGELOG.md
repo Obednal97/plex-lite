@@ -9,6 +9,14 @@ releases are fixes only.
 
 ## [Unreleased]
 
+### Added
+
+- A–Z rail in the Library view (title sort): the current letter follows the focus; Right from the
+  last column enters it, OK jumps to the letter's first title, and the number keys jump like a phone
+  keypad (2 = A, again = B ...). Uses Plex's `firstCharacter` counts with the active filters, so a
+  jump loads only the titles around the target. Z–A sorts flip it; other sorts hide it.
+- The demo server answers `firstCharacter`.
+
 ## [0.1.0] - 2026-10-27 (first public release)
 
 ### Added

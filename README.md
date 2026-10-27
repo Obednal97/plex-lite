@@ -22,7 +22,7 @@ More in [Screenshots](#screenshots).</sub>
 ## Features
 
 - **Libraries**: Recommended, Library (sort, genre, decade, unwatched) and Collections views for
-  movies and TV
+  movies and TV, with an A–Z rail to jump to a letter (see [Jump to a letter](#jump-to-a-letter))
 - **Title pages**: cast and crew, trailers and extras, ratings, versions, seasons and episodes, and
   a page for each person
 - **Player**: direct play (H.264/HEVC including 10-bit, in MKV/MP4) or server transcoding when
@@ -34,9 +34,32 @@ More in [Screenshots](#screenshots).</sub>
 - **Accounts**: sign in with a plex.tv/link code, switch Plex Home profiles (not PIN-protected ones
   yet), set server addresses manually when discovery doesn't work
 - **Remote**: built for the arrow keys, with pointer (Magic Remote) support. Hold OK for quick
-  actions (resume, play from the beginning, mark watched or unwatched).
+  actions (resume, play from the beginning, mark watched or unwatched). The number keys jump to a
+  letter in the Library view.
 - **Plugins**: optional add-ons for rows, actions and settings (see [Plugins](#plugins))
 - **Surprise Me**: for when nobody can decide what to watch (see [Surprise Me](#surprise-me))
+
+## Jump to a letter
+
+When the Library view is sorted by title, a slim **#, A–Z** rail sits at the right edge of the poster
+grid. The letter of the focused title is highlighted as you scroll, and letters with no titles are
+dimmed.
+
+| Key | What it does |
+| --- | --- |
+| Right (from the last column) | Moves into the rail, on the current letter |
+| Up / Down (in the rail) | Moves between letters that have titles; Up from the top goes to the filters |
+| OK (in the rail) | Jumps to the first title of that letter and focuses it |
+| Left or Back (in the rail) | Back to the grid where you were, without jumping |
+| 2–9 | Jumps like a phone keypad: 2 = A, press again for B, then C; 7 = P Q R S, 9 = W X Y Z |
+| 0 or 1 | Jumps to # (titles starting with a digit or symbol) |
+
+With the Magic Remote, click a letter. The jump honours the Genre, Decade and Unwatched filters, and
+a Z–A title sort flips the rail. With any other sort the rail is hidden (the number keys say to sort
+by Title), because letters don't mark positions in a list sorted by date or rating.
+
+A jump costs one small request when the filters change (Plex's `firstCharacter` counts per letter,
+about 1 KB) and then only the page of titles around the target, however far down it is.
 
 ## Surprise Me
 
@@ -190,7 +213,7 @@ account belongs in the repo.
 | --- | --- |
 | `tools/deploy.sh [--dev] [--no-launch]` | Builds, installs on the TV over SSH (`PLEXLITE_TV_SSH`, root or dev mode) and launches. `--dev` embeds a Plex token from `PLEX_ENV_FILE` so the TV skips sign-in. Dev builds go to `~/.cache/plexlite`, never into the repo. |
 | `node tools/check.mjs` | Checks JS and CSS against Chrome 53 and that the versions match. Run it before every commit. |
-| `node test/fuzzy.test.mjs` | Search tests and a small benchmark. |
+| `node --test test/` | All unit tests (search, A–Z rail offsets, plugins, Overseerr). `node test/fuzzy.test.mjs` alone adds a small search benchmark. |
 | `node tools/devserver.mjs` | Serves the app on the desktop at http://127.0.0.1:8920 with a read-only Plex proxy. The browser never sees your real token. |
 | `node tools/demo/server.mjs` | Runs the app on the desktop at http://127.0.0.1:8930 against a mock Plex server and plex.tv with a demo library of openly licensed films, so no Plex account or server is needed. Run `node tools/demo/fetch-media.mjs` once first for the artwork. See [tools/demo/README.md](tools/demo/README.md). |
 | `node tools/demo/shots.mjs` | Retakes the README screenshots in `docs/screenshots/` from the demo server (needs `playwright-core`, installed outside the repo). |
