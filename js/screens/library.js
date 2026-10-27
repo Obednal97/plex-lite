@@ -177,6 +177,34 @@
     this.stack.setZones(zones, 0);
     if (hubs[0] && hubs[0].Metadata[0] && this.screen.visible) this.hero.apply(hubs[0].Metadata[0]);
     if (this.focused) this.stack.focus(true);
+    this.addPluginShelves(zones);
+  };
+
+  // Plugins may add shelves after the Plex rows (e.g. "Trending on Trakt"). They arrive late and are
+  // appended without moving the focus.
+  RecommendedMode.prototype.addPluginShelves = function (base) {
+    if (!PL.plugins || !PL.plugins.shelfRows) return;
+    var self = this;
+    var shadow = this.screen.shadow;
+    PL.plugins.shelfRows(this.screen.section).then(function (shelves) {
+      if (!self.alive || !shelves || !shelves.length) return;
+      var extra = shelves.filter(function (sh) { return sh && sh.items && sh.items.length; }).map(function (sh) {
+        return new ui.Shelf({
+          title: sh.title,
+          items: sh.items,
+          kind: sh.kind || 'poster',
+          shadow: shadow,
+          onFocusItem: function (item) { if (item.art || item.ratingKey) self.hero.update(item); },
+          onSelect: sh.onSelect || function (item) { PL.app.push(screens.details(item)); },
+        });
+      });
+      if (!extra.length) return;
+      var focused = self.focused;
+      var index = self.stack.index;
+      if (focused) self.stack.focus(false);
+      self.stack.setZones(base.concat(extra), index);
+      if (focused) self.stack.focus(true);
+    }, function () { /* plugin failures never affect the screen */ });
   };
 
   // Called when coming back from details or the player: progress may have changed.

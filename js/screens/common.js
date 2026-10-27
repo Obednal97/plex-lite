@@ -150,6 +150,8 @@
     if (t === 'season' && item.parentRatingKey) {
       rows.push({ label: 'Go to show', action: open({ ratingKey: item.parentRatingKey, type: 'show', title: item.parentTitle }) });
     }
+    var extra = PL.plugins && PL.plugins.actions ? PL.plugins.actions(item) : null;
+    if (extra && !extra.then) extra.forEach(function (a) { rows.push({ label: a.label, action: a.run }); });
     rows.push({ label: 'Details', action: open(item) });
     var heading = t === 'episode' ? (item.grandparentTitle || '') + ' · ' + PL.fmt.episode(item) : (item.title || '');
     PL.app.push(screens.sheet([{ heading: heading, rows: rows }], { focus: 0 }));

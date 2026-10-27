@@ -316,6 +316,9 @@
     if (f.type === 'movie' || f.type === 'episode') {
       out.push({ icon: 'tracks', label: 'Audio & subtitles', hint: 'Audio and subtitles', action: function () { screens.trackSheet(f, null, self.mediaIndex || 0); } });
     }
+    (this.pluginActions || []).forEach(function (a) {
+      out.push({ icon: a.icon, label: a.label, action: a.run });
+    });
     if (f.type === 'episode' && f.grandparentRatingKey) {
       out.push({
         icon: 'show', label: 'Go to show', hint: 'Go to ' + (f.grandparentTitle || 'show'),
@@ -388,6 +391,7 @@
     }
     this.stack.setZones(zones, 1);
     if (this.visible) this.stack.focus(true);
+    this.loadPluginActions(f);
   };
 
   DetailsScreen.prototype.openPerson = function (person) {
@@ -399,6 +403,20 @@
     var params = {};
     params[person.filter] = person.id;
     PL.app.push(screens.items(person.name, '/library/sections/' + section + '/all', params));
+  };
+
+  // Plugin actions (e.g. "Request on Overseerr") become extra pills once they're known.
+  DetailsScreen.prototype.loadPluginActions = function (item) {
+    if (!PL.plugins || !PL.plugins.actions) return;
+    var self = this;
+    var got = PL.plugins.actions(item);
+    var apply = function (list) {
+      if (!self.alive || !list || !list.length || !self.buttonRow) return;
+      self.pluginActions = list;
+      self.buttonRow.setButtons(self.buttons());
+    };
+    if (got && typeof got.then === 'function') got.then(apply, function () {});
+    else apply(got);
   };
 
   DetailsScreen.prototype.makeEpisodeShelf = function (episodes, focusItem, title) {

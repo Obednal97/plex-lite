@@ -137,7 +137,8 @@ body.fast * { transition-duration: 90ms !important; transition-timing-function: 
   position: relative; border-radius: 14px; background: rgba(255, 255, 255, 0.06);
   transition: transform var(--t-lift) var(--ease);
 }
-.card-img { position: absolute; left: 0; top: 0; border-radius: 14px; }
+/* crop, never stretch: artwork comes in mixed shapes (square cast photos in tall boxes, 4:3 stills) */
+.card-img { position: absolute; left: 0; top: 0; border-radius: 14px; object-fit: cover; object-position: 50% 30%; }
 .card-fallback {
   position: absolute; left: 16px; right: 16px; top: 50%; transform: translateY(-50%);
   font-size: 22px; line-height: 28px; text-align: center; color: var(--text-2); display: none;
