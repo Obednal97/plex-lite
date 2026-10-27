@@ -5,6 +5,7 @@
 //   def.searchRows(q, ctx)       -> Promise<shelf | [shelf] | null>          shelves after Search's own
 //   def.shelfRows(section, ctx)  -> Promise<[shelf]>                         shelves on a library's Recommended
 //   def.actions(item, ctx)       -> [{label, icon?, run()}]                  details pills + hold-OK menu
+//   def.badges(item, ctx)        -> Promise<[{label, tone?}]>                 keyline badges on a details page
 //   def.onSelect(item, ctx)      OK on an item that came from one of its shelves
 //   def.services                 [luna service ids] bundled in plugins/<id>/service/
 //   def.tabs                     [{id, title}] tabs it adds (max 2 plugin tabs in total)
@@ -199,6 +200,17 @@
     }));
   };
 
+  // Promise<[{label, tone}]> keyline badges for a details page (e.g. "Downloading 45%"); late and optional.
+  plugins.badges = function (item) {
+    return Promise.all(active().filter(function (d) { return d.badges && !d.external; }).map(function (d) {
+      return safeAsync(d, 'badges', function () { return d.badges(item, d.ctx); }).then(function (list) {
+        return (Array.isArray(list) ? list : []).filter(function (b) { return b && b.label; }).slice(0, 2).map(function (b) {
+          return { label: String(b.label).slice(0, 40), tone: /^[a-z]{1,12}$/.test(b.tone || '') ? b.tone : '' };
+        });
+      });
+    })).then(flatten);
+  };
+
   // OK on an item that came from a plugin shelf (Search keeps plain items)
   plugins.select = function (item) {
     var d = item && find(item.plugin);
@@ -221,6 +233,10 @@
           return node;
         },
         icon: function (name) { return PL.ui.icon(name); },
+        spinner: function () { return PL.ui.spinner(); },
+        fadeInImage: function (img, src) { PL.ui.fadeInImage(img, src); },
+        isBack: PL.isBack,
+        KEY: PL.KEY,
       },
       sheet: function (sections, opts) { PL.app.push(PL.screens.sheet(sections, opts)); },
       textEntry: function (title, initial, placeholder, onDone) {
@@ -237,6 +253,20 @@
       http: PL.http,
       // explicit so it can be permissioned per plugin later
       plexToken: function () { return PL.plex.token; },
+      // the active Plex Home profile ({uuid, title}), or null for the account owner
+      profile: function () { return PL.storage.get('profile', null); },
+      // read-only Plex lookups on the connected server
+      plex: {
+        metadata: function (ratingKey) { return PL.plex.metadata(ratingKey); },
+        children: function (ratingKey) { return PL.plex.children(ratingKey); },
+        image: function (path, w, h) { return PL.plex.image(path, w, h); },
+      },
+      // bundled plugins only: push a screen object ({el, show, hide, key, destroy}) built with ctx.ui
+      push: function (screen) { PL.app.push(screen); },
+      // opens Plex Lite's details page for a Plex item ({ratingKey, type, title})
+      openItem: function (item) { PL.app.push(PL.screens.details(item)); },
+      pop: function () { PL.app.pop(); },
+      backdrop: function (url) { PL.app.backdrop.set(url || null, url ? 'detail' : 'ambient'); },
       // Calls one of the plugin's own bundled services (def.services); serviceId defaults to the first.
       service: function (method, params, serviceId) {
         var services = def.services || [];

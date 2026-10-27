@@ -372,6 +372,7 @@
     }
     if (this.visible) this.stack.focus(true);
     this.loadPluginActions(f);
+    this.loadPluginBadges(f);
   };
 
   // Their work in every library (person page); crew use the director/writer filter.
@@ -391,6 +392,21 @@
     };
     if (got && typeof got.then === 'function') got.then(apply, function () {});
     else apply(got);
+  };
+
+  // Plugin badges (e.g. "Downloading 45%") join the meta line's keyline badges when they arrive.
+  DetailsScreen.prototype.loadPluginBadges = function (item) {
+    if (!PL.plugins || !PL.plugins.badges) return;
+    var self = this;
+    var head = this.head;
+    PL.plugins.badges(item).then(function (list) {
+      if (!self.alive || self.head !== head || !list || !list.length) return;
+      var wrap = head.head.querySelector('.badges');
+      if (!wrap) return;
+      list.forEach(function (b) {
+        wrap.appendChild(PL.el('span', 'badge plugin-badge' + (b.tone ? ' tone-' + b.tone : ''), b.label));
+      });
+    }, function () {});
   };
 
   DetailsScreen.prototype.makeEpisodeShelf = function (episodes, focusItem, title) {

@@ -23,6 +23,8 @@ USED = {
     'dice': ('regular', 'dice-five'),
     'info': ('regular', 'info'),
     'close': ('regular', 'x'),
+    'report': ('regular', 'flag'),
+    'download': ('regular', 'download-simple'),
 }
 
 pkg = Path(sys.argv[1])
