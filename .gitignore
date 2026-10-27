@@ -2,8 +2,13 @@
 js/dev-config.js
 *.ipk
 *.env
+# local dev-tool settings (copy tools/local.env.example)
+tools/local.env
 .secrets/
 node_modules/
 .DS_Store
 .playwright-mcp/
 shots/
+__pycache__/
+*.pyc
+dist/
