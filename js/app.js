@@ -193,7 +193,6 @@
     if (!tab) return;
     app.tabs.selected = i;
     app.tabs.index = i;
-    PL.storage.set('tab', tab.id);
     app.blurTabs(true);
     app.setRoot(tab.make());
     app.tabs.paint();
