@@ -1,9 +1,9 @@
 # Plex Lite plugins, Phase 2: separately installed, sandboxed plugins
 
 Status: design + working implementation on branch `plugins-v2` (wired into the Phase 1 registry,
-Settings → Plugins and the tab bar; discovery verified on the TV). Phase 1 (bundled, reviewed plugins in
+Settings → Plugins, the tab bar and a plugin catalogue). Phase 1 (bundled, reviewed plugins in
 `plugins/<id>/`, registered with `PL.plugins.register()`) ships on `main`. Phase 2 lets people install
-plugins **as their own packages** without trusting them with the user's Plex account.
+plugins **from a catalogue, inside Plex Lite** without trusting them with the user's Plex account.
 
 ## Goals and non-goals
 
@@ -24,12 +24,16 @@ plugins **as their own packages** without trusting them with the user's Plex acc
    Settings → Plugins ("Remove access"), and the plugins holding it are listed there ("On · Plex
    sign-in"). Plex Lite logs *which* plugin received it, never the token. Plugin storage, results and
    logs are scrubbed of it.
-2. **Catalogue**: our own JSON list in this repo, `catalog/plugins.json`, pinning the SHA-256 of each
-   version's `.ipk` and entry file. Installs still go through Homebrew Channel / dev install.
+2. **Catalogue**: our own JSON list in this repo, `catalog/plugins.json`, pinning the SHA-256 of
+   every version's code (and `.ipk` for service plugins).
 3. **Plugins may add tabs and screens, declaratively.** A plugin declares tabs (`plexlitePlugin.tabs`
-   in its manifest) and returns screen *models* (shelves, grids, details-like pages, actions, sheets);
+   in its catalogue entry) and returns screen *models* (shelves, grids, details-like pages, actions, sheets);
    Plex Lite renders them with its own components (`js/screens/plugin-screen.js`). No plugin-drawn DOM
    in the visible UI. Needs the `tabs` permission; at most **2 plugin tabs** in total.
+4. **Discovery is catalogue-based** (decided later the same day): Plex Lite reads the catalogue and
+   installs from Settings → Plugins → Browse plugins (Install / Connect / Update / Remove). The
+   earlier design (plugins as separate IPKs found by Plex Lite's core service, elevated to root
+   through Homebrew Channel to scan other packages) is **dropped**, along with the core service.
 
 ## Threat model
 
@@ -45,72 +49,76 @@ Assume a plugin may be malicious or compromised (its update could be). It must n
 | Track via images | Shelf images must be Plex paths (resized by the user's own Plex server) or http(s) URLs on an origin the plugin is allowed to contact. |
 | Hang or flood the app | Per-call timeout (4 s), max 16 calls in flight, 256 KB message cap, results truncated (40 items/shelf, 3 shelves, 4 actions, 10 settings rows). After 5 consecutive failures the plugin is turned off with a toast. |
 | Script injection via the inlined source | Plugin source is inlined into `srcdoc`; `</script` and `<!--` are escaped. |
-| Swap code after the user approved it | The host records the entry's SHA-256 with the grant; catalogue installs pin hashes. A changed hash keeps grants only if permissions are unchanged (see Updates). |
-| Escalate via its own background service | `service` permission (medium risk) and the host only calls the service id the plugin's own manifest names. |
+| Swap code after the user approved it | Code is only installed if its SHA-256 matches the catalogue (checked in Plex Lite with a pure-JS SHA-256; WebCrypto isn't available to `file://` pages on Chrome 53). The installed copy lives in Plex Lite's own storage, and the hash is recorded with the grant. A changed hash keeps grants only if permissions are unchanged and the plugin doesn't hold the Plex sign-in (see Updates). |
+| Compromised catalogue host | The catalogue URL is fixed by default (this repo) and only changeable in Settings. A changed catalogue can only offer code; every install still shows the consent sheet. Signing is the next step (see Distribution). |
+| Escalate via its own background service | `service` permission (medium risk); the service id must start with the plugin id, and the host only calls that one. Plex Lite has no root path of its own any more. |
 
 Residual risks: a plugin granted `plex:token` can do anything the account can, so the consent text
 says so and it is marked "Sensitive". A plugin granted network access to its own origin can send
 it whatever the user's Plex library reveals through `plex:read`. That is inherent and stated in
 the consent sheet.
 
-## Packaging
+## Catalogue
 
-A plugin is an ordinary webOS web app package (`.ipk`) with an extra block in `appinfo.json`:
+`catalog/plugins.json` in this repo (schema 1):
 
 ```json
 {
-  "id": "com.example.plexlite.hello",
-  "version": "1.0.0",
-  "type": "web",
-  "main": "index.html",
-  "title": "Hello Shelf",
-  "plexlitePlugin": {
-    "apiVersion": 1,
-    "entry": "plugin.js",
-    "permissions": ["plex:read", "network:https://api.example.com"],
-    "service": "com.example.plexlite.hello.service",
-    "description": "What it adds, shown in Plex Lite's plugin list"
-  }
+  "schema": 1,
+  "updated": "2026-10-27",
+  "plugins": [{
+    "id": "com.example.plexlite.hello", "name": "Hello Shelf", "description": "…", "author": "…",
+    "version": "1.0.0", "apiVersion": 1, "minAppVersion": "0.1.0", "homepage": "https://…",
+    "kind": "web", "permissions": ["plex:read", "tabs"], "tabs": [{"id": "hello", "title": "Hello"}],
+    "bundleUrl": "bundles/com.example.plexlite.hello-1.0.0.js", "sha256": "7dc619ce…"
+  }]
 }
 ```
 
-- Installs with Homebrew Channel or dev install like any app (no new install path to maintain). Its
-  `index.html` just says "This is a Plex Lite plugin. Open Plex Lite → Settings → Plugins".
-- `examples/plugins/build-plugin-ipk.py <dir>` builds the package and prints the entry's SHA-256.
-- Optional background service (for plugins like Overseerr that need cookies or long-lived
-  sessions) ships in the same package under `./usr/palm/services/<id>`.
+- `kind: "web"`: `bundleUrl` + `sha256` of that one JS file (the plugin's `register()` code).
+- `kind: "service"`: `ipkUrl` + `sha256` of the `.ipk` (an app package carrying the background service),
+  plus `bundleUrl` + `bundleSha256` for the plugin code Plex Lite runs, and an optional `serviceId`
+  (default `<id>.service`; must start with the id). Needs the `service` permission.
+- Relative URLs resolve against the catalogue's own URL; only http(s) and plain relative paths (no
+  `..`) are accepted. `tabs` is optional (max 2). Entries with a newer `apiVersion` or
+  `minAppVersion` are listed but can't be installed. Bad entries are skipped, not fatal.
+- Plex Lite fetches it from a configurable URL (Settings → Plugins → Browse plugins → Catalogue
+  address; default `https://raw.githubusercontent.com/Obednal97/plex-lite/main/catalog/plugins.json`),
+  caches the last good copy (`plugins.catalogCache`), and falls back to the copy bundled in the app
+  (`catalog/` is in the IPK). The repo is private for now, so the bundled copy is what works today.
+  When offline, the newer of the cache and the bundled copy (by `updated`) wins.
+- **Publishing a web plugin**: `node tools/build-plugin.mjs examples/plugins/hello-shelf` copies the
+  plugin's `plugin.js` to `catalog/bundles/<id>-<version>.js`, pins its SHA-256 and writes the entry
+  from the plugin's `plugin.json`. A published version is immutable (rebuilding it with different code
+  fails; bump the version).
 
-Alternative considered: plugins as a JS file in a catalogue, downloaded by Plex Lite at runtime
-(no separate install). It's simpler for users but means Plex Lite downloads and runs code, and
-breaks Homebrew Channel's install, update and uninstall model. Kept as a later option (see
-Distribution).
+## Install, connect, update, remove
 
-## Discovery at start-up
+`js/plugin-store.js` (`PL.pluginStore`):
 
-Checked on the TV: WAM only lets a web app read its own folder plus a fixed allow-list
-(`/etc/wam/security_policy.conf`), so **Plex Lite's page cannot read another app's files**. And
-`applicationManager/listApps` returns each app's `folderPath` but not custom `appinfo` keys. So
-discovery goes through **Plex Lite's own JS service** (the one Phase 1 adds for Overseerr; Node
-v0.12.2 on webOS 4.5, so ES5):
+| State | Means | Browse shows |
+|---|---|---|
+| not installed | no code stored | Install (or "Needs Plex Lite x.y.z") |
+| installed | code stored and verified, not consented/on | Connect…, Remove |
+| update available | catalogue version > installed version | Update to x.y.z, Remove |
+| connected | consented and on | Manage, Remove |
 
-- `listPlugins {}` → ids of installed apps whose `appinfo.json` has a `plexlitePlugin` block (scans
-  `/media/developer/apps/usr/palm/applications`).
-- `readPlugin {id}` → `{appinfo, source, sha256}`. Rejects bad ids and entry paths that leave the
-  plugin's folder, and caps the source at 512 KB.
-
-Implemented in Plex Lite's core service, `service/` (`com.bednal.plexlite.service`;
-`service/plugin-loader.js` is unit-tested). **Developer services run jailed** (`/var/palm/jail/<id>`
-only bind-mounts the service's own folder), so the core service can't see other packages unless it is
-elevated: on rooted TVs the app runs Homebrew Channel's `elevate-service com.bednal.plexlite.service`
-(via HBC's `exec`) when `whoami` reports a non-root uid, then polls until the hub restarts it as root.
-A reinstall resets elevation, so this is checked on every start. Without root (no Homebrew Channel
-elevation) external plugins are unavailable; bundled plugins still work. The core service is
-read-only by design (fixed paths, no shell). Verified on the TV: after elevation `listPlugins` returned
-both installed example packages and `readPlugin` their code. (Note: `info` is a built-in
-`webos-service` method, hence `whoami`.) Bundled plugin services keep their own ids
-(Overseerr: `com.bednal.plexlite.overseerr`). The page side is
-`PL.pluginHost.serviceLoader(callService)`. For desktop work, `PL.pluginHost.devLoader()` reads
-unpacked plugins from `examples/plugins/` (open the app with `?plugins=dev`).
+- **Install (web)**: download the bundle (≤256 KB), check its SHA-256 against the catalogue, store it
+  in `localStorage` (`plugins.bundle.<id>`, read back to catch quota failures; ≤1 MB for all plugins),
+  record `plugins.installed[id]` (version, kind, hash, the manifest derived from the entry), then hand
+  it to the host. It waits there until **Connect** = the consent sheet → on → the plugin's own settings
+  (e.g. a server address) if it has any. Browse runs install + connect in one go.
+- **Install (service)**: the same for the code, and before storing it Plex Lite calls Homebrew Channel:
+  `luna://org.webosbrew.hbchannel.service/install {ipkUrl, ipkHash, subscribe: true}`. HBC 0.7.3
+  downloads, checks the hash, installs, and replies several times (`{statusText, progress}` …
+  `{finished: true}`); Plex Lite shows the status lines and cancels the subscription when finished.
+  HBC documents this service for other homebrew apps on rooted TVs (Hearth calls it from its web app),
+  so a dev-installed web app can call it. If HBC isn't there or refuses, nothing is stored.
+- **Update**: the same as install over the existing copy; grants carry over unless the update asks for
+  new permissions or the plugin holds the Plex sign-in (then it waits for consent again).
+- **Remove**: stops the frame, revokes grants, deletes the code, the record and the plugin's storage;
+  service plugins are also uninstalled through HBC (`uninstall {id}`).
+- At start-up the host starts with `PL.pluginStore.installedBundles()`; frames still start lazily.
 
 ## Runtime isolation
 
@@ -139,8 +147,8 @@ three rounds, i.e. roughly 0.3–5 MB per frame — noisy because other activity
 similar amounts (`performance.memory` is quantised to 10 MB steps on this build, so it can't resolve
 it). Budget assumption: ~3 MB per live frame. To keep it negligible:
 
-- **Lazy start**: a frame is created on a plugin's first hook call, not at boot. Discovery only
-  reads manifests.
+- **Lazy start**: a frame is created on a plugin's first hook call, not at boot. Start-up only
+  reads the installed records.
 - **At most 3 live frames** (least-recently-used are unloaded). **Idle unload** after 5 minutes.
 - Hooks are only called where the app needs them, and the host already debounces search.
 - Measure on the TV with `tools/tvdebug.mjs` (`performance.memory`, trace) before raising limits.
@@ -157,19 +165,18 @@ it). Budget assumption: ~3 MB per live frame. To keep it negligible:
 | `tabs` | low | Add its own tab to Plex Lite (max 2 plugin tabs overall) |
 
 - Always allowed: scoped storage, toasts, sheets (host-rendered), settings rows.
-- **First enable** (Settings → Plugins → the plugin) shows the consent sheet, which lists the
+- **Connect** (after install, or Settings → Plugins → the plugin → Connect…) shows the consent sheet, which lists the
   permissions with "Allow" / "Don't allow" (`PL.pluginHost.consent`). The decision is stored in
   `PL.storage('pluginHost.grants')` as `{version, hash, granted, origins, denied}`.
 - **Updates**: if the new version asks for nothing new, grants carry over (the new hash is recorded),
   except `plex:token`, which is re-asked on every update. If it adds a permission, only the new ones
   are asked about; until then the plugin stays inactive.
-- **Settings → Plugins** shows each external plugin: status (Off / Needs permission / On / On · Plex
-  sign-in), its permissions and whether each is allowed, and Enable… (consent), Plugin settings, Turn
-  off, Remove access (revokes every grant; it asks again if re-enabled).
+- **Settings → Plugins** shows "Browse plugins" and each installed plugin: status (Off / Needs
+  permission / On / On · Plex sign-in), its permissions and whether each is allowed, and Connect…,
+  Plugin settings, Turn off, Remove access (revokes every grant; it asks again on Connect) and
+  Uninstall.
 - `network:user`: when the user types an address in the plugin's settings, the host records that
   origin (`PL.pluginHost.allowOrigin`). The plugin can't add origins itself.
-- Settings → Plugins lists every installed plugin with its permissions, a toggle, and "Remove
-  access" (revokes grants and stops it).
 
 ## Host capabilities (what `ctx` does in Phase 2)
 
@@ -189,26 +196,35 @@ Without `plex:read`, a plugin only learns the item's type.
 
 ## Versioning and compatibility
 
-- `apiVersion` (currently 1) in both the manifest and `register()`. The host refuses plugins built
+- `apiVersion` (currently 1) in both the catalogue entry and `register()`. The host refuses plugins built
   for a newer API, and keeps supporting older ones for at least one major version.
 - Additive changes (new hooks, new `ctx` methods) don't bump the version; the SDK tells the host
   which hooks a plugin implements (`ready` message).
-- The plugin id in `register()` must equal the package id (checked); otherwise the plugin is refused.
+- The plugin id in `register()` must equal the catalogue id (checked); otherwise the plugin is refused.
+- `minAppVersion` in the catalogue keeps a plugin off older Plex Lite builds.
 
 ## Distribution
 
-1. **Now**: build an `.ipk` with `build-plugin-ipk.py` and install it through Homebrew Channel (dev
-   install) or `tools/deploy.sh`-style scripts.
-2. **Catalogue** (proposed): a JSON list Plex Lite can show under Settings → Plugins → Browse:
-   `{id, title, version, ipkUrl, ipkSha256, entrySha256, permissions, source, author}`. Plex Lite
-   installs through Homebrew Channel's install service and verifies `ipkSha256` (and, after install,
-   `entrySha256` via `readPlugin`) before enabling. A plugin whose hash doesn't match the catalogue
-   is refused.
+1. **Now**: `catalog/plugins.json` + `catalog/bundles/` in this repo, a copy bundled in the app.
+2. **When the repo is public**: the default URL starts working; the bundled copy remains the offline
+   fallback.
 3. **Signing** (later): catalogue entries signed with a key embedded in Plex Lite (Ed25519 via a
    small JS implementation, since WebCrypto Ed25519 isn't in Chrome 53), so a compromised catalogue
-   host can't push code.
-4. The Homebrew Channel repo itself could list plugins (they're normal apps), with the
-   `plexlitePlugin` block marking them.
+   host can't push code even to users who accept its consent sheet.
+
+### Overseerr as a service plugin (not done yet; the bundled Overseerr stays as is)
+
+Overseerr needs a background service (session cookie, CORS), so it would be a `service` entry:
+
+1. Package `plugins/overseerr/service/` as its own app IPK, id `com.bednal.plexlite.overseerr`, with
+   the service `com.bednal.plexlite.overseerr.service` (today it ships inside Plex Lite as
+   `com.bednal.plexlite.service`). Host the IPK on GitHub Releases and pin its SHA-256.
+2. Port `plugins/overseerr/plugin.js` to the SDK: its `ctx.service(...)` calls carry over; its UI
+   moves from DOM to declarative models (a `page` with Request actions, `settingsRows` for the server
+   address and sign-in).
+3. Entry: `kind: "service"`, `permissions: ["plex:read", "service"]`, `ipkUrl` + `sha256` (IPK),
+   `bundleUrl` + `bundleSha256` (the SDK port), `serviceId`.
+4. Drop it from the bundled plugins in the same release, migrating its settings.
 
 ## Migration from Phase 1
 
@@ -226,44 +242,33 @@ Without `plex:read`, a plugin only learns the item's type.
 call sites work unchanged. Recommendation for Phase 1 authors: write hooks that return Promises
 and treat `ctx` methods as async. Then the same code runs in both phases.
 
-## Prototype on this branch
+## On this branch
 
-- `js/plugin-host.js`: discovery (dev and service loaders), permission parsing, grants and consent
-  sheet, sandboxed frames, the RPC bridge, capabilities, sanitising, the Phase 1 adapter, lazy start,
-  LRU, idle unload and auto-disable.
-- `js/plugin-sdk.js`: the in-frame SDK.
-- `examples/plugins/hello-shelf`: a "Hello from a plugin" shelf, a "Say hello" action (scoped
-  storage + toast) and a settings row.
-- `examples/plugins/probe`: tries to escape (parent, top, localStorage, cookies, direct XHR,
-  ungranted capabilities) and reports the results.
-- `examples/plugins/build-plugin-ipk.py`: builds a plugin `.ipk`.
-- `service/` (core service: `listPlugins`, `readPlugin`, `whoami`) with `plugin-loader.js`.
-- `js/screens/plugin-screen.js`: renders declarative screen models.
-- `catalog/plugins.json`: the catalogue (pinned hashes).
-- `test/plugin-host.test.mjs`: 17 Node tests (permissions, sanitising, Plex allow-list, RPC limits,
-  end-to-end SDK ↔ host runs of the example plugins, the service loader).
+- `js/plugin-host.js`: permission parsing, grants and consent sheet, sandboxed frames, the RPC bridge,
+  capabilities, sanitising, the Phase 1 adapter, lazy start, LRU, idle unload, auto-disable;
+  `addRuntime`/`removeRuntime` for installs; `luna()` with multi-reply support (HBC install).
+- `js/plugin-store.js`: catalogue load/parse/cache, install/update/remove/connect, state.
+- `js/sha256.js`: pure-JS SHA-256 (tested against Node's crypto).
+- `js/plugin-sdk.js`: the in-frame SDK. `js/screens/plugin-screen.js`: declarative screens.
+- `catalog/plugins.json`, `catalog/bundles/`: the catalogue, with Hello Shelf published.
+- `tools/build-plugin.mjs`: publishes a web plugin into the catalogue.
+- `examples/plugins/hello-shelf` (published) and `examples/plugins/probe` (escape tests, unpublished).
+- `test/plugin-host.test.mjs`: 28 Node tests (permissions, sanitising, Plex allow-list, RPC limits,
+  end-to-end SDK ↔ host runs, SHA-256, catalogue parsing, tampered/oversized bundles and quota,
+  install → connect → update → remove, Plex sign-in re-ask on update, HBC install/uninstall).
 
-**Verified in a desktop browser** (`tools/devserver.mjs`, `?plugins=dev`): Hello Shelf's shelf loads
-from the real library through `plex:read` with no token in anything the plugin returned. The action runs and
-its toast shows. The probe's escape attempts are all blocked: parent/top/localStorage/cookies blocked by the
-sandbox, direct XHR blocked by CSP, and capabilities refused without grants.
+**Verified in a desktop browser** (`tools/devserver.mjs`): Settings → Browse plugins (bundled catalogue,
+since the repo URL 404s) → Install → consent sheet (real key presses) → Hello tab and plugin settings →
+reload (restored from storage, tab renders shelves) → a tampered update refused, 1.0.0 kept running →
+Remove (tab, frame, grants and stored code gone). Earlier: the probe's escapes blocked (parent, top,
+localStorage, cookies, direct XHR).
 
-Done since the prototype: wired into the Phase 1 registry (dotted ids, async actions, `tabs()` with a
-global cap of 2, `screen()`, `unregister()`), the tab bar (plugin tabs before Settings; rebuilt when
-discovery finishes late), Settings → Plugins (consent / settings / turn off / remove access, Plex
-sign-in holders), the hold-OK menu (waits ≤600 ms for external actions), the core service +
-self-elevation, and a 22-test suite. Verified in a desktop browser: discovery → consent sheet (real key
-press) → the "Hello" tab rendered with Plex Lite's components → item → plugin page with an action.
-Verified on the TV: elevated discovery via the core service, frame start cost.
-
-Not yet done: an end-to-end run of enable → tab on the TV itself (blocked by other builds being
-tested at the time; the code path is the same as the desktop run plus the verified service calls);
-catalogue browsing/installation UI.
+**On the TV**: frame start cost measured earlier (above). Not yet run there: the catalogue flow and
+an HBC install of a service plugin (none is published yet).
 
 ## Open questions
 
-1. Catalogue UI: browse `catalog/plugins.json` from Settings → Plugins and install through Homebrew
-   Channel's install service (needs a hosted `.ipk` per version and `ipkSha256` pinning).
-2. Signing catalogue entries (Ed25519) on top of hash pinning.
-3. Unrooted TVs: external plugins need the elevated core service; is a "bundled-only" mode enough
-   there, or should plugins ship their code inside their own (jailed) service as an alternative?
+1. Signing catalogue entries (Ed25519) on top of hash pinning.
+2. Hosting: raw GitHub for the catalogue and bundles once the repo is public; GitHub Releases for
+   service IPKs.
+3. Unrooted TVs: web plugins work everywhere; service plugins need Homebrew Channel.

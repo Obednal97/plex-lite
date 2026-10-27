@@ -1,0 +1,13 @@
+{
+  "id": "com.example.plexlite.hello",
+  "name": "Hello Shelf",
+  "description": "Example plugin: a Hello tab and shelf with a few random titles, and a \"Say hello\" action on details pages.",
+  "author": "Plex Lite examples",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "kind": "web",
+  "permissions": ["plex:read", "tabs"],
+  "tabs": [{ "id": "hello", "title": "Hello" }],
+  "minAppVersion": "0.1.0",
+  "homepage": "https://github.com/Obednal97/plex-lite/tree/main/examples/plugins/hello-shelf"
+}

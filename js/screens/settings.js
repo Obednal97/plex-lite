@@ -134,10 +134,107 @@
     function externalPluginRows() {
       var host = PL.pluginHost;
       if (!host || !host.list || !host.grants) return [];
-      return host.list().map(function (p) {
+      var browse = PL.pluginStore ? [{ label: 'Browse plugins', value: '', action: browsePlugins }] : [];
+      return browse.concat(host.list().map(function (p) {
         var on = p.active && PL.plugins.isEnabled(p.id);
         var value = p.disabled ? 'Error' : !p.active ? (host.grants.get(p.id) ? 'Needs permission' : 'Off') : on ? (p.holdsToken ? 'On · Plex sign-in' : 'On') : 'Off';
         return { label: 'Plugin · ' + p.title, value: value, action: function () { externalPluginSheet(p); } };
+      }));
+    }
+
+    var STATE_TEXT = { 'not-installed': 'Not installed', installed: 'Installed', connected: 'Connected' };
+
+    // The catalogue (remote, cached or bundled): one row per plugin with its state.
+    function browsePlugins() {
+      var store = PL.pluginStore;
+      PL.toast('Loading plugins…');
+      store.loadCatalog().then(function (c) {
+        var rows = c.plugins.map(function (e) {
+          var st = store.state(e);
+          var sub = !e.compatible && st.state === 'not-installed' ? e.needs
+            : st.state === 'update-available' ? 'Update to ' + e.version : STATE_TEXT[st.state];
+          return { label: e.name, sub: sub, action: function () { catalogueEntrySheet(e); } };
+        });
+        if (!rows.length) rows.push({ label: 'No plugins available', sub: c.errors[0] || '', action: function () {} });
+        var custom = store.catalogUrl() !== store.DEFAULT_URL;
+        rows.push({ label: 'Catalogue address', sub: (custom ? store.catalogUrl() : 'Default') + ' · ' + c.source, action: editCatalogUrl });
+        PL.app.push(screens.sheet([{ heading: 'Plugins', rows: rows }], { closeOnSelect: false }));
+      });
+    }
+
+    function editCatalogUrl() {
+      var store = PL.pluginStore;
+      PL.app.push(screens.textEntry('Catalogue address', store.catalogUrl(), 'Leave empty for the default', function (value) {
+        if (!store.setCatalogUrl(String(value || '').trim())) { PL.toast('Use an http(s) address'); return false; }
+        PL.toast('Catalogue address saved');
+        return true;
+      }));
+    }
+
+    function catalogueEntrySheet(e) {
+      var store = PL.pluginStore;
+      var st = store.state(e);
+      var parse = PL.pluginHost._internals.parsePermissions;
+      var rows = parse({ permissions: e.permissions }).list.map(function (perm) {
+        return { label: perm.text, sub: perm.risk === 'high' ? 'Sensitive' : '', action: function () {} };
+      });
+      if (!rows.length) rows.push({ label: 'Needs no permissions', action: function () {} });
+      var actions = [];
+      var run = function (fn) { return function () { PL.app.pop(); PL.app.pop(); fn(); }; };
+      if (!e.compatible && st.state === 'not-installed') {
+        actions.push({ label: e.needs, action: function () {} });
+      } else if (st.state === 'not-installed' || st.state === 'update-available') {
+        var label = st.state === 'not-installed' ? 'Install' : 'Update to ' + e.version;
+        actions.push({ label: label, sub: e.kind === 'service' ? 'Also installs a background service' : '', action: run(function () { installPlugin(e); }) });
+      } else if (st.state === 'installed') {
+        actions.push({ label: 'Connect…', action: run(function () { connectPlugin(e.id, e.name); }) });
+      } else {
+        actions.push({ label: 'Manage', action: run(function () {
+          var p = PL.pluginHost.list().filter(function (x) { return x.id === e.id; })[0];
+          if (p) externalPluginSheet(p);
+        }) });
+      }
+      if (st.installed) actions.push({ label: 'Remove', action: run(function () { removePlugin(e.id, e.name); }) });
+      var head = e.name + ' ' + (st.installed && st.installed.version !== e.version ? st.installed.version + ' → ' : '') + e.version +
+        (e.author ? ' · ' + e.author : '') + (e.description ? ' — ' + e.description : '');
+      PL.app.push(screens.sheet([{ heading: head, rows: rows }, { heading: '', rows: actions }], { closeOnSelect: false, focus: rows.length }));
+    }
+
+    function installPlugin(e) {
+      PL.pluginStore.install(e, function (status) { PL.toast(e.name + ': ' + status); }).then(function () {
+        var rt = PL.pluginHost.runtimes[e.id];
+        // an update that keeps all its grants is already running
+        if (PL.pluginHost.definitions[e.id] && !PL.pluginHost.grants.missing(e.id, rt.manifest, rt.hash).length) {
+          PL.toast(e.name + ' updated');
+          refreshTabs();
+          build();
+          return;
+        }
+        connectPlugin(e.id, e.name);
+      }, function (err) { PL.toast(e.name + ': ' + PL.errorMessage(err), 5000); build(); });
+    }
+
+    // Connect = consent, then on, then its own settings (e.g. a server address) if it has any.
+    function connectPlugin(id, name) {
+      PL.pluginStore.connect(id).then(function (on) {
+        build();
+        if (!on) { PL.toast(name + ' was not connected'); return; }
+        PL.toast(name + ' is connected');
+        refreshTabs();
+        var def = PL.pluginHost.definitions[id];
+        if (def && def.settingsRows) {
+          def.settingsRows().then(function (list) {
+            if (list.length) PL.app.push(screens.sheet([{ heading: name, rows: list.map(function (r) { return { label: r.label, sub: r.value, action: r.action }; }) }]));
+          }, function () {});
+        }
+      }, function (err) { PL.toast(PL.errorMessage(err)); });
+    }
+
+    function removePlugin(id, name) {
+      PL.pluginStore.remove(id).then(function (ok) {
+        PL.toast(ok ? name + ' removed' : name + ' removed (its service could not be uninstalled)');
+        refreshTabs();
+        build();
       });
     }
 
@@ -158,13 +255,7 @@
       if (!p.permissions.length) rows.push({ label: 'Needs no permissions', action: function () {} });
       var actions = [];
       if (!p.active) {
-        actions.push({ label: 'Enable…', action: function () {
-          PL.app.pop();
-          host.enable(p.id).then(function (def) {
-            if (def) { PL.plugins.setEnabled(p.id, true); PL.toast(p.title + ' is on'); refreshTabs(); }
-            build();
-          }, function (err) { PL.toast(PL.errorMessage(err)); });
-        } });
+        actions.push({ label: 'Connect…', action: function () { PL.app.pop(); connectPlugin(p.id, p.title); } });
       } else {
         var on = PL.plugins.isEnabled(p.id);
         if (on) {
@@ -190,6 +281,9 @@
           refreshTabs();
           build();
         } });
+      }
+      if (PL.pluginStore && PL.pluginStore.installed()[p.id]) {
+        actions.push({ label: 'Uninstall', action: function () { PL.app.pop(); removePlugin(p.id, p.title); } });
       }
       PL.app.push(screens.sheet([
         { heading: p.title + ' ' + (p.version || '') + (p.description ? ' — ' + p.description : ''), rows: rows },

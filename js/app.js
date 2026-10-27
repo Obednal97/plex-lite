@@ -391,7 +391,7 @@
       var dvrs = PL.plex.get('/livetv/dvrs', null, { timeout: 6000 }).then(function (mc) {
         return !!(mc && mc.Dvr && mc.Dvr.length);
       }, function () { return false; });
-      // external plugins are discovered before the tab bar is built (they may add tabs); capped wait
+      // installed plugins are loaded before the tab bar is built (they may add tabs); capped wait
       var plugins = PL.pluginHost && PL.pluginHost.autoStart ? Promise.race([
         PL.pluginHost.autoStart(),
         new Promise(function (r) { setTimeout(r, 3000); }),
@@ -403,7 +403,7 @@
       app.buildTabs();
       app.selectTab(app.startTab());
       app.ready = true;
-      // plugin discovery that finished after the 3 s wait may add tabs: rebuild, keeping the tab
+      // plugins that loaded after the 3 s wait may add tabs: rebuild, keeping the tab
       if (PL.pluginHost && PL.pluginHost.booted) {
         PL.pluginHost.booted.then(function () {
           var before = app.tabs.tabs.map(function (t) { return t.id; }).join();

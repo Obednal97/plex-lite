@@ -1,4 +1,4 @@
 {
-  "name": "com.bednal.plexlite.overseerr",
+  "name": "com.bednal.plexlite.service",
   "main": "service.js"
 }

@@ -33,7 +33,7 @@ fork's services become `<its id>.…` automatically (README, "App id").
     version: '1.0.0',
     apiVersion: 1,              // this document
     description: 'Request movies and shows that are not in your library.',
-    services: ['com.bednal.plexlite.overseerr'],   // optional
+    services: ['com.bednal.plexlite.service'],   // optional
     // hooks below are all optional
   });
 })();
@@ -147,15 +147,25 @@ PL.plugins.register({
 ```
 
 Items with a numeric `ratingKey` open Plex Lite's details page; an `onSelect` may return another model,
-which is pushed as a new screen. Separately installed (external) plugins declare their tabs in
-`appinfo.json` (`plexlitePlugin.tabs`) and need the `tabs` permission; see
-[PLUGINS-v2-design.md](PLUGINS-v2-design.md).
+which is pushed as a new screen. Catalogue (external) plugins declare their tabs in their catalogue
+entry (`tabs`) and need the `tabs` permission; see [PLUGINS-v2-design.md](PLUGINS-v2-design.md).
 
 ## Bundled vs external plugins
 
 Bundled plugins (this document) are reviewed code shipped inside Plex Lite. External plugins are
-installed as their own packages and run sandboxed with explicit permissions; Plex sign-in (the raw
-token) is a **Sensitive** permission, re-asked on every update and revocable in Settings → Plugins.
+listed in the catalogue (`catalog/plugins.json`) and installed from Settings → Plugins → Browse
+plugins: Plex Lite downloads the code, checks its pinned SHA-256, asks for consent and runs it
+sandboxed with explicit permissions. Plex sign-in (the raw token) is a **Sensitive** permission,
+re-asked on every update and revocable in Settings → Plugins.
+
+- **Web plugin** (most plugins): one JS file using `PlexLitePlugin.register({...})` with the same hooks.
+  Put `plugin.js` + `plugin.json` (the catalogue entry without `bundleUrl`/`sha256`) in a folder and
+  run `node tools/build-plugin.mjs <folder>`; it copies the code to `catalog/bundles/` and pins the
+  hash. Example: `examples/plugins/hello-shelf`.
+- **Service plugin** (needs a background service, like Overseerr): an `.ipk` with the service, installed
+  by Plex Lite through Homebrew Channel (`ipkUrl` + `sha256`), plus a web bundle for the hooks
+  (`bundleUrl` + `bundleSha256`). How Overseerr would move there: PLUGINS-v2-design.md → Distribution.
+
 Writing hooks that return Promises and treating `ctx` calls as asynchronous lets the same plugin code
 move from bundled to external.
 

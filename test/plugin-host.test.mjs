@@ -1,10 +1,10 @@
-// Tests for the Phase 2 plugin host: permissions, sanitising, the RPC bridge, and end-to-end runs of
-// the real SDK + example plugins in one vm context talking to the host in another (as an iframe would).
+// Tests for the Phase 2 plugin host: permissions, sanitising, the RPC bridge, end-to-end runs of the
+// real SDK + example plugins in one vm context talking to the host in another (as an iframe would),
+// and the catalogue/install store (hash checks, install/update/remove).
 //   node test/plugin-host.test.mjs
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, cpSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import vm from 'node:vm';
 
@@ -381,24 +381,212 @@ test('revoke: grants removed, definition gone, plugin back to pending; token hol
   eq(host.pending, ['com.example.t']);
 });
 
-// ---- service-side loader (Node 0.12-compatible reference) ----------------------------------------
+// ---- catalogue, hashes, installs (js/sha256.js + js/plugin-store.js) -----------------------------
 
-test('service loader: lists plugin packages, reads entries, rejects traversal', () => {
-  const require = createRequire(import.meta.url);
-  const loader = require(join(ROOT, 'service/plugin-loader.js'));
-  const apps = mkdtempSync(join(tmpdir(), 'pl-apps-'));
-  cpSync(join(ROOT, 'examples/plugins/hello-shelf'), join(apps, 'com.example.plexlite.hello'), { recursive: true });
-  mkdirSync(join(apps, 'com.example.notaplugin'));
-  writeFileSync(join(apps, 'com.example.notaplugin/appinfo.json'), JSON.stringify({ id: 'com.example.notaplugin' }));
-  mkdirSync(join(apps, 'com.example.evil'));
-  writeFileSync(join(apps, 'com.example.evil/appinfo.json'), JSON.stringify({ id: 'com.example.evil', plexlitePlugin: { entry: '../com.example.plexlite.hello/plugin.js' } }));
-  eq(loader.listPlugins(apps), ['com.example.evil', 'com.example.plexlite.hello']);
-  const r = loader.readPlugin(apps, 'com.example.plexlite.hello');
-  assert.equal(r.appinfo.title, 'Hello Shelf');
-  assert.match(r.sha256, /^[0-9a-f]{64}$/);
-  assert.throws(() => loader.readPlugin(apps, 'com.example.evil'), /Invalid entry path/);
-  assert.throws(() => loader.readPlugin(apps, '../etc'), /Invalid plugin id/);
-  assert.throws(() => loader.readPlugin(apps, 'com.example.notaplugin'), /Not a Plex Lite plugin/);
+const sha = (t) => createHash('sha256').update(t, 'utf8').digest('hex');
+const CATALOG = read('catalog/plugins.json');
+const HELLO_ENTRY = JSON.parse(CATALOG).plugins[0];
+
+function makeStoreEnv({ files = {}, luna } = {}) {
+  const store = {};
+  const toasts = [];
+  const consents = [];
+  const PL = {
+    VERSION: '0.1.0',
+    warn() {}, log() {}, el() {}, http() {},
+    toast: (m) => toasts.push(m),
+    storage: {
+      get: (k, d) => (k in store ? clone(store[k]) : d),
+      set: (k, v) => { if (!(store.full && String(k).indexOf('plugins.bundle.') === 0)) store[k] = clone(v); },
+      del: (k) => { delete store[k]; },
+    },
+    plex: { token: TOKEN, get: () => Promise.resolve({ Metadata: [{ ratingKey: '11', title: 'Alpha' }] }) },
+  };
+  const win = { PL, ...TIMERS };
+  win.window = win;
+  vm.createContext(win);
+  for (const f of ['js/plugins.js', 'js/plugin-host.js', 'js/sha256.js', 'js/plugin-store.js']) vm.runInContext(read(f), win);
+  const host = PL.pluginHost;
+  host.init({ sdkSource: SDK, createFrame: (srcdoc, onMsg) => makeFrameFactory(srcdoc.indexOf("'1.0.1'") !== -1 ? HELLO_V2 : HELLO)(srcdoc, onMsg) });
+  host.consent = (m, perms) => { consents.push([m.id, perms.map((p) => p.id)]); return Promise.resolve(true); };
+  const fetched = [];
+  const st = PL.pluginStore._create({
+    luna,
+    fetchText: (url) => { fetched.push(url); return url in files ? Promise.resolve(files[url]) : Promise.reject(new Error('HTTP 404')); },
+  });
+  return { PL, host, st, store, toasts, consents, fetched, I: PL.pluginStore._internals };
+}
+const HELLO_V2 = HELLO.replace("version: '1.0.0'", "version: '1.0.1'");
+const BUNDLED_HELLO = 'catalog/' + HELLO_ENTRY.bundleUrl;
+
+test('sha256: pure JS matches node crypto (empty, block edges, unicode, 1 MB, the hello bundle)', () => {
+  const win = {};
+  vm.createContext(win);
+  vm.runInContext(read('js/sha256.js'), win);
+  for (const t of ['', 'abc', 'a'.repeat(55), 'a'.repeat(56), 'a'.repeat(64), 'Amélie 😀 字', 'x'.repeat(1 << 20), HELLO]) {
+    assert.equal(win.PL.sha256(t), sha(t), JSON.stringify(t.slice(0, 12)));
+  }
+  assert.equal(HELLO_ENTRY.sha256, sha(read(BUNDLED_HELLO)), 'catalogue pins the published bundle');
+  assert.equal(read(BUNDLED_HELLO), HELLO, 'published bundle is the example source');
+});
+
+test('catalogue: bundled copy parses; URLs resolve against the catalogue; bad entries skipped', () => {
+  const { I, PL } = makeStoreEnv();
+  const c = I.parseCatalog(CATALOG, 'catalog/plugins.json');
+  eq(c.errors, []);
+  assert.equal(c.plugins[0].bundleUrl, 'catalog/bundles/com.example.plexlite.hello-1.0.0.js');
+  assert.equal(c.plugins[0].bundleSha256, HELLO_ENTRY.sha256);
+  assert.equal(c.plugins[0].compatible, true);
+  const remote = I.parseCatalog(CATALOG, PL.pluginStore.DEFAULT_URL);
+  assert.equal(remote.plugins[0].bundleUrl, 'https://raw.githubusercontent.com/Obednal97/plex-lite/main/catalog/bundles/com.example.plexlite.hello-1.0.0.js');
+  const H = '0'.repeat(64);
+  const base = { name: 'X', version: '1.0.0', apiVersion: 1, kind: 'web', permissions: [], bundleUrl: 'b.js', sha256: H };
+  const svc = { ...base, kind: 'service', permissions: ['service'], ipkUrl: 'https://e.com/x.ipk', bundleSha256: H };
+  const bad = I.parseCatalog({ schema: 1, plugins: [
+    { ...base, id: 'com.ok.one' },
+    { ...base, id: 'com.ok.one' },
+    { ...base, id: 'Bad Id' },
+    { ...base, id: 'com.bad.hash', sha256: 'abc' },
+    { ...base, id: 'com.bad.perm', permissions: ['root'] },
+    { ...base, id: 'com.bad.path', bundleUrl: '../../js/app.js' },
+    { ...base, id: 'com.bad.scheme', bundleUrl: 'javascript:alert(1)' },
+    { ...base, id: 'com.bad.kind', kind: 'native' },
+    { ...svc, id: 'com.bad.svcperm', permissions: [] },
+    { ...svc, id: 'com.bad.svcid', serviceId: 'com.webos.service.secret' },
+    { ...svc, id: 'com.ok.svc' },
+    { ...base, id: 'com.ok.newer', minAppVersion: '9.0.0' },
+  ] }, 'https://example.com/c/plugins.json', { appVersion: '0.1.0' });
+  eq(bad.plugins.map((p) => p.id), ['com.ok.one', 'com.ok.svc', 'com.ok.newer']);
+  assert.equal(bad.errors.length, 9);
+  assert.equal(bad.plugins[1].serviceId, 'com.ok.svc.service');
+  assert.equal(bad.plugins[1].ipkSha256, H);
+  assert.equal(bad.plugins[2].compatible, false);
+  assert.match(bad.plugins[2].needs, /9\.0\.0/);
+  assert.throws(() => I.parseCatalog('{"plugins": {}}', 'x'), /Not a plugin catalogue/);
+  assert.throws(() => I.parseCatalog('nope', 'x'));
+});
+
+test('catalogue: remote → cached last good copy → bundled copy', async () => {
+  const files = { 'catalog/plugins.json': CATALOG };
+  const env = makeStoreEnv({ files });
+  let c = await env.st.loadCatalog();
+  assert.equal(c.source, 'bundled', 'private repo: remote 404s');
+  const newer = JSON.parse(CATALOG);
+  newer.updated = '2099-01-01';
+  files[env.PL.pluginStore.DEFAULT_URL] = JSON.stringify(newer);
+  c = await env.st.loadCatalog();
+  assert.equal(c.source, 'remote');
+  delete files[env.PL.pluginStore.DEFAULT_URL];
+  c = await env.st.loadCatalog();
+  assert.equal(c.source, 'cache');
+  assert.equal(env.st.setCatalogUrl('file:///etc/passwd'), false);
+  assert.equal(env.st.setCatalogUrl('https://example.com/plugins.json'), true);
+  c = await env.st.loadCatalog();
+  assert.equal(c.source, 'bundled', 'cache belongs to another catalogue URL');
+  delete files['catalog/plugins.json'];
+  c = await env.st.loadCatalog();
+  assert.equal(c.source, 'none');
+  eq(c.plugins, []);
+});
+
+test('install: a tampered or oversized bundle is refused and nothing is stored', async () => {
+  const entry = makeStoreEnv().I.parseCatalog(CATALOG, 'catalog/plugins.json').plugins[0];
+  const env = makeStoreEnv({ files: { [BUNDLED_HELLO]: HELLO.replace('Say hello', 'Steal stuff') } });
+  await assert.rejects(env.st.install(entry), /does not match the catalogue/);
+  eq(env.st.installed(), {});
+  assert.ok(!env.host.runtimes[entry.id]);
+  assert.ok(!Object.keys(env.store).some((k) => k.indexOf('plugins.bundle.') === 0));
+  const big = 'x'.repeat(300 * 1024);
+  const env2 = makeStoreEnv({ files: { [BUNDLED_HELLO]: big } });
+  await assert.rejects(env2.st.install({ ...entry, bundleSha256: sha(big) }), /too large/);
+  const env3 = makeStoreEnv({ files: { [BUNDLED_HELLO]: HELLO } });
+  env3.store.full = true; // localStorage quota exceeded
+  await assert.rejects(env3.st.install(entry), /Not enough room/);
+  eq(env3.st.installed(), {});
+});
+
+test('install → connect → update available → update → remove', async () => {
+  const files = { [BUNDLED_HELLO]: HELLO, 'catalog/bundles/v2.js': HELLO_V2 };
+  const env = makeStoreEnv({ files });
+  const { st, host, PL } = env;
+  const entry = env.I.parseCatalog(CATALOG, 'catalog/plugins.json').plugins[0];
+  assert.equal(st.state(entry).state, 'not-installed');
+  const progress = [];
+  await st.install(entry, (t) => progress.push(t));
+  eq(progress, ['Downloading…']);
+  assert.equal(st.state(entry).state, 'installed');
+  eq(host.pending, [entry.id], 'waits for consent');
+  eq(PL.plugins.tabs(), []);
+  assert.equal(await st.connect(entry.id), true);
+  eq(env.consents, [[entry.id, ['plex:read', 'tabs']]]);
+  assert.equal(st.state(entry).state, 'connected');
+  eq(PL.plugins.tabs().map((t) => t.plugin + '/' + t.id), [entry.id + '/hello']);
+  const rows = await PL.plugins.shelfRows({ key: '1', type: 'movie' });
+  assert.equal(rows[0].items[0].title, 'Alpha');
+
+  // a code-only update (same permissions, no plex:token) keeps the grants and stays connected
+  const v2 = { ...entry, version: '1.0.1', bundleUrl: 'catalog/bundles/v2.js', bundleSha256: sha(HELLO_V2) };
+  assert.equal(st.state(v2).state, 'update-available');
+  await st.update(v2);
+  assert.equal(st.state(v2).state, 'connected');
+  assert.equal(st.installed()[entry.id].version, '1.0.1');
+  assert.equal(env.consents.length, 1, 'no new consent');
+  eq((await PL.plugins.shelfRows({ key: '1', type: 'movie' }))[0].items.length, 1);
+  eq(st.installedBundles().map((b) => [b.manifest.id, b.hash]), [[entry.id, sha(HELLO_V2)]]);
+
+  await st.remove(entry.id);
+  assert.equal(st.state(v2).state, 'not-installed');
+  assert.ok(!host.runtimes[entry.id]);
+  assert.equal(host.grants.get(entry.id), null);
+  eq(PL.plugins.tabs(), []);
+  assert.ok(!Object.keys(env.store).some((k) => /^plugins\.bundle\.|^plugin\./.test(k)), 'code and plugin data gone');
+});
+
+test('update: a plugin holding the Plex sign-in must be asked again', async () => {
+  const files = { [BUNDLED_HELLO]: HELLO, 'catalog/bundles/v2.js': HELLO_V2 };
+  const env = makeStoreEnv({ files });
+  const entry = { ...env.I.parseCatalog(CATALOG, 'catalog/plugins.json').plugins[0], permissions: ['plex:read', 'plex:token'] };
+  await env.st.install(entry);
+  await env.st.connect(entry.id);
+  eq(env.host.tokenHolders(), [entry.id]);
+  await env.st.update({ ...entry, version: '1.0.1', bundleUrl: 'catalog/bundles/v2.js', bundleSha256: sha(HELLO_V2) });
+  assert.equal(env.st.state(entry).state, 'installed', 'not connected until re-consent');
+  eq(env.host.pending, [entry.id]);
+  await env.st.connect(entry.id);
+  eq(env.consents.map((c) => c[1]), [['plex:read', 'plex:token'], ['plex:token']]);
+  assert.equal(env.st.state(entry).state, 'connected');
+});
+
+test('service plugin: Homebrew Channel install (hash, progress, finished) and uninstall', async () => {
+  const calls = [];
+  let fail = false;
+  const luna = (uri, params, ms, onUpdate) => {
+    calls.push([uri, params]);
+    if (fail) return Promise.reject(new Error('Invalid hash'));
+    if (!onUpdate) return Promise.resolve({ returnValue: true });
+    for (const r of [{ statusText: 'Downloading…', progress: 50 }, { statusText: 'Verifying…' }, { statusText: 'Finished.', finished: true }]) {
+      if (onUpdate(r)) return Promise.resolve(r);
+    }
+    return Promise.reject(new Error('never finished'));
+  };
+  const H = sha(HELLO);
+  const env = makeStoreEnv({ files: { 'https://example.com/hello.js': HELLO }, luna });
+  const [entry] = env.I.parseCatalog({ schema: 1, plugins: [{
+    id: 'com.example.plexlite.hello', name: 'Hello', version: '1.0.0', apiVersion: 1, kind: 'service',
+    permissions: ['plex:read', 'service'], ipkUrl: 'https://example.com/hello.ipk', sha256: 'a'.repeat(64),
+    bundleUrl: 'https://example.com/hello.js', bundleSha256: H,
+  }] }, 'https://example.com/plugins.json').plugins;
+  const progress = [];
+  await env.st.install(entry, (t) => progress.push(t));
+  eq(calls[0], ['luna://org.webosbrew.hbchannel.service/install', { ipkUrl: 'https://example.com/hello.ipk', ipkHash: 'a'.repeat(64), subscribe: true }]);
+  eq(progress, ['Downloading…', 'Installing service…', 'Downloading…', 'Verifying…', 'Finished.']);
+  assert.equal(env.st.installed()[entry.id].serviceId, 'com.example.plexlite.hello.service');
+  assert.equal(env.host.runtimes[entry.id].manifest.service, 'com.example.plexlite.hello.service');
+  assert.equal(await env.st.remove(entry.id), true);
+  eq(calls[1], ['luna://org.webosbrew.hbchannel.service/uninstall', { id: entry.id }]);
+  fail = true;
+  await assert.rejects(env.st.install(entry), /Invalid hash/);
+  eq(env.st.installed(), {}, 'nothing kept when the service fails to install');
 });
 
 for (const [name, fn] of tests) {

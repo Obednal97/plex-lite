@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 APP = Path(__file__).resolve().parent.parent
-INCLUDE = ["appinfo.json", "index.html", "css", "js", "img", "plugins"]
+INCLUDE = ["appinfo.json", "index.html", "css", "js", "img", "plugins", "catalog"]
 TEXT = {".js", ".json", ".html", ".css"}
 
 
@@ -99,9 +99,6 @@ def main():
     # plugins/<id>/ web files ship inside the app; a plugin's service/ (with services.json) is
     # installed as a webOS service at ./usr/palm/services/<service id>, declared in packageinfo
     services = []
-    # Plex Lite's own core service (service/), then each bundled plugin's service
-    if (APP / "service" / "services.json").exists():
-        services.append((json.loads((APP / "service" / "services.json").read_text())["id"], APP / "service"))
     for svc_json in sorted((APP / "plugins").glob("*/service/services.json")):
         services.append((json.loads(svc_json.read_text())["id"].replace(source_id, app_id), svc_json.parent))
 

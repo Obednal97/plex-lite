@@ -166,7 +166,7 @@
     version: '1.0.0',
     apiVersion: 1,
     description: 'Request movies and shows that are not in your library, from Search.',
-    services: ['com.bednal.plexlite.overseerr'],
+    services: ['com.bednal.plexlite.service'],
     settingsRows: settings,
 
     // TMDB matches that aren't already available in Plex, badged by request status.

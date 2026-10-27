@@ -12,7 +12,7 @@ var http = require('http');
 var fs = require('fs');
 var urlLib = require('url');
 
-var service = new Service('com.bednal.plexlite.overseerr');
+var service = new Service('com.bednal.plexlite.service');
 var STATE_FILE = '/tmp/com.bednal.plexlite.service.json';
 var state = load();
 

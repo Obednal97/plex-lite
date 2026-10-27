@@ -593,60 +593,9 @@
     });
   };
 
-  // Desktop/dev loader: plugins unpacked under examples/plugins/<dir>/ (listed in index.json).
-  host.devLoader = function (base) {
-    base = base || 'examples/plugins/';
-    var get = function (path) { return PL.http('GET', base + path, { text: true }); };
-    return {
-      list: function () {
-        return get('index.json').then(function (t) { return JSON.parse(t); });
-      },
-      read: function (dir) {
-        return get(dir + '/appinfo.json').then(function (t) {
-          var manifest = JSON.parse(t);
-          var meta = manifest.plexlitePlugin || {};
-          return get(dir + '/' + meta.entry).then(function (source) {
-            return { manifest: normalizeManifest(manifest), source: source, hash: null };
-          });
-        });
-      },
-    };
-  };
-
-  // TV loader: Plex Lite's own JS service reads installed plugin packages (WAM only lets a web app
-  // read its own folder, so the host can't read another app's files itself). Service methods
-  // listPlugins / readPlugin are specified in docs/PLUGINS-v2-design.md (reference code in
-  // service-lib/plugin-loader.js).
-  host.serviceLoader = function (callService) {
-    return {
-      list: function () { return callService('listPlugins', {}).then(function (r) { return r.plugins || []; }); },
-      read: function (id) {
-        return callService('readPlugin', { id: id }).then(function (r) {
-          return { manifest: normalizeManifest(r.appinfo), source: r.source, hash: r.sha256 };
-        });
-      },
-    };
-  };
-
-  // appinfo.json of a plugin package -> the manifest the host uses.
-  function normalizeManifest(appinfo) {
-    var meta = appinfo.plexlitePlugin || {};
-    return {
-      id: appinfo.id,
-      title: appinfo.title,
-      version: appinfo.version,
-      apiVersion: meta.apiVersion || 1,
-      entry: meta.entry,
-      permissions: meta.permissions || [],
-      tabs: (Array.isArray(meta.tabs) ? meta.tabs : []).filter(function (t) { return t && t.id && t.title; })
-        .map(function (t) { return { id: str(t.id, 40), title: str(t.title, 18) }; }),
-      service: meta.service || null,
-      description: meta.description || appinfo.appDescription || '',
-    };
-  }
-
   host.runtimes = {};
   host.definitions = {};
+  host.pending = [];
 
   function liveFrames() {
     return Object.keys(host.runtimes).map(function (k) { return host.runtimes[k]; }).filter(function (r) { return r.frame; });
@@ -659,47 +608,58 @@
     while (live.length >= LIMITS.maxActiveFrames) live.shift().stop();
   }
 
-  // Loads every installed plugin's manifest; plugins with grants become definitions immediately,
-  // others wait in host.pending until the user enables them (consent).
-  host.start = function (loader, opts) {
-    opts = opts || {};
-    var grants = new Grants(PL.storage);
-    host.grants = grants;
-    host.pending = [];
-    return loader.list().then(function (ids) {
-      return Promise.all(ids.map(function (id) {
-        return loader.read(id).then(function (bundle) { return bundle; }, function (e) {
-          PL.warn('plugin unreadable', id, e && e.message);
-          return null;
-        });
-      }));
-    }).then(function (bundles) {
-      return Promise.all(bundles.filter(Boolean).map(function (b) {
-        var m = b.manifest;
-        if (!m.id || !m.entry || m.apiVersion > API_VERSION || parsePermissions(m).errors.length) {
-          PL.warn('plugin skipped', m.id, 'invalid manifest or newer API');
-          return null;
-        }
-        var rt = new Runtime(b, {
-          grants: grants,
-          sdkSource: opts.sdkSource,
-          plex: { get: PL.plex.get, token: function () { return PL.plex.token; } },
-          storage: PL.storage,
-          toast: PL.toast,
-          http: PL.http,
-          service: opts.callService ? function (svc, method, params) { return opts.callService(svc, method, params); } : null,
-          sheet: function (heading, rows) { PL.app.push(PL.screens.sheet([{ heading: heading, rows: rows }])); },
-          beforeStart: makeRoom,
-          createFrame: opts.createFrame,
-        });
-        host.runtimes[m.id] = rt;
-        var rec = grants.get(m.id);
-        var missing = grants.missing(m.id, m, b.hash);
-        if (rec && !rec.denied && !missing.length) return host.activate(m.id);
-        host.pending.push(m.id);
-        return null;
-      }));
-    }).then(function () { return host.list(); });
+  // opts: {sdkSource, callService(svc, method, params), createFrame?}
+  host.init = function (opts) {
+    host.opts = opts || {};
+    host.grants = host.grants || new Grants(PL.storage);
+  };
+
+  // bundle: {manifest, source, hash} — an installed plugin (see js/plugin-store.js). Replaces any
+  // previous runtime for the same id (updates). Activates at once if its grants are complete,
+  // otherwise it waits in host.pending until the user connects it (consent).
+  host.addRuntime = function (bundle) {
+    var m = bundle.manifest;
+    var opts = host.opts || {};
+    if (!m || !m.id || m.apiVersion > API_VERSION || parsePermissions(m).errors.length) {
+      PL.warn('plugin skipped', m && m.id, 'invalid manifest or newer API');
+      return null;
+    }
+    host.removeRuntime(m.id, true);
+    var rt = new Runtime(bundle, {
+      grants: host.grants,
+      sdkSource: opts.sdkSource,
+      plex: { get: PL.plex.get, token: function () { return PL.plex.token; } },
+      storage: PL.storage,
+      toast: PL.toast,
+      http: PL.http,
+      service: opts.callService ? function (svc, method, params) { return opts.callService(svc, method, params); } : null,
+      sheet: function (heading, rows) { PL.app.push(PL.screens.sheet([{ heading: heading, rows: rows }])); },
+      beforeStart: makeRoom,
+      createFrame: opts.createFrame,
+    });
+    host.runtimes[m.id] = rt;
+    var rec = host.grants.get(m.id);
+    var missing = host.grants.missing(m.id, m, bundle.hash);
+    if (rec && !rec.denied && !missing.length) return host.activate(m.id);
+    if (host.pending.indexOf(m.id) === -1) host.pending.push(m.id);
+    return null;
+  };
+
+  // keepGrants: an update replaces the code but keeps the user's grants (re-checked on activation).
+  host.removeRuntime = function (id, keepGrants) {
+    var rt = host.runtimes[id];
+    if (rt) rt.stop();
+    delete host.runtimes[id];
+    delete host.definitions[id];
+    host.pending = host.pending.filter(function (p) { return p !== id; });
+    if (PL.plugins && PL.plugins.unregister) PL.plugins.unregister(id);
+    if (!keepGrants && host.grants) host.grants.remove(id);
+  };
+
+  host.start = function (bundles, opts) {
+    host.init(opts);
+    (bundles || []).forEach(function (b) { host.addRuntime(b); });
+    return Promise.resolve(host.list());
   };
 
   host.activate = function (id) {
@@ -788,84 +748,47 @@
       x.send();
     });
   }
+  host.readOwnFile = readOwnFile;
 
-  host.boot = function (loader, opts) {
-    opts = opts || {};
-    return readOwnFile('js/plugin-sdk.js').then(function (sdk) {
-      opts.sdkSource = sdk;
-      return host.start(loader, opts);
-    });
-  };
-
-  // Luna call from the app page (PalmServiceBridge), e.g. to Plex Lite's core service.
-  host.luna = function (uri, params, timeoutMs) {
+  // Luna call from the app page (PalmServiceBridge). onUpdate(reply) -> true when the call is done
+  // (for services that answer several times, e.g. Homebrew Channel's install progress).
+  host.luna = function (uri, params, timeoutMs, onUpdate) {
     return new Promise(function (resolve, reject) {
       if (typeof PalmServiceBridge === 'undefined') { reject(new Error('Not on the TV')); return; }
       var bridge = new PalmServiceBridge();
       var done = false;
-      var timer = setTimeout(function () { if (!done) { done = true; reject(new Error('No answer from ' + uri)); } }, timeoutMs || 8000);
-      host.bridges = (host.bridges || []).concat([bridge]); // keep a reference until it answers
-      bridge.onservicecallback = function (msg) {
+      var finish = function (fn, v) {
         if (done) return;
         done = true;
         clearTimeout(timer);
         host.bridges.splice(host.bridges.indexOf(bridge), 1);
+        if (onUpdate) { try { bridge.cancel(); } catch (e) { /* already closed */ } } // ends a subscription
+        fn(v);
+      };
+      var timer = setTimeout(function () { finish(reject, new Error('No answer from ' + uri)); }, timeoutMs || 8000);
+      host.bridges = (host.bridges || []).concat([bridge]); // keep a reference until it answers
+      bridge.onservicecallback = function (msg) {
         var r;
         try { r = JSON.parse(msg); } catch (e) { r = { returnValue: false, errorText: 'Bad reply' }; }
-        if (r.returnValue) resolve(r);
-        else reject(new Error(r.errorText || 'Service error'));
+        if (r.returnValue === false) { finish(reject, new Error(r.errorText || 'Service error')); return; }
+        if (!onUpdate || onUpdate(r)) finish(resolve, r);
       };
       bridge.call(uri, JSON.stringify(params || {}));
     });
   };
 
-  var CORE = 'luna://com.bednal.plexlite.service/';
-  var HBC_EXEC = 'luna://org.webosbrew.hbchannel.service/exec';
-  // elevate, then stop the still-jailed instance (exact process title, so the shell itself isn't hit)
-  var ELEVATE = '/media/developer/apps/usr/palm/services/org.webosbrew.hbchannel.service/elevate-service com.bednal.plexlite.service' +
-    ' && (kill $(pgrep -f "^com.bednal.plexlite.service$") 2>/dev/null; true)';
-
-  // The core service must run outside the developer jail to see other apps' packages. On a rooted TV
-  // Homebrew Channel can elevate it (a reinstall undoes that, so it's checked on every start).
-  host.ensureCoreElevated = function () {
-    return host.luna(CORE + 'whoami', {}).then(function (r) {
-      if (r.uid === 0) return true;
-      return host.luna(HBC_EXEC, { command: ELEVATE }, 20000).then(function () {
-        // the hub restarts the service after rescanning its configuration; poll for a few seconds
-        var tries = 0;
-        var check = function () {
-          return new Promise(function (res) { setTimeout(res, 1000); }).then(function () {
-            return host.luna(CORE + 'whoami', {}).then(function (r2) { return r2.uid === 0; }, function () { return false; });
-          }).then(function (ok) {
-            if (ok || ++tries >= 6) {
-              PL.log('plugin host: core service elevated', ok);
-              return ok;
-            }
-            return check();
-          });
-        };
-        return check();
+  // Starts the host with the plugins installed from the catalogue (js/plugin-store.js). Never rejects.
+  host.autoStart = function () {
+    if (!PL.pluginStore) return Promise.resolve([]);
+    host.booted = readOwnFile('js/plugin-sdk.js').then(function (sdk) {
+      return host.start(PL.pluginStore.installedBundles(), {
+        sdkSource: sdk,
+        callService: function (svc, method, params) {
+          if (!svc) return Promise.reject(new Error('This plugin has no service'));
+          return host.luna('luna://' + svc + '/' + method, params, 25000);
+        },
       });
     }).then(null, function (e) {
-      PL.warn('plugin host: cannot elevate the core service (needs a rooted TV with Homebrew Channel)', e && e.message);
-      return false;
-    });
-  };
-
-  // Starts the host for the app: dev examples with ?plugins=dev on a desktop, installed plugins
-  // (through the core service) on the TV, nothing elsewhere. Never rejects.
-  host.autoStart = function () {
-    var dev = typeof location !== 'undefined' && /[?&]plugins=dev\b/.test(location.search);
-    var onTv = typeof PalmServiceBridge !== 'undefined';
-    if (!dev && !onTv) return Promise.resolve([]);
-    var loader = dev ? host.devLoader() : host.serviceLoader(function (method, params) { return host.luna(CORE + method, params); });
-    var ready = dev ? Promise.resolve(true) : host.ensureCoreElevated();
-    host.booted = ready.then(function () { return host.boot(loader, {
-      callService: function (svc, method, params) {
-        if (!svc) return Promise.reject(new Error('This plugin has no service'));
-        return host.luna('luna://' + svc + '/' + method, params, 25000);
-      },
-    }); }).then(null, function (e) {
       PL.warn('plugin host', e && e.message);
       return [];
     });
@@ -878,6 +801,6 @@
     originAllowed: originAllowed, projectItem: projectItem, sanitizeShelf: sanitizeShelf, sanitizeList: sanitizeList,
     plexPathAllowed: plexPathAllowed, cleanParams: cleanParams, scrubToken: scrubToken, Rpc: Rpc, Runtime: Runtime,
     sanitizeModel: sanitizeModel,
-    buildSrcdoc: buildSrcdoc, toDefinition: toDefinition, normalizeManifest: normalizeManifest,
+    buildSrcdoc: buildSrcdoc, toDefinition: toDefinition,
   };
 })();
