@@ -9,6 +9,14 @@ releases are fixes only.
 
 ## [Unreleased]
 
+### Added
+
+- Overseerr plugin: a Downloading screen, a Downloading shelf on Recommended and a download badge on
+  title pages; "Report a problem" (details and hold-OK) creates an Overseerr issue under the viewer's
+  own account; one Overseerr session per Plex Home profile.
+- Plugin API: a `badges` hook for title pages; `ctx.profile()`, `ctx.plex`, `ctx.openItem()` and, for
+  bundled plugins, `ctx.push()`/`pop()`/`backdrop()`.
+
 ## [0.1.0] - unreleased (first public release)
 
 ### Added

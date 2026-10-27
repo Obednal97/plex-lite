@@ -130,6 +130,9 @@ html, body { background: var(--ground); color: var(--text); }
 .hero-meta { margin-top: 12px; font-size: 28px; line-height: 34px; color: var(--text-2); }
 .hero-summary { margin-top: 18px; font-size: 26px; line-height: 38px; color: var(--reading); max-width: 760px; }
 .badges { margin-left: 16px; vertical-align: 3px; }
+/* plugin badges on details (e.g. "Downloading 45%"): the same keyline, in the accent */
+.badge.tone-accent { color: var(--accent); border-color: rgba(90, 214, 226, 0.7); }
+.badge.tone-warn { color: #f0b44c; border-color: rgba(240, 180, 76, 0.7); }
 .badge { height: 28px; line-height: 26px; padding: 0 9px; font-size: 20px; letter-spacing: 0.06em; color: var(--text-2); border: 1px solid rgba(255, 255, 255, 0.38); border-radius: 7px; }
 .rating-badge { height: 28px; line-height: 26px; padding: 0 9px; font-size: 20px; color: var(--text-2); border: 1px solid rgba(255, 255, 255, 0.24); border-radius: 7px; }
 .details-extra { font-size: 24px; line-height: 32px; color: var(--text-2); }

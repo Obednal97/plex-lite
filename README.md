@@ -133,9 +133,12 @@ Plugins add rows, actions and settings without touching the app's screens. They 
 inside the app and are reviewed like any other code. Each one can be switched off under
 **Settings → Plugin · <name>**.
 
-- **Overseerr** (`plugins/overseerr/`): request movies and shows that aren't in your library, from
-  Search. It signs in to your Overseerr server with your Plex account through a small webOS
-  background service, because the app itself can't hold Overseerr's session cookie.
+- **Overseerr** (`plugins/overseerr/`, also works with Seerr): request movies and shows that aren't
+  in your library, from Search; see what's downloading (a Downloading screen, a shelf and a badge on
+  title pages); and report a problem with a title (bad quality, wrong language, out of sync…), which
+  creates an Overseerr issue under your own account. It signs in with your Plex profile through a
+  small webOS background service, because the app itself can't hold Overseerr's session cookie.
+  See [docs/OVERSEERR.md](docs/OVERSEERR.md).
 
 To write your own, see [docs/PLUGINS.md](docs/PLUGINS.md).
 

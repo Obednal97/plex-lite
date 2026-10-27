@@ -214,6 +214,7 @@
           items: sh.items,
           kind: sh.kind || 'poster',
           shadow: shadow,
+          makeCard: sh.makeCard,
           onFocusItem: function (item) { if (item.art || item.ratingKey) self.hero.update(item); },
           onSelect: sh.onSelect || function (item) { PL.app.push(screens.details(item)); },
         });

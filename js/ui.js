@@ -719,6 +719,22 @@
     this.layout();
   };
 
+  // Re-measures one zone whose content changed size (e.g. a late badge that wrapped a line) and moves
+  // the zones below it; the focused zone keeps its place on screen.
+  VStack.prototype.reflow = function (zone) {
+    var h = zone.el.offsetHeight;
+    if (!h || h === zone.height) return false;
+    zone.height = h;
+    var y = this.opts.top || 0;
+    this.zones.forEach(function (z) {
+      z.top = y;
+      z.el.style.top = y + 'px';
+      y += z.height;
+    });
+    this.layout();
+    return true;
+  };
+
   // A fresh page: its first rows rise in one after another (only rows on screen, capped).
   VStack.prototype.enter = function () {
     var n = 0;
