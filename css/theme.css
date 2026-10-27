@@ -1,0 +1,249 @@
+/* Plex Lite design refresh ("2030"): loaded after every other stylesheet, so it restyles without
+   touching the component CSS underneath. See docs/DESIGN.md for the language and the reasons.
+   Chrome 53 rules still apply: no backdrop-filter/grid/flex gap/clamp; animate transform/opacity only;
+   one shared focus shadow, no per-card box-shadows at rest. */
+
+:root {
+  --ground: #2b2b2e;           /* the page: calm mid-grey, not black */
+  --ground-rgb: 43, 43, 46;
+  --ink: #050508;              /* scrims behind text over artwork */
+  --bg: #2b2b2e;
+  --text: #f7fafc;             /* titles, focused labels */
+  --text-2: #b8bfcc;           /* meta, captions */
+  --text-3: #9499a3;           /* tertiary, counts */
+  --reading: #cdd3dd;          /* synopses */
+  --fill: rgba(255, 255, 255, 0.10);      /* idle controls on the ground */
+  --fill-hi: rgba(255, 255, 255, 0.20);   /* selected-but-not-focused */
+  --control: rgba(34, 34, 36, 0.92);      /* idle pills over artwork */
+  --rim: rgba(255, 255, 255, 0.14);
+  --rim-light: rgba(255, 255, 255, 0.28);
+  --focus: #f7fafc;            /* focused fill */
+  --focus-ink: #08080a;        /* text on the focused fill */
+  --resume: #fab82e;           /* progress (Plex amber) */
+  --accent: #e5a00d;
+  --glass: rgba(255, 255, 255, 0.10);
+  --glass-hi: rgba(255, 255, 255, 0.20);
+  --glass-edge: rgba(255, 255, 255, 0.14);
+  --glass-edge-top: rgba(255, 255, 255, 0.28);
+  --glass-dark: rgba(44, 44, 48, 0.96);
+  --t-lift: 200ms;
+}
+
+html, body { background: var(--ground); color: var(--text); }
+
+/* ---- Backdrops: full-bleed art, graded scrims that land on the ground ------------------------- */
+
+.backdrop-ambient .backdrop-shade { background: rgba(var(--ground-rgb), 0.30); }
+
+.backdrop-hero .backdrop-img, .backdrop-hero .backdrop-shade { left: 0; right: auto; top: 0; width: 1920px; height: 1080px; }
+.backdrop-hero .backdrop-shade,
+.backdrop-detail .backdrop-shade {
+  background:
+    linear-gradient(180deg, rgba(5, 5, 8, 0.45) 0%, rgba(5, 5, 8, 0) 16%),
+    linear-gradient(90deg, rgba(5, 5, 8, 0.88) 0%, rgba(5, 5, 8, 0.74) 34%, rgba(5, 5, 8, 0.30) 52%, rgba(5, 5, 8, 0) 66%),
+    linear-gradient(0deg, #2b2b2e 0%, #2b2b2e 18%, rgba(43, 43, 46, 0.72) 34%, rgba(43, 43, 46, 0) 60%);
+}
+
+/* ---- Tab bar: a quiet track, text tabs, a single white plate for focus ------------------------ */
+
+.tabbar-pill {
+  height: 68px; padding: 6px; border-radius: 34px;
+  background: rgba(30, 30, 33, 0.72); border: 1px solid var(--rim); border-top-color: var(--rim-light);
+}
+.tab { height: 56px; line-height: 56px; padding: 0 30px; border-radius: 28px; font-size: 28px; font-weight: 500; color: var(--text-2); }
+.tab.selected { background: var(--fill-hi); color: var(--text); font-weight: 600; }
+.tab.focused { background: var(--focus); color: var(--focus-ink); font-weight: 600; transform: scale(1.05); }
+
+/* ---- Sub-nav and filter bar: borderless text tabs ---------------------------------------------- */
+
+.chip {
+  height: 52px; line-height: 52px; padding: 0 24px; margin-right: 8px; border-radius: 26px;
+  font-size: 26px; font-weight: 500; color: var(--text-2); background: transparent; border: 0;
+}
+.chip.selected { color: var(--text); background: var(--fill); border: 0; font-weight: 600; }
+.chip.focused { background: var(--focus); color: var(--focus-ink); border: 0; transform: scale(1.05); }
+.chip .chip-value { color: var(--text-3); }
+.chip.focused .chip-value { color: rgba(8, 8, 10, 0.55); }
+
+/* ---- Shelves --------------------------------------------------------------------------------- */
+
+.shelf-title { height: 44px; line-height: 44px; font-size: 32px; font-weight: 700; color: var(--text); }
+.shelf-track { top: 60px; }
+.zone-above { opacity: 0.32; }
+
+/* ---- Cards: lit-glass edge on focus, quiet sheen at rest -------------------------------------- */
+
+.card-inner { background: #1f2129; }
+.card-edge { opacity: 1; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
+.card.focused .card-edge {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45), inset 0 3px 0 -1px rgba(255, 255, 255, 0.45), inset 0 0 14px rgba(255, 255, 255, 0.10);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 34%);
+}
+.card-poster.focused .card-inner, .card-season.focused .card-inner, .card-wide.focused .card-inner { transform: scale(1.09); }
+.focus-shadow { box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5); }
+.card-placeholder .card-inner { background: #1f2129; }
+.card-fallback { font-size: 24px; color: var(--text-2); }
+
+.card-progress { left: 14px; right: 14px; bottom: 14px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); z-index: 2; }
+.card-progress-fill { height: 5px; background: var(--resume); }
+.card-check { z-index: 2; width: 30px; height: 30px; border-radius: 15px; background: rgba(247, 250, 252, 0.95); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); }
+
+/* poster caption: revealed under the focused card only */
+.card-meta { margin-top: 20px; }
+.card-title { font-size: 26px; line-height: 32px; font-weight: 600; color: var(--text); }
+.card-sub { font-size: 24px; line-height: 30px; color: var(--text-2); }
+.grid-card .card-meta { opacity: 0; }
+.grid-card.focused .card-meta, .card-poster.focused .card-meta, .card-season.focused .card-meta { opacity: 1; transform: translate3d(0, 16px, 0); }
+
+/* landscape cards carry their title on the art, over a bottom scrim, and pop with the art */
+.card-wide .card-inner::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 124px; z-index: 1; border-radius: 0 0 14px 14px;
+  background: linear-gradient(0deg, rgba(5, 5, 8, 0.82) 0%, rgba(5, 5, 8, 0.45) 55%, rgba(5, 5, 8, 0) 100%);
+}
+.card-wide .card-meta {
+  position: absolute; left: 0; top: 0; height: 236px; margin: 0; padding: 0 22px 28px; z-index: 4;
+  display: -webkit-box; display: -webkit-flex; display: flex;
+  -webkit-flex-direction: column; flex-direction: column; -webkit-justify-content: flex-end; justify-content: flex-end;
+  transition: transform var(--t-lift) var(--ease);
+}
+.card-wide .card-title { font-size: 26px; line-height: 32px; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+.card-wide .card-sub { font-size: 24px; line-height: 30px; color: rgba(247, 250, 252, 0.82); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+.card-wide.focused .card-meta { transform: scale(1.09); }
+.card-wide .card-progress { bottom: 12px; left: 22px; right: 22px; }
+.card-wide.no-art .card-fallback, .card-wide .no-art .card-fallback { display: none; }
+
+/* people: circles (approved), lit edge and a bigger pop for a lone row of circles */
+.card-person .card-inner { background: #1f2129; border: 0; }
+.card-person.focused .card-inner { transform: scale(1.13); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5); }
+.card-person .card-edge { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.10); }
+.card-person.focused .card-edge { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5), inset 0 3px 0 -1px rgba(255, 255, 255, 0.45); }
+.person-meta .card-title { font-size: 24px; }
+.person-meta .card-sub { font-size: 22px; }
+.card-person.focused .person-meta { transform: translate3d(0, 20px, 0); }
+
+/* ---- Hero & details text --------------------------------------------------------------------- */
+
+.hero { width: 860px; bottom: 500px; }
+.hero-eyebrow { font-size: 24px; line-height: 30px; font-weight: 600; letter-spacing: 0.08em; color: var(--text-2); }
+.hero-title { font-size: 72px; line-height: 80px; font-weight: 700; letter-spacing: -0.01em; }
+.hero-title.long { font-size: 60px; line-height: 66px; }
+.hero-meta { margin-top: 12px; font-size: 28px; line-height: 34px; color: var(--text-2); }
+.hero-summary { margin-top: 18px; font-size: 26px; line-height: 38px; color: var(--reading); max-width: 760px; }
+.badges { margin-left: 16px; vertical-align: 3px; }
+.badge { height: 28px; line-height: 26px; padding: 0 9px; font-size: 20px; letter-spacing: 0.06em; color: var(--text-2); border: 1px solid rgba(255, 255, 255, 0.38); border-radius: 7px; }
+.rating-badge { height: 28px; line-height: 26px; padding: 0 9px; font-size: 20px; color: var(--text-2); border: 1px solid rgba(255, 255, 255, 0.24); border-radius: 7px; }
+.details-extra { font-size: 24px; line-height: 32px; color: var(--text-2); }
+
+/* ---- Buttons: dark capsules over art; the focused one is the only bright thing ------------------- */
+
+.btn { height: 72px; background: var(--control); border: 0; color: var(--text); }
+.btn-primary { background: rgba(247, 250, 252, 0.24); border: 0; color: var(--text); font-size: 28px; padding: 0 44px; line-height: 72px; }
+.btn-secondary { font-size: 26px; padding: 0 30px; line-height: 72px; font-weight: 600; }
+.btn.focused { background: var(--focus); color: var(--focus-ink); border: 0; transform: scale(1.05); }
+.btn-primary.focused { transform: scale(1.05); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45); }
+.btn .ico { width: 30px; height: 30px; vertical-align: -7px; }
+
+/* ---- Sheets & toasts: lit glass panels (opaque enough to need no live blur) -------------------- */
+
+.sheet-scrim { background: rgba(5, 5, 8, 0.38); }
+.sheet {
+  width: 620px; border-radius: 30px; padding: 22px 14px;
+  background: linear-gradient(180deg, rgba(58, 58, 64, 0.97) 0%, rgba(40, 40, 46, 0.98) 100%);
+  border: 1px solid var(--rim); border-top-color: var(--rim-light);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45);
+}
+.sheet-heading { font-size: 22px; line-height: 28px; letter-spacing: 0.08em; color: var(--text-3); padding: 14px 22px 10px; }
+.sheet-row { height: 68px; line-height: 68px; padding: 0 60px 0 22px; border-radius: 16px; font-size: 28px; font-weight: 500; }
+.sheet-row .sheet-sub { font-size: 24px; color: var(--text-3); }
+.sheet-row.focused { background: var(--focus); color: var(--focus-ink); }
+.sheet-row.checked::after { top: 22px; }
+
+.toast {
+  height: 68px; line-height: 66px; padding: 0 34px; border-radius: 34px; font-size: 26px;
+  background: linear-gradient(180deg, rgba(58, 58, 64, 0.97) 0%, rgba(40, 40, 46, 0.98) 100%);
+  border: 1px solid var(--rim); border-top-color: var(--rim-light);
+}
+
+/* ---- Player OSD: title, a hairline rail, nothing else -------------------------------------------- */
+
+.osd { height: 380px; }
+.osd-shade { height: 380px; background: linear-gradient(0deg, rgba(5, 5, 8, 0.86) 0%, rgba(5, 5, 8, 0.5) 42%, rgba(5, 5, 8, 0) 100%); }
+.osd-text { bottom: 150px; }
+.osd-eyebrow { font-size: 24px; line-height: 30px; color: var(--text-2); font-weight: 600; letter-spacing: 0.04em; }
+.osd-title { font-size: 48px; line-height: 58px; font-weight: 700; }
+.scrub { bottom: 112px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.20); }
+.scrub-buffer, .scrub-played { height: 6px; border-radius: 3px; }
+.scrub-buffer { background: rgba(255, 255, 255, 0.28); }
+.scrub-played { background: rgba(247, 250, 252, 0.95); }
+.scrub-thumb { top: -8px; width: 22px; height: 22px; border-radius: 11px; }
+.scrub-bubble { background: linear-gradient(180deg, rgba(58, 58, 64, 0.97), rgba(40, 40, 46, 0.98)); border: 1px solid var(--rim); font-size: 26px; }
+.osd-times { bottom: 64px; font-size: 24px; color: var(--text-2); }
+.upnext, .skip-pill { border-radius: 30px; }
+.upnext {
+  background: linear-gradient(180deg, rgba(58, 58, 64, 0.97), rgba(40, 40, 46, 0.98));
+  border: 1px solid var(--rim); border-top-color: var(--rim-light);
+}
+.upnext-label { font-size: 24px; color: var(--text-2); }
+.upnext-hint { font-size: 24px; color: var(--text-3); }
+
+/* ---- Search: the query is the headline --------------------------------------------------------- */
+
+.search-field {
+  top: 140px; height: 84px; padding: 0 6px; border-radius: 0; background: transparent; border: 0;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.16);
+  font-size: 48px; line-height: 82px; font-weight: 700;
+}
+.search-field .placeholder { color: var(--text-3); font-weight: 500; }
+.search-field .caret { height: 46px; vertical-align: -8px; background: var(--focus); }
+.key { background: var(--fill); border: 0; border-radius: 14px; font-size: 28px; font-weight: 500; color: var(--text); }
+.key.wide { font-size: 24px; }
+.key.focused { background: var(--focus); color: var(--focus-ink); transform: scale(1.08); }
+.search-status { font-size: 30px; color: var(--text-3); }
+
+/* ---- Live TV: quiet rows on the ground, white plate on focus ------------------------------------ */
+
+.channel { background: rgba(255, 255, 255, 0.06); border: 0; border-radius: 18px; }
+.channel.focused { background: var(--focus); color: var(--focus-ink); transform: scale(1.02); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4); }
+.channel-num { font-size: 26px; color: var(--text); }
+.channel-name { font-size: 22px; color: var(--text-2); }
+.channel-now { font-size: 28px; }
+.channel-time { font-size: 22px; color: var(--text-2); }
+.channel-bar { background: rgba(255, 255, 255, 0.20); height: 5px; }
+.channel-bar-fill { height: 5px; background: var(--focus); }
+.channel-next { font-size: 22px; color: var(--text-3); }
+.channel-next b { color: var(--text-2); }
+
+/* ---- Settings & panels: a list on the ground, hairlines instead of a box ------------------------- */
+
+.page-title { font-size: 48px; line-height: 56px; letter-spacing: -0.01em; }
+.page-count { font-size: 24px; color: var(--text-3); text-shadow: none; }
+.panel { background: transparent; border: 0; padding: 0; border-radius: 0; }
+.panel.more::after { background: linear-gradient(0deg, #2b2b2e, rgba(43, 43, 46, 0)); border-radius: 0; }
+.row { height: 84px; line-height: 84px; padding: 0 28px; border-radius: 16px; font-size: 28px; font-weight: 500; box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08); }
+.row .row-value { font-size: 26px; color: var(--text-2); }
+.row.focused { background: var(--focus); color: var(--focus-ink); box-shadow: none; }
+.row.focused .row-value { color: rgba(8, 8, 10, 0.55); }
+
+.center-card {
+  background: linear-gradient(180deg, rgba(58, 58, 64, 0.6), rgba(40, 40, 46, 0.6));
+  border: 1px solid var(--rim); border-top-color: var(--rim-light);
+}
+.code-tile { background: rgba(255, 255, 255, 0.08); border: 1px solid var(--rim); color: var(--resume); }
+.text-input { background: var(--fill); border: 2px solid var(--focus); }
+.grid-empty { color: var(--text-3); }
+
+/* ---- Pointer mode follows the same focus look ----------------------------------------------------- */
+
+.pointer .card:hover .card-edge {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45), inset 0 3px 0 -1px rgba(255, 255, 255, 0.45), inset 0 0 14px rgba(255, 255, 255, 0.10);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 34%);
+}
+.pointer .card-poster:hover .card-inner, .pointer .card-season:hover .card-inner, .pointer .card-wide:hover .card-inner { transform: scale(1.09); }
+.pointer .card-wide:hover .card-meta { transform: scale(1.09); }
+.pointer .card.focused .card-edge { opacity: 1; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); background: none; }
+.pointer .card-wide.focused .card-meta { transform: none; }
+.pointer .tab:hover, .pointer .chip:hover, .pointer .btn:hover, .pointer .key:hover,
+.pointer .row:hover, .pointer .sheet-row:hover { background: var(--focus); color: var(--focus-ink); }
+.pointer .tab.focused, .pointer .chip.focused, .pointer .key.focused, .pointer .row.focused, .pointer .sheet-row.focused { background: transparent; color: var(--text); }
+.pointer .btn.focused { background: var(--control); color: var(--text); }
+.pointer .btn-primary.focused { background: rgba(247, 250, 252, 0.24); color: var(--text); box-shadow: none; }

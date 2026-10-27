@@ -111,7 +111,7 @@
     this.meta.appendChild(document.createTextNode(ui.metaLine(item, { skipEpisode: true })));
     if (item.viewOffset && item.duration) this.meta.appendChild(document.createTextNode(' · ' + PL.fmt.remaining(item)));
     this.summary.textContent = item.summary || '';
-    PL.app.backdrop.set(PL.plex.image(ui.artPath(item), 1280, 720, { quality: 75 }), 'hero');
+    PL.app.backdrop.set(PL.plex.image(ui.artPath(item), 1920, 1080, { quality: 72 }), 'hero');
   };
 
   function RecommendedMode(screen) {
@@ -274,7 +274,7 @@
     this.el.appendChild(this.empty);
     var self = this;
     this.grid = new ui.Grid({
-      columns: 7,
+      columns: 6,
       shadow: screen.shadow,
       anchor: 90,
       fetchPage: function (start, size) { return self.fetch(start, size); },
@@ -442,7 +442,7 @@
     this.el.appendChild(this.empty);
     var self = this;
     this.grid = new ui.Grid({
-      columns: 7,
+      columns: 6,
       shadow: screen.shadow,
       anchor: 90,
       fetchPage: function (start, size) {
@@ -606,7 +606,7 @@
       if (item) PL.app.backdrop.set(ui.ambient(ui.artPath(item)), 'ambient');
     }, 400);
     var grid = new ui.Grid({
-      columns: 7,
+      columns: 6,
       shadow: shadow,
       anchor: 90,
       fetchPage: function (start, size) {

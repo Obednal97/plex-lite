@@ -16,11 +16,12 @@
   // Shelf opts.geometry overrides these (custom card kinds such as cast portraits use it with
   // opts.makeCard(item, kind, geo) -> node with .card and .card-inner).
   ui.GEOMETRY = {
-    poster: { w: 220, h: 330, pitch: 248, scale: 1.08 },
-    wide: { w: 392, h: 220, pitch: 420, scale: 1.06 },
-    season: { w: 180, h: 270, pitch: 204, scale: 1.08 },
-    // people: square photo shown as a circle (ui.makePersonCard)
-    person: { w: 180, h: 180, pitch: 212, scale: 1.08, round: true },
+    // fewer, larger cards with more air (docs/DESIGN.md); scale is the focus pop
+    poster: { w: 250, h: 375, pitch: 280, scale: 1.09 },
+    wide: { w: 420, h: 236, pitch: 448, scale: 1.09 },
+    season: { w: 200, h: 300, pitch: 228, scale: 1.09 },
+    // people: square photo shown as a circle (ui.makePersonCard); circles need a bigger pop to read
+    person: { w: 190, h: 190, pitch: 230, scale: 1.13, round: true },
   };
 
   // ---- Item helpers ------------------------------------------------------------------------------
@@ -71,7 +72,7 @@
   };
 
   ui.ambient = function (path) {
-    return PL.plex.image(path, 480, 270, { blur: 28, opacity: 55, background: '0b0b0f', format: 'jpeg', quality: 70 });
+    return PL.plex.image(path, 480, 270, { blur: 28, opacity: 50, background: '2b2b2e', format: 'jpeg', quality: 70 });
   };
 
   // ---- Shared focus shadow ---------------------------------------------------------------------
@@ -223,7 +224,8 @@
     if (opts.title) this.el.appendChild(PL.el('div', 'shelf-title', opts.title));
     this.track = PL.el('div', 'shelf-track');
     this.el.appendChild(this.track);
-    this.height = (opts.title ? 56 : 0) + this.geo.h + (this.kind === 'wide' ? 100 : 112);
+    // landscape cards carry their title on the art, so they only need room for the focus pop
+    this.height = (opts.title ? 60 : 0) + this.geo.h + (this.kind === 'wide' ? 56 : 124);
     this.left = opts.left != null ? opts.left : ui.MARGIN;
     this.attached = false;
   }
@@ -641,7 +643,8 @@
   function Grid(opts) {
     this.opts = opts;
     this.cols = opts.columns || 7;
-    this.geo = { w: 220, h: 330, pitch: 248, rowPitch: 424, scale: 1.08 };
+    // captions show under the focused poster only, so a row needs room for one caption + air
+    this.geo = { w: 250, h: 375, pitch: 280, rowPitch: 470, scale: 1.09 };
     this.items = [];
     this.total = opts.total || 0;
     this.index = 0;
