@@ -301,17 +301,29 @@
       fetchPage: function (start, size) { return self.fetch(start, size); },
       onLoaded: function (total) { self.onLoaded(total); },
       onError: function (err) { self.empty.textContent = PL.errorMessage(err); },
-      onFocusItem: function (item) { if (self.screen.visible) self.ambient(item); self.screen.updateHeader(); },
+      onFocusItem: function (item, index) {
+        if (self.screen.visible) self.ambient(item);
+        self.rail.setCurrent(PL.az.slotAt(self.letters, index));
+        self.screen.updateHeader();
+      },
       onSelect: function (item) { PL.app.push(screens.details(item)); },
     });
     this.grid.el.style.top = '320px';
     this.el.appendChild(this.grid.el);
+    // A–Z rail (js/az.js): title sort only
+    this.rail = new PL.az.Rail({ onPick: function (slot) { self.jump(slot, [slot]); } });
+    this.el.appendChild(this.rail.el);
+    this.flash = new PL.az.Flash();
+    this.el.appendChild(this.flash.el);
+    this.letters = null;
+    this.tap = { digit: -1, slot: null, at: 0 };
     this.area = 'bar';
     this.ambient = PL.debounce(function (item) {
       if (item && self.screen.visible) PL.app.backdrop.set(ui.ambient(ui.artPath(item)), 'ambient');
     }, 400);
     this.paintBar();
     this.grid.reset(0);
+    this.loadLetters();
   }
 
   AllMode.prototype.sortDef = function () {
@@ -319,19 +331,23 @@
     return this.sorts.filter(function (s) { return s.key === f.sort; })[0] || this.sorts[0];
   };
 
-  AllMode.prototype.fetch = function (start, size) {
+  // the grid's filters, shared by the listing and the A–Z counts so their offsets agree
+  AllMode.prototype.filterParams = function () {
     var f = this.filters;
-    var params = {
-      type: this.section.type === 'show' ? 2 : 1,
-      sort: f.sort + (f.dir === 'desc' ? ':desc' : ''),
-      includeCollections: 0,
-      excludeFields: 'summary',
-      'X-Plex-Container-Start': start,
-      'X-Plex-Container-Size': size,
-    };
+    var params = { type: this.section.type === 'show' ? 2 : 1, includeCollections: 0 };
     if (f.genre) params.genre = f.genre.key;
     if (f.decade) params.decade = f.decade.key;
     if (f.unwatched) params.unwatched = 1;
+    return params;
+  };
+
+  AllMode.prototype.fetch = function (start, size) {
+    var f = this.filters;
+    var params = this.filterParams();
+    params.sort = f.sort + (f.dir === 'desc' ? ':desc' : '');
+    params.excludeFields = 'summary';
+    params['X-Plex-Container-Start'] = start;
+    params['X-Plex-Container-Size'] = size;
     return PL.plex.get('/library/sections/' + this.section.key + '/all', params).then(function (mc) {
       return { total: mc.totalSize != null ? mc.totalSize : (mc.size || 0), items: mc.Metadata || [] };
     });
@@ -340,11 +356,70 @@
   AllMode.prototype.onLoaded = function (total) {
     this.count.textContent = total ? total.toLocaleString() + (total === 1 ? ' title' : ' titles') : '';
     this.empty.textContent = total ? '' : 'Nothing matches these filters';
-    if (!total && this.area === 'grid') {
-      this.area = 'bar';
-      this.grid.setFocused(false);
-      this.bar.setFocused(this.focused);
+    if (!total && (this.area === 'grid' || this.area === 'rail')) this.focusArea('bar');
+    this.paintRail();
+  };
+
+  // ---- A–Z rail ----
+
+  AllMode.prototype.titleSorted = function () { return this.filters.sort === 'titleSort'; };
+
+  // One small request (about 1 KB) alongside the grid's first page, with the same filters.
+  AllMode.prototype.loadLetters = function () {
+    var self = this;
+    var gen = this.lettersGen = (this.lettersGen || 0) + 1;
+    this.letters = null;
+    this.rail.show(false);
+    if (!this.titleSorted()) return;
+    var desc = this.filters.dir === 'desc';
+    PL.plex.get('/library/sections/' + this.section.key + '/firstCharacter', this.filterParams()).then(function (mc) {
+      if (gen !== self.lettersGen || self.alive === false) return;
+      self.letters = PL.az.index(mc.Directory || [], desc);
+      self.rail.setModel(self.letters);
+      self.rail.setCurrent(PL.az.slotAt(self.letters, self.grid.index));
+      self.paintRail();
+    }, function (err) { PL.warn('firstCharacter failed', err && err.message); });
+  };
+
+  AllMode.prototype.paintRail = function () {
+    var on = !!this.letters && this.grid.total > 0;
+    if (on && this.grid.loaded && this.letters.total !== this.grid.total) {
+      PL.warn('A-Z counts differ from the listing', this.letters.total, this.grid.total);
     }
+    this.rail.show(on);
+    if (!this.rail.shown && this.area === 'rail') this.focusArea('grid');
+  };
+
+  // Jump to a letter's first title and put the focus there (from the rail, a click or a number key).
+  // shown: the letters for the flash (a number key's group, or just the letter).
+  AllMode.prototype.jump = function (slot, shown) {
+    var letters = this.letters;
+    var at = slot ? PL.az.target(letters, slot) : -1;
+    this.flash.show(shown, slot, function (s) { return PL.az.target(letters, s) < 0; });
+    if (at < 0) return;
+    this.grid.jumpTo(at);
+    this.rail.setCurrent(slot);
+    this.focusArea('grid');
+    this.screen.updateHeader();
+  };
+
+  // Number keys, phone-style: 2 = A, again = B, again = C ...; 1 and 0 = #.
+  AllMode.prototype.digit = function (d) {
+    if (!this.titleSorted()) {
+      PL.toast('Sort by Title to jump to a letter');
+      return;
+    }
+    if (!this.rail.shown) return;
+    var slot = PL.az.tap(this.letters, this.tap, d, Date.now());
+    this.jump(slot, PL.az.KEYPAD[d].split(''));
+  };
+
+  AllMode.prototype.focusArea = function (area) {
+    if (area === 'rail' && !this.rail.shown) area = 'grid';
+    this.area = area;
+    this.bar.setFocused(this.focused && area === 'bar');
+    this.grid.setFocused(this.focused && area === 'grid');
+    this.rail.setFocused(this.focused && area === 'rail');
   };
 
   AllMode.prototype.paintBar = function () {
@@ -365,7 +440,9 @@
     this.screen.paintSurprise();
     this.count.textContent = '';
     this.empty.textContent = '';
+    this.flash.hide();
     this.grid.reset(0);
+    this.loadLetters();
   };
 
   AllMode.prototype.pickSort = function () {
@@ -416,12 +493,13 @@
 
   AllMode.prototype.setFocused = function (on) {
     this.focused = on;
-    this.bar.setFocused(on && this.area === 'bar');
-    this.grid.setFocused(on && this.area === 'grid');
+    this.focusArea(this.area);
     if (!on) this.screen.shadow.hide();
   };
 
-  AllMode.prototype.scrolled = function () { return this.focused && this.area === 'grid' && this.grid.rowOf(this.grid.index) > 0; };
+  AllMode.prototype.scrolled = function () {
+    return this.focused && (this.area === 'grid' || this.area === 'rail') && this.grid.rowOf(this.grid.index) > 0;
+  };
 
   AllMode.prototype.applyScroll = function (scrolled) {
     this.bar.el.classList.toggle('faded', scrolled);
@@ -434,28 +512,48 @@
   };
 
   AllMode.prototype.key = function (code) {
+    var d = PL.az.digitOf(code);
+    if (d >= 0) {
+      this.digit(d);
+      return true;
+    }
     if (this.area === 'bar') {
       if (this.bar.key(code)) return true;
       if (code === K.DOWN && this.grid.total > 0) {
-        this.area = 'grid';
-        this.bar.setFocused(false);
-        this.grid.setFocused(true);
+        this.focusArea('grid');
         return true;
       }
       return false;
     }
+    if (this.area === 'rail') {
+      if (this.rail.key(code)) return true;
+      // Left (or Back) returns to the grid where it was. Up past the top letter goes to the filters
+      // only while the grid is at its top row (the bar shares the screen with row 0 only).
+      if (code === K.LEFT || PL.isBack(code)) {
+        this.focusArea('grid');
+        return true;
+      }
+      if (code === K.UP) {
+        if (this.grid.rowOf(this.grid.index) === 0) this.focusArea('bar');
+        return true;
+      }
+      return code === K.RIGHT;
+    }
     if (this.grid.key(code)) return true;
+    // Right from the last column (or the last title) moves into the rail
+    if (code === K.RIGHT && this.rail.shown) {
+      this.focusArea('rail');
+      return true;
+    }
     if (code === K.UP) {
-      this.area = 'bar';
-      this.grid.setFocused(false);
-      this.bar.setFocused(true);
+      this.focusArea('bar');
       return true;
     }
     return false;
   };
 
-  AllMode.prototype.hide = function () { this.ambient.cancel(); };
-  AllMode.prototype.destroy = function () { this.alive = false; this.ambient.cancel(); };
+  AllMode.prototype.hide = function () { this.ambient.cancel(); this.flash.hide(); };
+  AllMode.prototype.destroy = function () { this.alive = false; this.ambient.cancel(); this.flash.hide(); };
 
   // ---- Collections ---------------------------------------------------------------------------------
 

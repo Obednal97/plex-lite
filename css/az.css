@@ -1,0 +1,64 @@
+/* The A–Z jump rail on the Library grid (js/az.js). Same language as the rest (docs/DESIGN.md): quiet
+   letters on the ground, one soft pill on the current letter, the white plate when it has focus.
+   Only transform and opacity change after a filter change. Loaded after motion.css. */
+
+/* 27 letters x 26 px, in the 94 px right of the grid's last column, from under the title count
+   (228) to the bottom safe margin */
+.az-rail {
+  position: absolute; left: 1846px; top: 316px; width: 48px; height: 702px;
+  opacity: 0; pointer-events: none; transition: opacity 200ms var(--spring);
+}
+.az-rail.on { opacity: 1; pointer-events: auto; }
+
+.az-letter {
+  position: absolute; left: 0; width: 48px; height: 26px; line-height: 26px; text-align: center;
+  font-size: 20px; font-weight: 600; color: var(--text-2);
+}
+.az-letter.empty { opacity: 0.3; }
+.az-letter.under { opacity: 0; }
+
+/* the marker: one element that slides on transform; its two looks cross-fade on opacity */
+.az-mark {
+  position: absolute; left: 0; top: -3px; width: 48px; height: 32px; opacity: 0;
+  transition: transform 240ms var(--spring), opacity 200ms var(--spring);
+}
+.az-mark.instant { transition: none; }
+.az-mark-cur, .az-mark-focus {
+  position: absolute; left: 0; top: 0; width: 48px; height: 32px; line-height: 32px; border-radius: 16px;
+  text-align: center; font-size: 22px; font-weight: 700;
+  transition: opacity 160ms linear, transform var(--t-pop) var(--spring);
+}
+.az-mark-cur { background: var(--fill-hi); color: var(--text); }
+.az-mark-focus { background: var(--focus); color: var(--focus-ink); opacity: 0; }
+.az-rail.focused .az-mark-cur { opacity: 0; }
+.az-rail.focused .az-mark-focus { opacity: 1; transform: scale(1.12); }
+
+.pointer .az-letter { cursor: pointer; }
+.pointer .az-letter:hover { color: var(--text); }
+.pointer .az-letter.empty { cursor: default; color: var(--text-2); }
+
+/* a jump lands without scrolling across the gap; the new rows fade up from their frames */
+.grid-inner.instant, .grid-inner.glide.instant { transition: none; }
+.grid-jump { animation: azJumpIn var(--t-in) linear both; }
+@keyframes azJumpIn {
+  from { opacity: 0.25; }
+  to { opacity: 1; }
+}
+
+/* the jump flash: the letter (or a number key's group) large, in lit glass, for a moment */
+.az-flash {
+  position: absolute; left: 0; top: 470px; width: 1920px; height: 140px; text-align: center;
+  opacity: 0; pointer-events: none; transition: opacity 260ms linear;
+}
+.az-flash.on { opacity: 1; transition: opacity 90ms linear; }
+.az-flash-text {
+  display: inline-block; height: 140px; line-height: 136px; min-width: 140px; padding: 0 34px; border-radius: 30px;
+  font-size: 84px; font-weight: 700; color: var(--text);
+  background: linear-gradient(180deg, #3a3a40 0%, #28282e 100%);
+  border: 1px solid var(--rim); border-top-color: var(--rim-light);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45);
+}
+.az-flash-text span { display: inline-block; }
+.az-flash-text.group span { margin: 0 14px; color: var(--text-3); }
+.az-flash-text.group span.lit { color: var(--text); }
+.az-flash-text.group span.empty { opacity: 0.35; }

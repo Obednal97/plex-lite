@@ -63,6 +63,11 @@ Transform and opacity only.
 - **Recommended:** full-bleed hero art of the focused item, title/meta/synopsis in a 760–860 px
   column, shelves below with headings in primary white.
 - **Library:** borderless sub-nav and sort/filter tabs; 6 × 250 px posters, caption under focus.
+  The A–Z rail (title sort only) lives in the 94 px right of the last column: 27 letters at a 26 px
+  pitch in 20 px `--text-2` (one of the few places below the 24 px floor, like badges), empty letters
+  at 30% opacity. The current letter sits on a soft `--fill-hi` pill; when the rail has focus that
+  pill becomes the white plate, like every other focused control. A jump flashes the letter (or a
+  number key's group, the chosen letter lit) in a lit-glass tile for a moment.
 - **Details:** full-bleed art; ratings and badges as 1 px keylines; dark capsule actions with Phosphor
   icons; borderless season tabs; episodes with titles on the art.
 - **Search:** the query is the headline (48 px with an underline), not a boxed field; flat keys.

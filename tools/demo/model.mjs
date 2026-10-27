@@ -303,6 +303,21 @@ class Model {
     return dir === 'desc' ? out.reverse() : out;
   }
 
+  // /library/sections/{id}/firstCharacter: titles per first letter, in titleSort order, as Plex does
+  // it ('#' for digits and symbols, letters folded to upper case, letters without titles left out).
+  // Built from runs over the sorted list so the counts always add up to this mock's own sort order.
+  firstCharacter(items) {
+    const out = [];
+    for (const it of this.sort(items, 'titleSort')) {
+      const c = (it.titleSort || it.title || '').charAt(0).normalize('NFD').charAt(0).toUpperCase();
+      const letter = c >= 'A' && c <= 'Z' ? c : '#';
+      const last = out[out.length - 1];
+      if (last && last.title === letter) last.size++;
+      else out.push({ key: letter === '#' ? '%23' : letter, title: letter, size: 1 });
+    }
+    return out;
+  }
+
   tagDirectory(sectionKey, kind) {
     const items = this.sectionItems(sectionKey);
     if (kind === 'decade') {

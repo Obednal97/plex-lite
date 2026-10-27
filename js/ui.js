@@ -839,6 +839,7 @@
     this.total = total || 0;
     this.index = 0;
     this.generation++;
+    this.windowGen = null;
     this.loaded = false;
     this.entering = true;
     this.ensurePage(0);
@@ -923,9 +924,10 @@
       }
       node.classList.toggle('focused', this.focused && i === this.index);
     }
-    // prefetch the next page before the user reaches it
+    // prefetch the next page before the user reaches it (not while a jump's window is loading: its
+    // JSON would compete with the window's on the TV's one fast core)
     var ahead = Math.min(this.total - 1, (lastRow + 4) * this.cols);
-    if (ahead >= 0 && !this.items[ahead]) this.ensurePage(Math.floor(ahead / this.pageSize));
+    if (ahead >= 0 && !this.items[ahead] && !this.windowGen) this.ensurePage(Math.floor(ahead / this.pageSize));
     if (this.focused && this.opts.shadow && this.total > 0) {
       this.opts.shadow.place(this.inner, (this.index % this.cols) * this.geo.pitch, row * this.geo.rowPitch,
         this.geo.w, this.geo.h, this.geo.scale);
@@ -954,6 +956,74 @@
     this.render();
     this.notify();
     return true;
+  };
+
+  // Jumps straight to item `index` (the A–Z rail). There is no scroll across the gap: the grid and the
+  // focus shadow land at once, the rows around the target appear as placeholder frames, and only the
+  // page(s) holding them are fetched (render() asks for them); posters fill in as they arrive.
+  Grid.prototype.jumpTo = function (index) {
+    if (this.total <= 0) return false;
+    index = PL.clamp(index, 0, this.total - 1);
+    if (index === this.index) return false;
+    this.index = index;
+    var inner = this.inner;
+    var shadow = this.opts.shadow && this.opts.shadow.el;
+    inner.classList.add('instant');
+    if (shadow) shadow.classList.add('instant');
+    this.movedAt = 0;
+    this.loadWindow();
+    this.render();
+    // the fade-up from the frames (css/az.css); cards' own entrance animations bubble here too
+    if (!this.jumpEnd) {
+      this.jumpEnd = function (e) { if (e.target === inner) inner.classList.remove('grid-jump'); };
+      inner.addEventListener('animationend', this.jumpEnd);
+    }
+    inner.classList.add('grid-jump');
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        inner.classList.remove('instant');
+        if (shadow) shadow.classList.remove('instant');
+      });
+    });
+    this.notify();
+    return true;
+  };
+
+  // After a jump, fetch just the rows render() is about to draw (36 titles) in one request instead of
+  // the one or two whole pages around them: half the JSON to parse on the TV before the cards show.
+  // The pages it touches are held while it runs and released afterwards, so scrolling on still loads
+  // them in full (render's prefetch usually asks for them straight away, after the cards are up).
+  Grid.prototype.loadWindow = function () {
+    var row = this.rowOf(this.index);
+    var first = Math.max(0, row - 2) * this.cols;
+    var last = Math.min(this.total - 1, (row + 4) * this.cols - 1);
+    var held = [];
+    for (var p = Math.floor(first / this.pageSize); p <= Math.floor(last / this.pageSize); p++) {
+      if (!this.pages[p]) {
+        this.pages[p] = 'window';
+        held.push(p);
+      }
+    }
+    if (!held.length) return;
+    var self = this;
+    var gen = this.generation;
+    var token = this.windowGen = {};
+    var release = function () {
+      held.forEach(function (pg) { if (self.pages[pg] === 'window') delete self.pages[pg]; });
+      if (self.windowGen === token) self.windowGen = null;
+    };
+    this.opts.fetchPage(first, last - first + 1).then(function (res) {
+      if (gen !== self.generation) return;
+      self.setPage(first, res.items, res.total);
+      release();
+      self.render();
+      if (self.focused) self.notify();
+    }, function (err) {
+      if (gen !== self.generation) return;
+      release();
+      PL.warn('grid window failed', err && err.message);
+      self.render();
+    });
   };
 
   Grid.prototype.refreshItem = function (ratingKey) {

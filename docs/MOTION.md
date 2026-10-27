@@ -79,5 +79,14 @@ CSS transition (`css/motion.css`):
   the logo and text are absolutely positioned within it, so nothing below moves when the logo
   arrives.
 
+- **A–Z rail.** The rail's letters never restyle. One marker element carries the letter: it slides on
+  `transform` (240 ms) and switches between the soft pill and the focus plate by cross-fading two
+  children on `opacity`; the letter underneath it fades out. A jump (`ui.Grid.jumpTo`) does *not*
+  scroll across the gap, which would mean animating past hundreds of rows: the grid and the focus
+  shadow land at once (`.instant` for two frames), the new rows appear as placeholder frames in the
+  same frame and fade up from 25% over 140 ms, and posters dissolve in as they arrive. The jump fetches just
+  the 36 titles it draws in one request (`Grid.loadWindow`) and holds the page prefetch until they're
+  in, so the TV parses half the JSON before the cards show.
+
 Only `transform` and `opacity` animate (plus the capsule's `width`, a single small element). Rows
 use `top` for placement so the entrance animations can own `transform`.

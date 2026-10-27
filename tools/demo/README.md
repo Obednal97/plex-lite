@@ -18,7 +18,7 @@ plex.tv/link screen; the demo "approves" the code after 30 seconds.
 
 | File | |
 | --- | --- |
-| `server.mjs` | Serves the app and answers the Plex endpoints the app calls: sections, hubs, metadata (extras, On Deck, markers, chapters), children, related, search, collections, genre/decade lists, play queues, timeline and scrobble (watched state is kept in memory until restart), the Live TV guide, `/photo/:/transcode` and direct play. `/plextv/*` mocks plex.tv: user, Home users, resources and link-code pins. The page gets `window.PL_DEV` pointing the app at both. |
+| `server.mjs` | Serves the app and answers the Plex endpoints the app calls: sections, hubs, metadata (extras, On Deck, markers, chapters), children, related, search, collections, genre/decade lists, first-letter counts (`firstCharacter`, for the A–Z rail), play queues, timeline and scrobble (watched state is kept in memory until restart), the Live TV guide, `/photo/:/transcode` and direct play. `/plextv/*` mocks plex.tv: user, Home users, resources and link-code pins. The page gets `window.PL_DEV` pointing the app at both. |
 | `model.mjs` | Builds Plex-shaped metadata (`MediaContainer`, rating keys, tag ids, image paths, hubs, a repeating Live TV schedule) from `library.json`. |
 | `library.json` | The content: titles, credits, summaries, collections, channels, which file each image and video comes from (with licence and author), and which titles `shots.mjs` uses. Generated from Wikimedia Commons metadata, then hand-edited. |
 | `art.mjs` | SVG artwork for what has no free image: typographic posters, wordmark logos, channel badges, collection collages, and the blurred "ambient" backdrops Plex's transcoder would make. |

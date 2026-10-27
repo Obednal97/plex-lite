@@ -261,6 +261,10 @@ function pms(req, res, path, q) {
   if ((m = /^\/library\/sections\/(\d+)\/all$/.exec(path))) {
     return send(res, 200, page(model.filter(model.sectionItems(m[1], q.get('type')), q), q));
   }
+  if ((m = /^\/library\/sections\/(\d+)\/firstCharacter$/.exec(path))) {
+    const dirs = model.firstCharacter(model.filter(model.sectionItems(m[1], q.get('type')), q));
+    return send(res, 200, container({ size: dirs.length, title2: 'By First Letter', Directory: dirs }));
+  }
   if ((m = /^\/library\/sections\/(\d+)\/(genre|decade|actor|director|writer|country)$/.exec(path))) {
     const dirs = model.tagDirectory(m[1], m[2]);
     return send(res, 200, container({ size: dirs.length, Directory: dirs }));
