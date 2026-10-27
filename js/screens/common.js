@@ -150,11 +150,23 @@
     if (t === 'season' && item.parentRatingKey) {
       rows.push({ label: 'Go to show', action: open({ ratingKey: item.parentRatingKey, type: 'show', title: item.parentTitle }) });
     }
-    var extra = PL.plugins && PL.plugins.actions ? PL.plugins.actions(item) : null;
-    if (extra && !extra.then) extra.forEach(function (a) { rows.push({ label: a.label, action: a.run }); });
-    rows.push({ label: 'Details', action: open(item) });
     var heading = t === 'episode' ? (item.grandparentTitle || '') + ' · ' + PL.fmt.episode(item) : (item.title || '');
-    PL.app.push(screens.sheet([{ heading: heading, rows: rows }], { focus: 0 }));
+    var shown = false;
+    var finish = function (extra) {
+      if (shown) return;
+      shown = true;
+      (extra || []).forEach(function (a) { rows.push({ label: a.label, action: a.run }); });
+      rows.push({ label: 'Details', action: open(item) });
+      PL.app.push(screens.sheet([{ heading: heading, rows: rows }], { focus: 0 }));
+    };
+    var extra = PL.plugins && PL.plugins.actions ? PL.plugins.actions(item) : null;
+    if (extra && typeof extra.then === 'function') {
+      // external (sandboxed) plugins answer asynchronously; don't keep the menu waiting long
+      extra.then(finish, function () { finish(null); });
+      setTimeout(function () { finish(null); }, 600);
+    } else {
+      finish(extra);
+    }
     return true;
   };
 

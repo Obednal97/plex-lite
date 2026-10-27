@@ -360,6 +360,13 @@
       tabs.push({ id: 'section.' + s.key, label: s.title, make: function () { return PL.screens.library(s); } });
     });
     if (app.hasLiveTv) tabs.push({ id: 'livetv', label: 'Live TV', make: function () { return PL.screens.livetv(); } });
+    // plugin tabs (declarative screens; at most 2) sit before Settings
+    (PL.plugins && PL.plugins.tabs ? PL.plugins.tabs() : []).forEach(function (t) {
+      tabs.push({
+        id: 'plugin.' + t.plugin + '.' + t.id, label: t.title,
+        make: function () { return PL.screens.pluginScreen({ plugin: t.plugin, tab: t.id }, { root: true }); },
+      });
+    });
     tabs.push({ id: 'settings', label: 'Settings', make: function () { return PL.screens.settings(); } });
     app.tabs.setTabs(tabs);
   };
@@ -384,13 +391,30 @@
       var dvrs = PL.plex.get('/livetv/dvrs', null, { timeout: 6000 }).then(function (mc) {
         return !!(mc && mc.Dvr && mc.Dvr.length);
       }, function () { return false; });
-      return Promise.all([PL.plex.sections(), dvrs]);
+      // installed plugins are loaded before the tab bar is built (they may add tabs); capped wait
+      var plugins = PL.pluginHost && PL.pluginHost.autoStart ? Promise.race([
+        PL.pluginHost.autoStart(),
+        new Promise(function (r) { setTimeout(r, 3000); }),
+      ]) : null;
+      return Promise.all([PL.plex.sections(), dvrs, plugins]);
     }).then(function (res) {
       app.sections = res[0];
       app.hasLiveTv = res[1];
       app.buildTabs();
       app.selectTab(app.startTab());
       app.ready = true;
+      // plugins that loaded after the 3 s wait may add tabs: rebuild, keeping the tab
+      if (PL.pluginHost && PL.pluginHost.booted) {
+        PL.pluginHost.booted.then(function () {
+          var before = app.tabs.tabs.map(function (t) { return t.id; }).join();
+          var current = app.tabs.tabs[app.tabs.selected];
+          app.buildTabs();
+          var ids = app.tabs.tabs.map(function (t) { return t.id; });
+          if (ids.join() === before) return;
+          app.tabs.selected = Math.max(0, ids.indexOf(current && current.id));
+          app.tabs.paint();
+        });
+      }
       launch.run();
       // one-time tip so the hold-OK quick actions are discoverable
       if (!PL.storage.get('tip.holdOk', false)) {

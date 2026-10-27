@@ -7,7 +7,12 @@
 //   def.actions(item, ctx)       -> [{label, icon?, run()}]                  details pills + hold-OK menu
 //   def.onSelect(item, ctx)      OK on an item that came from one of its shelves
 //   def.services                 [luna service ids] bundled in plugins/<id>/service/
+//   def.tabs                     [{id, title}] tabs it adds (max 2 plugin tabs in total)
+//   def.screen(tabId, ctx)       -> Promise<model> what a tab shows (rendered by Plex Lite, see
+//                                   js/screens/plugin-screen.js): {type: 'shelves'|'grid'|'page', …}
 // A shelf is {id, title, kind: 'poster'|'wide', items, makeCard?, onSelect?}.
+// External plugins (separately installed, sandboxed; js/plugin-host.js) register definitions with
+// def.external = true whose hooks are all asynchronous.
 //
 // The host functions below are what screens call. Each one isolates every plugin (try/catch, plus a
 // timeout for promises): a broken plugin loses its own rows and is logged, the screen carries on.
@@ -18,7 +23,8 @@
   var defs = [];
   var bridges = [];
   var TIMEOUT_MS = 8000;
-  var ID_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;
+  var ID_RE = /^[a-z0-9][a-z0-9.-]{1,80}$/;
+  var MAX_TABS = 2;
 
   // ---- Registry, enable/disable -----------------------------------------------------------------
 
@@ -44,15 +50,19 @@
       PL.warn('plugin rejected (' + (def && def.id) + '): ' + problem);
       return false;
     }
-    def.ctx = makeCtx(def);
+    def.ctx = def.external ? { id: def.id } : makeCtx(def);
     defs.push(def);
     return true;
+  };
+
+  plugins.unregister = function (id) {
+    defs = defs.filter(function (d) { return d.id !== id; });
   };
 
   // [{id, name, version, enabled, description}]
   plugins.list = function () {
     return defs.map(function (d) {
-      return { id: d.id, name: d.name, version: d.version, description: d.description || '', enabled: plugins.isEnabled(d.id) };
+      return { id: d.id, name: d.name, version: d.version, description: d.description || '', enabled: plugins.isEnabled(d.id), external: !!d.external };
     });
   };
 
@@ -138,20 +148,52 @@
     })).then(flatten);
   };
 
-  // [{label, icon?, run()}] for a Plex item (details pills, hold-OK menu)
+  function cleanActions(d, list) {
+    return (list || []).filter(function (a) { return a && a.label && a.run; }).map(function (a) {
+      return { label: a.label, icon: a.icon, run: function () { safe(d, 'action', null, function () { a.run(); }); } };
+    });
+  }
+
+  // [{label, icon?, run()}] for a Plex item (details pills, hold-OK menu). Bundled plugins answer at
+  // once; if an external plugin is active the result is a Promise (callers handle both).
   plugins.actions = function (item) {
-    return flatten(active().filter(function (d) { return d.actions; }).map(function (d) {
-      return safe(d, 'actions', [], function () {
-        return (d.actions(item, d.ctx) || []).filter(function (a) { return a && a.label && a.run; }).map(function (a) {
-          return { label: a.label, icon: a.icon, run: function () { safe(d, 'action', null, function () { a.run(); }); } };
-        });
-      });
+    var withActions = active().filter(function (d) { return d.actions; });
+    var bundled = flatten(withActions.filter(function (d) { return !d.external; }).map(function (d) {
+      return safe(d, 'actions', [], function () { return cleanActions(d, d.actions(item, d.ctx)); });
     }));
+    var external = withActions.filter(function (d) { return d.external; });
+    if (!external.length) return bundled;
+    return Promise.all(external.map(function (d) {
+      return safeAsync(d, 'actions', function () { return d.actions(item); }).then(function (l) { return cleanActions(d, l); });
+    })).then(function (lists) { return bundled.concat(flatten(lists)); });
+  };
+
+  // ---- Tabs (declarative screens) ----------------------------------------------------------------
+
+  // [{plugin, id, title}] — at most MAX_TABS across all plugins, in registration order.
+  plugins.tabs = function () {
+    var out = [];
+    active().forEach(function (d) {
+      var list = typeof d.tabs === 'function' ? safe(d, 'tabs', [], function () { return d.tabs(); }) : d.tabs;
+      (Array.isArray(list) ? list : []).forEach(function (t) {
+        if (out.length >= MAX_TABS || !t || !t.id || !t.title || !d.screen) return;
+        out.push({ plugin: d.id, id: String(t.id), title: String(t.title).slice(0, 18) });
+      });
+    });
+    return out;
+  };
+
+  // The model a plugin tab shows (null if the plugin failed or timed out).
+  plugins.screen = function (pluginId, tabId) {
+    var d = find(pluginId);
+    if (!d || !d.screen || !plugins.isEnabled(d.id)) return Promise.resolve(null);
+    return safeAsync(d, 'screen', function () { return d.screen(tabId, d.ctx); });
   };
 
   // refresh (optional): lets a plugin ask Settings to redraw after it changed state
   plugins.settingsRows = function (refresh) {
-    return flatten(active().filter(function (d) { return d.settingsRows; }).map(function (d) {
+    // external plugins' rows are async; they live in their own sheet (Settings → Plugins → the plugin)
+    return flatten(active().filter(function (d) { return d.settingsRows && !d.external; }).map(function (d) {
       d.ctx.refreshSettings = refresh || function () {};
       return safe(d, 'settingsRows', [], function () { return d.settingsRows(d.ctx) || []; });
     }));

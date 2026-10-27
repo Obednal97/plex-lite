@@ -1,0 +1,11 @@
+{
+  "id": "com.example.plexlite.probe",
+  "name": "Sandbox Probe",
+  "description": "Test plugin: tries to escape the sandbox and reports what it could reach. Not published in the catalogue.",
+  "author": "Plex Lite examples",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "kind": "web",
+  "permissions": [],
+  "minAppVersion": "0.1.0"
+}

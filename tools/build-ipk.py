@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 APP = Path(__file__).resolve().parent.parent
-INCLUDE = ["appinfo.json", "index.html", "css", "js", "img", "plugins"]
+INCLUDE = ["appinfo.json", "index.html", "css", "js", "img", "plugins", "catalog"]
 TEXT = {".js", ".json", ".html", ".css"}
 
 

@@ -53,7 +53,7 @@ function files(dir, ext) {
 let problems = 0;
 const report = (file, line, msg) => { problems++; console.log(`${relative(APP, file)}:${line}  ${msg}`); };
 
-for (const file of [...files(join(APP, 'js'), '.js'), ...files(join(APP, 'plugins'), '.js')]) {
+for (const file of [...files(join(APP, 'js'), '.js'), ...files(join(APP, 'plugins'), '.js'), ...files(join(APP, 'catalog'), '.js'), ...files(join(APP, 'examples'), '.js')]) {
   const src = readFileSync(file, 'utf8');
   let ast;
   try {

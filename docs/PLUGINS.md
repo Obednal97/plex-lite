@@ -121,6 +121,58 @@ badge with `ctx.ui.badge(node, className, text)`.
 | `plexToken()` | the Plex account token; explicit so it can be permissioned later |
 | `service(method, params, serviceId?)` | calls one of the plugin's own `services` over the Luna bus |
 
+## Tabs and screens (declarative)
+
+A plugin can add up to two tabs (two plugin tabs in total across all plugins). It never draws UI:
+it returns a *model* and Plex Lite renders it with its own components, so the look and performance
+stay consistent.
+
+```js
+PL.plugins.register({
+  id: 'trending', name: 'Trending', version: '1.0.0', apiVersion: 1,
+  tabs: [{ id: 'main', title: 'Trending' }],
+  screen: function (tabId, ctx) {
+    return Promise.resolve({
+      type: 'shelves',                       // or 'grid' ({items}) or 'page' (details-like)
+      shelves: [{ title: 'This week', kind: 'poster', items: [
+        { title: 'Some film', year: 2026, thumb: '/library/metadata/1/thumb/1', ratingKey: '1' },
+        { title: 'Not in Plex', thumb: 'https://…', onSelect: function () {
+          return { type: 'page', title: 'Not in Plex', summary: '…',
+                   actions: [{ label: 'Request', icon: 'check', run: function () { /* … */ } }] };
+        } },
+      ] }],
+    });
+  },
+});
+```
+
+Items with a numeric `ratingKey` open Plex Lite's details page; an `onSelect` may return another model,
+which is pushed as a new screen. Catalogue (external) plugins declare their tabs in their catalogue
+entry (`tabs`) and need the `tabs` permission; see [PLUGINS-v2-design.md](PLUGINS-v2-design.md).
+
+## Bundled vs external plugins
+
+Bundled plugins (this document) are reviewed code shipped inside Plex Lite. External plugins are
+listed in the catalogue (`catalog/plugins.json`) and installed from Settings → Plugins → Browse
+plugins: Plex Lite downloads the code, checks its pinned SHA-256, asks for consent and runs it
+sandboxed with explicit permissions. Plex sign-in (the raw token) is a **Sensitive** permission,
+re-asked on every update and revocable in Settings → Plugins.
+
+- **Web plugin** (most plugins): one JS file using `PlexLitePlugin.register({...})` with the same hooks.
+  Put `plugin.js` + `plugin.json` (the catalogue entry without `bundleUrl`/`sha256`) in a folder and
+  run `node tools/build-plugin.mjs <folder>`; it copies the code to `catalog/bundles/` and pins the
+  hash. Example: `examples/plugins/hello-shelf`.
+- **Service plugin** (needs a background service, like Overseerr): an `.ipk` with the service, installed
+  by Plex Lite through Homebrew Channel (`ipkUrl` + `sha256`), plus a web bundle for the hooks
+  (`bundleUrl` + `bundleSha256`). How Overseerr would move there: PLUGINS-v2-design.md → Distribution.
+
+Writing hooks that return Promises and treating `ctx` calls as asynchronous lets the same plugin code
+move from bundled to external.
+
+External plugins can add at most two tabs between them (titles up to 18 characters); they sit before
+Settings in the tab bar. Installed plugins start lazily (in their frame) and are unloaded when idle,
+so having one installed doesn't slow down browsing.
+
 ## Services (when the web app can't do it alone)
 
 Overseerr needs one because its session cookie is `HttpOnly; SameSite=Lax`: the app (a `file://`
