@@ -38,6 +38,9 @@ const goNamed = (id) => goTab(JSON.stringify(id));
 const goMode = (sec, m) => goSection(sec) + `var s=PL.app.top();s.subnav.selected=s.subnav.index=${m};s.subnav.paint();s.setMode(${m});s.focusArea('content');`;
 const surprise = "var lib=PL.app.top();var r=PL.screens.surprise(lib.section,lib.surpriseFilters());" +
   "r.play=function(){r.stopCountdown();};PL.app.push(r);";
+const collection = (after) => "PL.plex.get('/library/sections/'+" + MOVIES + "+'/collections',{}).then(function(mc){" +
+  "var it=(mc.Metadata||[]).filter(function(x){return x.childCount>=2;})[0];var c=PL.screens.details(it);PL.app.push(c);" +
+  "setTimeout(function(){" + after + "},1500);return it.childCount+' titles';})";
 const run = (body, ret) => `(function(){${body}return ${ret || "'ok'"};})()`;
 // Opens the details page of the section's most recently watched item (Plex type 1 movie, 2 show),
 // or of PLEXLITE_SHOTS_MOVIE; `after` runs with the screen as d.
@@ -67,6 +70,10 @@ const PAGES = {
   // the reveal's countdown runs to the end (10 s shot) but its play() is stubbed, so nothing plays
   'surprise-shows': run(goSection(SHOWS) + surprise),
   'surprise-movies': run(goSection(MOVIES) + surprise),
+  // the first movie collection with 2+ titles: its page with the pill focused, then its reveal
+  'collection-surprise-pill': run(goSection(MOVIES), collection("c.key(38);")),
+  'collection-surprise': run(goSection(MOVIES), collection("setTimeout(function(){c.key(38);c.key(13);" +
+    "var r=PL.app.top();if(r.stopCountdown)r.play=function(){r.stopCountdown();};},1500);")),
 };
 
 const pages = only.length ? only : Object.keys(PAGES);

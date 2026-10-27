@@ -571,7 +571,7 @@
 
   screens.details = function (item) {
     if (item.type === 'collection') {
-      return screens.items(item.title, '/library/collections/' + item.ratingKey + '/children', {});
+      return screens.items(item.title, '/library/collections/' + item.ratingKey + '/children', {}, { collection: item });
     }
     return new DetailsScreen(item);
   };

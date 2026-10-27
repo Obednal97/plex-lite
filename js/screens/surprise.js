@@ -1,14 +1,18 @@
-// Surprise Me: picks something to watch from a Movies or TV Shows library, reveals it full screen
-// for a few seconds, then plays it. "What do you want to watch?" "I don't know." -> this.
+// Surprise Me: picks something to watch from a Movies or TV Shows library (or one collection),
+// reveals it full screen for a few seconds, then plays it. "What do you want to watch?" "I don't
+// know." -> this.
 //
 // Picking (PL.surprise.pick):
 // - unwatched titles first; if there are none, anything (a rewatch). Settings can include watched.
 // - in the Library view the active genre/decade filters apply, and the Unwatched filter is strict.
+// - from a collection page it picks among that collection's titles (same rules).
 // - movies play from where they were left; shows play their next episode (Plex's On Deck, which is
 //   S1 E1 for a show that was never started), or the first regular episode for a finished show.
-// - the last picks are remembered per profile and library (in memory), so Spin again doesn't
-//   bring the same title straight back.
+// - the last picks are remembered per profile and library/collection (localStorage, so they survive
+//   a restart), so Spin again or tomorrow's spin doesn't bring the same title straight back.
 // Watched state is the current Plex Home profile's: every request carries that profile's token.
+//
+// A source is a library section ({key, type}) or a collection ({key, type, collection: ratingKey}).
 'use strict';
 
 (function () {
@@ -18,31 +22,61 @@
 
   var COUNTDOWN_SEC = 8;
   var BATCH = 12;          // random candidates per request (lets us skip recent picks without a 2nd call)
-  var HISTORY = 15;        // recent picks remembered per library
+  var HISTORY = 15;        // recent picks remembered per library / collection
+  var HISTORY_SOURCES = 40; // libraries/collections remembered (oldest dropped), keeps the entry small
+  var COLLECTION_MAX = 300; // titles read from one collection
   var SPIN_MIN_MS = 650;   // the dice rolls at least this long, even when the pick is instant
   var PRELOAD_MS = 2500;   // reveal anyway if the art is slower than this
   var DECODE_MS = 240;     // art shown under the dice this long before the text, so its decode is done
+  var STORE = 'surprise.recent'; // {"<profile>:<source>": {t: lastUsed, keys: [ratingKey, ...]}}
 
-  var surprise = PL.surprise = { history: {} };
+  var surprise = PL.surprise = {};
 
-  function historyFor(section) {
+  function sourceId(source) {
     var profile = (PL.storage.get('profile', null) || {}).uuid || 'owner';
-    var key = profile + ':' + section.key;
-    return surprise.history[key] || (surprise.history[key] = []);
+    return profile + ':' + (source.collection ? 'c' + source.collection : 's' + source.key);
   }
 
-  surprise.remember = function (section, ratingKey) {
-    var h = historyFor(section);
-    var i = h.indexOf(ratingKey);
-    if (i !== -1) h.splice(i, 1);
-    h.unshift(ratingKey);
-    if (h.length > HISTORY) h.length = HISTORY;
+  // Storage can be full, disabled or hold something unexpected: history is best effort.
+  function loadRecent() {
+    try {
+      var all = PL.storage.get(STORE, null);
+      return all && typeof all === 'object' && !Array.isArray(all) ? all : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function historyFor(source) {
+    var entry = loadRecent()[sourceId(source)];
+    var keys = entry && Array.isArray(entry.keys) ? entry.keys : [];
+    return keys.filter(function (k) { return typeof k === 'string'; });
+  }
+
+  surprise.remember = function (source, ratingKey) {
+    try {
+      var all = loadRecent();
+      var id = sourceId(source);
+      var keys = historyFor(source).filter(function (k) { return k !== String(ratingKey); });
+      keys.unshift(String(ratingKey));
+      all[id] = { t: Date.now(), keys: keys.slice(0, HISTORY) };
+      var ids = Object.keys(all);
+      if (ids.length > HISTORY_SOURCES) {
+        ids.sort(function (a, b) { return ((all[b] && all[b].t) || 0) - ((all[a] && all[a].t) || 0); });
+        ids.slice(HISTORY_SOURCES).forEach(function (old) { delete all[old]; });
+      }
+      PL.storage.set(STORE, all);
+    } catch (e) {
+      PL.warn('surprise history not saved', e && e.message);
+    }
   };
 
+  surprise.recent = historyFor;
+
   // A random page of the library (sort=random is done by the server).
-  function query(section, filters, unwatched) {
+  function query(source, filters, unwatched) {
     var params = {
-      type: section.type === 'show' ? 2 : 1,
+      type: source.type === 'show' ? 2 : 1,
       sort: 'random',
       includeCollections: 0,
       'X-Plex-Container-Start': 0,
@@ -51,24 +85,53 @@
     if (filters.genre) params.genre = filters.genre.key;
     if (filters.decade) params.decade = filters.decade.key;
     if (unwatched) params.unwatched = 1;
-    return PL.plex.get('/library/sections/' + section.key + '/all', params).then(function (mc) {
+    return PL.plex.get('/library/sections/' + source.key + '/all', params).then(function (mc) {
       return { total: mc.totalSize != null ? mc.totalSize : (mc.size || 0), items: mc.Metadata || [] };
     });
   }
 
+  function shuffle(list) {
+    for (var i = list.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = list[i];
+      list[i] = list[j];
+      list[j] = t;
+    }
+    return list;
+  }
+
+  // Collections ignore sort=random and unwatched on the server, so the (small) list is read once
+  // and shuffled here.
+  function collectionPool(source, includeWatched) {
+    return PL.plex.get('/library/collections/' + source.collection + '/children', {
+      'X-Plex-Container-Start': 0, 'X-Plex-Container-Size': COLLECTION_MAX, excludeFields: 'summary',
+    }).then(function (mc) {
+      var items = (mc.Metadata || []).filter(function (it) { return it.type === 'movie' || it.type === 'show'; });
+      var unwatched = items.filter(function (it) { return !ui.isWatched(it); });
+      if (includeWatched) return { res: { total: items.length, items: shuffle(items) }, pool: 'all' };
+      if (unwatched.length) return { res: { total: unwatched.length, items: shuffle(unwatched) }, pool: 'unwatched' };
+      return { res: { total: items.length, items: shuffle(items) }, pool: 'rewatch' };
+    });
+  }
+
   // Prefers titles that weren't picked lately; in a tiny pool, at least not the last one again.
-  function choose(items, section, unwatchedOnly) {
-    var recent = historyFor(section);
+  function choose(items, source, unwatchedOnly) {
+    var recent = historyFor(source);
     var pool = unwatchedOnly ? items.filter(function (it) { return !ui.isWatched(it); }) : items;
     if (!pool.length) pool = items;
-    var fresh = pool.filter(function (it) { return recent.indexOf(it.ratingKey) === -1; });
+    var fresh = pool.filter(function (it) { return recent.indexOf(String(it.ratingKey)) === -1; });
     if (fresh.length) return fresh[0];
-    return pool.filter(function (it) { return it.ratingKey !== recent[0]; })[0] || pool[0] || null;
+    return pool.filter(function (it) { return String(it.ratingKey) !== recent[0]; })[0] || pool[0] || null;
   }
 
   // What actually plays: the movie itself, or the show's next episode.
   function resolve(item) {
-    if (item.type !== 'show') return Promise.resolve({ item: item, target: item, how: item.viewOffset > 0 ? 'resume' : 'start' });
+    var how = item.viewOffset > 0 ? 'resume' : 'start';
+    if (item.type !== 'show') {
+      if (item.summary != null) return Promise.resolve({ item: item, target: item, how: how });
+      // collection lists come without summaries: the reveal needs one
+      return PL.plex.metadata(item.ratingKey).then(function (full) { return { item: full, target: full, how: how }; });
+    }
     return PL.plex.metadata(item.ratingKey).then(function (show) {
       var deck = PL.plex.onDeck(show);
       if (deck) {
@@ -91,17 +154,19 @@
   surprise.resolve = resolve;
 
   // filters (Library view): {genre, decade, unwatched}. Resolves {item, target, how, total, pool}.
-  surprise.pick = function (section, filters) {
+  surprise.pick = function (source, filters) {
     filters = filters || {};
     var strict = !!filters.unwatched;
     var includeWatched = !strict && !!PL.storage.get('surprise.includeWatched', false);
-    return query(section, filters, !includeWatched).then(function (res) {
+    var found = source.collection ? collectionPool(source, includeWatched) : query(source, filters, !includeWatched).then(function (res) {
       if (res.items.length || includeWatched || strict) return { res: res, pool: includeWatched ? 'all' : 'unwatched' };
-      return query(section, filters, false).then(function (all) { return { res: all, pool: 'rewatch' }; });
-    }).then(function (r) {
-      var item = choose(r.res.items, section, r.pool === 'unwatched');
+      return query(source, filters, false).then(function (all) { return { res: all, pool: 'rewatch' }; });
+    });
+    return found.then(function (r) {
+      var item = choose(r.res.items, source, r.pool === 'unwatched');
       if (!item) {
-        var err = new Error(filters.genre || filters.decade || strict ? 'Nothing matches these filters' : 'This library is empty');
+        var err = new Error(source.collection ? 'This collection is empty'
+          : filters.genre || filters.decade || strict ? 'Nothing matches these filters' : 'This library is empty');
         err.empty = true;
         throw err;
       }
@@ -136,9 +201,9 @@
 
   // ---- The reveal ------------------------------------------------------------------------------
 
-  // section: the library; filters: from the Library view (or {}).
-  function SurpriseScreen(section, filters) {
-    this.section = section;
+  // source: the library or collection; filters: from the Library view, or {label} for a collection.
+  function SurpriseScreen(source, filters) {
+    this.source = source;
     this.filters = filters || {};
     this.el = PL.el('div', 'surprise is-spinning');
     this.gen = 0;
@@ -146,6 +211,7 @@
     // OK acts on release (like the library), so a held OK can't repeat into Spin again, or on
     // into the details page or the player that a press opens
     this.longPress = true;
+    this.noHoldTip = true; // the "hold OK on a title" tip doesn't apply here
     this.pick = null;
 
     var dice = PL.el('div', 'surprise-dice');
@@ -188,7 +254,7 @@
   }
 
   SurpriseScreen.prototype.noun = function (n) {
-    return this.section.type === 'show' ? (n === 1 ? 'show' : 'shows') : (n === 1 ? 'movie' : 'movies');
+    return this.source.type === 'show' ? (n === 1 ? 'show' : 'shows') : (n === 1 ? 'movie' : 'movies');
   };
 
   SurpriseScreen.prototype.spin = function () {
@@ -198,12 +264,12 @@
     var started = Date.now();
     this.spinning = true;
     this.stopCountdown();
-    this.diceLabel.textContent = this.section.type === 'show' ? 'Picking a show…' : 'Picking a movie…';
+    this.diceLabel.textContent = this.source.type === 'show' ? 'Picking a show…' : 'Picking a movie…';
     this.el.classList.add('is-spinning');
     PL.app.backdrop.dim(this.pick ? 0.5 : 0.35);
-    surprise.pick(this.section, this.filters).then(function (pick) {
+    surprise.pick(this.source, this.filters).then(function (pick) {
       if (gen !== self.gen || !self.alive) return null;
-      surprise.remember(self.section, pick.item.ratingKey);
+      surprise.remember(self.source, pick.item.ratingKey);
       var art = PL.plex.image(ui.artPath(pick.item), 1280, 720, { quality: 75 });
       var logo = ui.logoPath(pick.item);
       return preload([art, logo && ui.logoUrl(logo)].filter(Boolean), PRELOAD_MS).then(function () {
@@ -381,5 +447,5 @@
     return true;
   };
 
-  screens.surprise = function (section, filters) { return new SurpriseScreen(section, filters); };
+  screens.surprise = function (source, filters) { return new SurpriseScreen(source, filters); };
 })();
