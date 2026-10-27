@@ -187,15 +187,16 @@ session as before. CH+/CH− presses within 600 ms tune only the last channel, a
   started after the tune) all work by seeking; resuming after a pause plays on from where it paused.
 - **Sessions:** after CH+, CH+ ×2, Red and a mini-guide tune, leaving the player left no live sessions on the server.
 
+## Owner decisions (2026-10-27)
+
+1. **Recording:** not wanted. Not built.
+2. **Default filter:** the guide opens on Favourites whenever there are some; otherwise on the last filter used.
+
 ## Open questions for the owner
 
-1. **Recording.** The DVR can record, but the proxy has one tuner: a recording would take the tuner, so live TV
-   (in any Plex app) would fail during it, and recordings need disk space. Build Record (Red in the guide and
-   banner, a red dot on the cell) only if you want it and accept that.
-2. **Group prefixes.** IPTV titles like "UK - News One" are shown as "News One" when most channels carry such a prefix.
+1. **Group prefixes.** IPTV titles like "UK - News One" are shown as "News One" when most channels carry such a prefix.
    Would you like the groups (UK, USA, sports…) as filters too?
-3. **Default filter.** The guide remembers the last filter. Should it always open on Favourites once you have some?
-4. **Tune time.** 9–14 s per channel change on your setup, nearly all in the server's tune call (the IPTV proxy
+2. **Tune time.** 9–14 s per channel change on your setup, nearly all in the server's tune call (the IPTV proxy
    starting the stream). The proxy's buffer settings may shorten it; the app can't.
-5. **Buffer.** Plex keeps 90 minutes (`TranscoderLivePruneBuffer`). Forum reports say Plex's own players stall at that limit; long pauses were not tested here. Go live always works.
+3. **Buffer.** Plex keeps 90 minutes (`TranscoderLivePruneBuffer`). Forum reports say Plex's own players stall at that limit; long pauses were not tested here. Go live always works.
    that limit; ours goes live when the buffer runs out under it (not yet seen in a long test).

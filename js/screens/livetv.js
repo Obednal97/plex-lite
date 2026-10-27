@@ -63,7 +63,8 @@
     this.start = this.origin;   // view start
     this.anchor = now();        // the time Up/Down keep
     this.rows = {};             // index -> {chan, cells, track, nodes:[{a, node, label}], key, shifted}
-    this.filter = PL.storage.get('livetv.filter', 'all');
+    // opens on Favourites once there are some (the owner's choice); otherwise the last filter used
+    this.filter = G.favourites().length ? 'favourites' : PL.storage.get('livetv.filter', 'all');
     this.area = 'grid';
     this.visible = false;
     this.alive = true;

@@ -22,8 +22,9 @@ releases are fixes only.
 - Live TV rebuilt (docs/LIVETV-v2-design.md). The tab is a two-hour guide grid of every channel in
   the DVR's lineup (channels without guide data too), with the focused programme's details, synopsis
   and artwork above it, filters (All, Favourites, Movies, Sports, News), number keys to jump to a
-  channel, Favourites (hold OK or Yellow), and Back to return to now. Programmes load in three-hour
-  blocks for all channels, so moving never waits on the network.
+  channel, Favourites (hold OK or Yellow; the guide opens on Favourites once there are some), and
+  Back to return to now. Programmes load in three-hour blocks for all channels, so moving never
+  waits on the network.
 - The live player has its own controls: a channel banner on every zap (logo, number, programme,
   progress, time left, what's next), a mini guide over the picture (Up/Down), number entry, last
   channel (an icon, or Red), and Favourite. Pausing shows how far behind live you are, with Go live.
