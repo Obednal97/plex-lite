@@ -381,6 +381,14 @@
       app.selectTab(app.startTab());
       app.ready = true;
       launch.run();
+      // one-time tip so the hold-OK quick actions are discoverable
+      if (!PL.storage.get('tip.holdOk', false)) {
+        setTimeout(function () {
+          if (!app.ready || !app.top() || !app.top().longPress) return;
+          PL.toast('Tip: hold OK on any title for more options', 6000);
+          PL.storage.set('tip.holdOk', true);
+        }, 5000);
+      }
       // load the search index as soon as the first screen has drawn (cached copies load in slices)
       if (PL.fuzzy) setTimeout(function () { PL.fuzzy.ensure(); }, 1500);
     }).then(null, function (err) {
