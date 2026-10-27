@@ -68,7 +68,8 @@ helper can act on the webhook (e.g. blocklist the release, delete the file, sear
 - **Downloading screen** (Settings → Overseerr → Downloads, or OK on a Downloading card): one row per
   title with poster, title, episodes, a progress rail, "45% · 12 min left" and size. Shows group their
   episodes ("S1 E4–E6 · 3 episodes"). It refreshes every 10 s while it's open and stops when hidden.
-  OK opens the title in Plex when it's already in the library.
+  It opens at once with the list the shelf already loaded, then refreshes. OK opens the title in Plex
+  when it's already in the library.
 - **Downloading shelf** on each library's Recommended view (movies in movie libraries, shows in TV
   libraries), only when something is downloading; cards carry the progress bar and a percentage badge.
 - **Details badge**: "Downloading 45%", "Almost ready", "Queued" or "Download stalled" on the meta line

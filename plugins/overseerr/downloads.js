@@ -136,8 +136,9 @@
       paint();
     }
 
-    function load(fresh) {
-      return O.downloads(ctx, fresh ? 0 : 8000).then(render, function (err) {
+    // maxAge: how old a cached list may be (the shelf and badges keep one warm)
+    function load(maxAge) {
+      return O.downloads(ctx, maxAge).then(render, function (err) {
         if (!alive) return;
         if (!rows.length) setStatus('Couldn\'t load downloads', err && err.message);
         else ctx.warn('downloads refresh failed: ' + (err && err.message));
@@ -148,7 +149,7 @@
       clearTimeout(timer);
       timer = setTimeout(function () {
         if (!alive || !visible) return;
-        load(false).then(schedule, schedule);
+        load(REFRESH_MS - 2000).then(schedule, schedule);
       }, REFRESH_MS);
     }
 
@@ -168,7 +169,12 @@
         visible = true;
         ctx.backdrop(null);
         paint();
-        load(!rows.length).then(schedule, schedule);
+        // draw the list the shelf already has at once; the next refresh brings it up to date
+        var first = !rows.length;
+        load(first ? 60000 : REFRESH_MS - 2000).then(function () {
+          if (first && alive && visible) load(REFRESH_MS - 2000).then(schedule, schedule);
+          else schedule();
+        }, schedule);
       },
       hide: function () { visible = false; clearTimeout(timer); paint(); },
       destroy: function () { alive = false; clearTimeout(timer); },
