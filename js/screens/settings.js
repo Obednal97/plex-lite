@@ -49,7 +49,7 @@
       ];
       // Plugins: an On/Off row per installed plugin, then the enabled plugins' own rows; all before
       // Sign out / About.
-      var pluginToggles = PL.plugins.list().map(function (p) {
+      var pluginToggles = PL.plugins.list().filter(function (p) { return !p.external; }).map(function (p) {
         return {
           label: 'Plugin · ' + p.name,
           value: p.enabled ? 'On' : 'Off',
@@ -60,7 +60,7 @@
           },
         };
       });
-      defs.splice(defs.length - 2, 0, pluginToggles, PL.plugins.settingsRows(build));
+      defs.splice(defs.length - 2, 0, pluginToggles, externalPluginRows(), PL.plugins.settingsRows(build));
       defs = [].concat.apply([], defs);
       PL.clear(panel);
       rows = defs.map(function (d, i) {
@@ -127,6 +127,74 @@
         PL.toast('Connected to ' + s.name + ' (' + (KIND_LABEL[s.kind] || s.kind) + ')');
         build();
       }, function (err) { PL.toast(PL.errorMessage(err)); build(); });
+    }
+
+    // Separately installed (sandboxed) plugins: status row → a sheet with permissions, enable
+    // (consent), its own settings, turn off, and remove access.
+    function externalPluginRows() {
+      var host = PL.pluginHost;
+      if (!host || !host.list || !host.grants) return [];
+      return host.list().map(function (p) {
+        var on = p.active && PL.plugins.isEnabled(p.id);
+        var value = p.disabled ? 'Error' : !p.active ? (host.grants.get(p.id) ? 'Needs permission' : 'Off') : on ? (p.holdsToken ? 'On · Plex sign-in' : 'On') : 'Off';
+        return { label: 'Plugin · ' + p.title, value: value, action: function () { externalPluginSheet(p); } };
+      });
+    }
+
+    function refreshTabs() {
+      var current = PL.app.tabs.tabs[PL.app.tabs.selected];
+      PL.app.buildTabs();
+      var ids = PL.app.tabs.tabs.map(function (t) { return t.id; });
+      PL.app.tabs.selected = Math.max(0, ids.indexOf(current && current.id));
+      PL.app.tabs.paint();
+    }
+
+    function externalPluginSheet(p) {
+      var host = PL.pluginHost;
+      var rows = p.permissions.map(function (perm) {
+        var allowed = p.granted.indexOf(perm.id) !== -1;
+        return { label: perm.text, sub: (perm.risk === 'high' ? 'Sensitive · ' : '') + (allowed ? 'Allowed' : 'Not allowed'), action: function () {} };
+      });
+      if (!p.permissions.length) rows.push({ label: 'Needs no permissions', action: function () {} });
+      var actions = [];
+      if (!p.active) {
+        actions.push({ label: 'Enable…', action: function () {
+          PL.app.pop();
+          host.enable(p.id).then(function (def) {
+            if (def) { PL.plugins.setEnabled(p.id, true); PL.toast(p.title + ' is on'); refreshTabs(); }
+            build();
+          }, function (err) { PL.toast(PL.errorMessage(err)); });
+        } });
+      } else {
+        var on = PL.plugins.isEnabled(p.id);
+        if (on) {
+          actions.push({ label: 'Plugin settings', action: function () {
+            PL.app.pop();
+            var def = host.definitions[p.id];
+            def.settingsRows().then(function (list) {
+              if (!list.length) { PL.toast(p.title + ' has no settings'); return; }
+              PL.app.push(screens.sheet([{ heading: p.title, rows: list.map(function (r) { return { label: r.label, sub: r.value, action: r.action }; }) }]));
+            }, function (err) { PL.toast(PL.errorMessage(err)); });
+          } });
+        }
+        actions.push({ label: on ? 'Turn off' : 'Turn on', action: function () {
+          PL.app.pop();
+          PL.plugins.setEnabled(p.id, !on);
+          refreshTabs();
+          build();
+        } });
+        actions.push({ label: 'Remove access', sub: p.holdsToken ? 'Takes back your Plex sign-in' : '', action: function () {
+          PL.app.pop();
+          host.revoke(p.id);
+          PL.toast(p.title + ': access removed');
+          refreshTabs();
+          build();
+        } });
+      }
+      PL.app.push(screens.sheet([
+        { heading: p.title + ' ' + (p.version || '') + (p.description ? ' — ' + p.description : ''), rows: rows },
+        { heading: '', rows: actions },
+      ], { closeOnSelect: false, focus: rows.length }));
     }
 
     function pickProfile() {

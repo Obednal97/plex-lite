@@ -1,9 +1,9 @@
 {
-  "id": "com.bednal.plexlite.service",
-  "description": "Plex Lite background service (Overseerr session)",
+  "id": "com.bednal.plexlite.overseerr",
+  "description": "Overseerr plugin service (keeps the Overseerr session)",
   "services": [
     {
-      "name": "com.bednal.plexlite.service"
+      "name": "com.bednal.plexlite.overseerr"
     }
   ]
 }

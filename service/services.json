@@ -1,0 +1,9 @@
+{
+  "id": "com.bednal.plexlite.service",
+  "description": "Plex Lite core service (finds installed external plugins)",
+  "services": [
+    {
+      "name": "com.bednal.plexlite.service"
+    }
+  ]
+}

@@ -97,7 +97,7 @@ function runtimeFor(h, manifest, source, extra = {}) {
   return { rt, grants, plexCalls };
 }
 
-const HELLO_MANIFEST = { id: 'com.example.plexlite.hello', title: 'Hello Shelf', version: '1.0.0', apiVersion: 1, entry: 'plugin.js', permissions: ['plex:read'] };
+const HELLO_MANIFEST = { id: 'com.example.plexlite.hello', title: 'Hello Shelf', version: '1.0.0', apiVersion: 1, entry: 'plugin.js', permissions: ['plex:read', 'tabs'], tabs: [{ id: 'hello', title: 'Hello' }] };
 const PROBE_MANIFEST = { id: 'com.example.plexlite.probe', title: 'Sandbox Probe', version: '0.1.0', apiVersion: 1, entry: 'plugin.js', permissions: [] };
 
 // ---- permissions & sanitising -------------------------------------------------------------------
@@ -285,11 +285,107 @@ test('e2e: expired option ids are refused', async () => {
   rt.stop();
 });
 
+// ---- Phase 2 decisions: Sensitive token re-ask, tabs, screen models, revoke -----------------------
+
+test('plex:token is re-asked on any update (version or code hash); other grants carry over', () => {
+  const h = makeHost();
+  const g = new h.I.Grants(h.PL.storage);
+  const m = { version: '1.0.0', permissions: ['plex:read', 'plex:token'] };
+  g.set('t', { version: '1.0.0', hash: 'aaa', granted: ['plex:read', 'plex:token'], origins: [], denied: false });
+  eq(g.missing('t', m, 'aaa').map((p) => p.id), [], 'same version + hash: nothing to ask');
+  eq(g.missing('t', { ...m, version: '1.0.1' }, 'aaa').map((p) => p.id), ['plex:token']);
+  eq(g.missing('t', m, 'bbb').map((p) => p.id), ['plex:token'], 'code changed');
+  eq(g.missing('r', { version: '2', permissions: ['plex:read'] }, 'x').map((p) => p.id), ['plex:read']);
+  g.set('r', { version: '1', hash: 'x', granted: ['plex:read'], denied: false });
+  eq(g.missing('r', { version: '2', permissions: ['plex:read'] }, 'y').map((p) => p.id), [], 'non-sensitive grants survive updates');
+});
+
+test('screen models are sanitised; options become closures; unknown types refused', async () => {
+  const h = makeHost();
+  const rec = { granted: ['plex:read'], origins: [], denied: false };
+  const rt = { id: 'p', grant: () => rec, call: () => Promise.resolve({ type: 'page', title: 'Next', actions: [] }) };
+  assert.equal(h.I.sanitizeModel({ type: 'html', body: '<b>x</b>' }, rec, rt), null);
+  const m = h.I.sanitizeModel({ type: 'grid', title: 't'.repeat(200), items: Array.from({ length: 900 }, (_, i) => ({ title: 'T' + i, select: 'f' + i })) }, rec, rt);
+  assert.equal(m.title.length, 80);
+  assert.equal(m.items.length, 40, 'grid items go through the shelf sanitiser (capped)');
+  const next = await m.items[0].onSelect();
+  assert.equal(next.type, 'page');
+  const page = h.I.sanitizeModel({ type: 'page', title: 'P', summary: 's'.repeat(2000), actions: [{ id: 'f1', label: 'Go' }, { label: 'no id' }], shelves: [{ title: 'S', items: [{ title: 'a' }] }] }, rec, rt);
+  assert.equal(page.summary.length, 600);
+  assert.equal(page.actions.length, 1);
+  assert.equal(page.shelves[0].items[0].title, 'a');
+});
+
+test('e2e: a plugin tab needs the "tabs" grant, then renders shelves; an item opens a page whose action runs', async () => {
+  const h = makeHost();
+  const { rt, grants } = runtimeFor(h, HELLO_MANIFEST, HELLO, {
+    plex: {
+      get: (path) => Promise.resolve(path === '/library/sections'
+        ? { Directory: [{ key: '1', title: 'Movies' }] }
+        : { Metadata: [{ ratingKey: '11', title: 'Alpha', year: 2001, thumb: '/library/metadata/11/thumb/1', summary: 'Sum' }] }),
+      token: () => TOKEN,
+    },
+  });
+  grants.set(HELLO_MANIFEST.id, { granted: ['plex:read'], origins: [], denied: false });
+  const def = h.I.toDefinition(rt);
+  eq(def.tabs(), [], 'no tabs without the grant');
+  assert.equal(await def.screen('hello'), null);
+  grants.set(HELLO_MANIFEST.id, { granted: ['plex:read', 'tabs'], origins: [], denied: false });
+  eq(def.tabs(), [{ id: 'hello', title: 'Hello' }]);
+  const model = await def.screen('hello');
+  assert.equal(model.type, 'shelves');
+  assert.equal(model.shelves[0].title, 'Newest in Movies');
+  const page = await model.shelves[0].items[0].onSelect();
+  assert.equal(page.type, 'page');
+  assert.equal(page.title, 'Alpha');
+  await page.actions[0].run();
+  eq(h.toasts, ['Hello, Alpha']);
+  rt.stop();
+});
+
+test('registry: dotted external ids, at most 2 plugin tabs overall, unregister', () => {
+  const store = {};
+  const PL = {
+    warn() {}, log() {}, toast() {}, el() {}, http() {},
+    storage: { get: (k, d) => (k in store ? store[k] : d), set: (k, v) => { store[k] = v; }, del: (k) => { delete store[k]; } },
+    plex: { token: TOKEN },
+  };
+  const win = { PL, ...TIMERS };
+  win.window = win;
+  vm.createContext(win);
+  vm.runInContext(read('js/plugins.js'), win);
+  const screen = () => Promise.resolve({ type: 'shelves', shelves: [] });
+  assert.equal(PL.plugins.register({ id: 'one', name: 'One', version: '1', apiVersion: 1, tabs: [{ id: 'a', title: 'A' }, { id: 'b', title: 'B' }], screen }), true);
+  assert.equal(PL.plugins.register({ id: 'com.example.ext', name: 'Ext', version: '1', apiVersion: 1, external: true, tabs: () => [{ id: 'c', title: 'C' }], screen }), true);
+  eq(PL.plugins.tabs().map((t) => t.plugin + '/' + t.id), ['one/a', 'one/b'], 'capped at 2');
+  PL.plugins.unregister('one');
+  eq(PL.plugins.tabs().map((t) => t.plugin + '/' + t.id), ['com.example.ext/c']);
+  PL.plugins.setEnabled('com.example.ext', false);
+  eq(PL.plugins.tabs(), []);
+});
+
+test('revoke: grants removed, definition gone, plugin back to pending; token holders tracked', () => {
+  const h = makeHost();
+  const host = h.host;
+  host.grants = new h.I.Grants(h.PL.storage);
+  host.pending = [];
+  host.runtimes = { 'com.example.t': { id: 'com.example.t', manifest: { title: 'T', permissions: ['plex:token'] }, stop() {} } };
+  host.grants.set('com.example.t', { granted: ['plex:token'], origins: [], denied: false });
+  host.definitions['com.example.t'] = {};
+  eq(host.tokenHolders(), ['com.example.t']);
+  assert.equal(host.list()[0].holdsToken, true);
+  host.revoke('com.example.t');
+  eq(host.tokenHolders(), []);
+  assert.equal(host.grants.get('com.example.t'), null);
+  assert.ok(!host.definitions['com.example.t']);
+  eq(host.pending, ['com.example.t']);
+});
+
 // ---- service-side loader (Node 0.12-compatible reference) ----------------------------------------
 
 test('service loader: lists plugin packages, reads entries, rejects traversal', () => {
   const require = createRequire(import.meta.url);
-  const loader = require(join(ROOT, 'service-lib/plugin-loader.js'));
+  const loader = require(join(ROOT, 'service/plugin-loader.js'));
   const apps = mkdtempSync(join(tmpdir(), 'pl-apps-'));
   cpSync(join(ROOT, 'examples/plugins/hello-shelf'), join(apps, 'com.example.plexlite.hello'), { recursive: true });
   mkdirSync(join(apps, 'com.example.notaplugin'));

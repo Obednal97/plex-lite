@@ -68,6 +68,16 @@
     return { title: s.title, kind: s.kind, items: (s.items || []).map(wrapItem) };
   }
 
+  // Screen models (tabs): functions become ids, recursively for items/actions/shelves.
+  function wrapModel(m) {
+    if (!m || typeof m !== 'object') return null;
+    var out = { type: m.type, title: m.title, eyebrow: m.eyebrow, subtitle: m.subtitle, summary: m.summary, art: m.art };
+    if (m.items) out.items = m.items.map(wrapItem);
+    if (m.shelves) out.shelves = m.shelves.map(wrapShelf);
+    if (m.actions) out.actions = wrapList(m.actions, 'run');
+    return out;
+  }
+
   function wrapList(list, fnKey) {
     return (list || []).map(function (a) {
       var out = { label: a.label, icon: a.icon, value: a.value };
@@ -85,6 +95,7 @@
     },
     actions: function (item) { return Promise.resolve(def.actions(item, ctx)).then(function (l) { return wrapList(l, 'run'); }); },
     settingsRows: function () { return Promise.resolve(def.settingsRows(ctx)).then(function (l) { return wrapList(l, 'action'); }); },
+    screen: function (tabId) { return Promise.resolve(def.screen(tabId, ctx)).then(wrapModel); },
   };
 
   // Synchronous throws in plugin code become rejections, so the host always gets an answer.
@@ -93,7 +104,9 @@
     try {
       if (msg.m === 'invoke') {
         var fn = fns[msg.a[0]];
-        run = fn ? Promise.resolve(fn(msg.a[1], ctx)) : Promise.reject(new Error('That option has expired'));
+        // an option may answer with a new screen model to open
+        run = fn ? Promise.resolve(fn(msg.a[1], ctx)).then(function (v) { return v && v.type ? wrapModel(v) : null; })
+          : Promise.reject(new Error('That option has expired'));
       } else if (hooks[msg.m] && def && typeof def[msg.m] === 'function') {
         run = hooks[msg.m].apply(null, msg.a || []);
       } else {
@@ -132,6 +145,7 @@
         info: {
           id: d.id, name: d.name, version: d.version, apiVersion: d.apiVersion || 1,
           hooks: Object.keys(hooks).filter(function (h) { return typeof d[h] === 'function'; }),
+          tabs: (Array.isArray(d.tabs) ? d.tabs : []).slice(0, 2).map(function (t) { return { id: String(t.id), title: String(t.title) }; }),
         },
       });
     },

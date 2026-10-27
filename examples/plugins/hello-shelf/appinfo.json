@@ -10,7 +10,16 @@
   "plexlitePlugin": {
     "apiVersion": 1,
     "entry": "plugin.js",
-    "permissions": ["plex:read"],
-    "description": "Adds a \"Hello from a plugin\" shelf with a few random titles, and a \"Say hello\" action on details pages."
+    "permissions": [
+      "plex:read",
+      "tabs"
+    ],
+    "description": "Adds a Hello tab and shelf with a few random titles, and a \"Say hello\" action on details pages.",
+    "tabs": [
+      {
+        "id": "hello",
+        "title": "Hello"
+      }
+    ]
   }
 }

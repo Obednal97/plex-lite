@@ -360,6 +360,13 @@
       tabs.push({ id: 'section.' + s.key, label: s.title, make: function () { return PL.screens.library(s); } });
     });
     if (app.hasLiveTv) tabs.push({ id: 'livetv', label: 'Live TV', make: function () { return PL.screens.livetv(); } });
+    // plugin tabs (declarative screens; at most 2) sit before Settings
+    (PL.plugins && PL.plugins.tabs ? PL.plugins.tabs() : []).forEach(function (t) {
+      tabs.push({
+        id: 'plugin.' + t.plugin + '.' + t.id, label: t.title,
+        make: function () { return PL.screens.pluginScreen({ plugin: t.plugin, tab: t.id }, { root: true }); },
+      });
+    });
     tabs.push({ id: 'settings', label: 'Settings', make: function () { return PL.screens.settings(); } });
     app.tabs.setTabs(tabs);
   };
@@ -384,7 +391,12 @@
       var dvrs = PL.plex.get('/livetv/dvrs', null, { timeout: 6000 }).then(function (mc) {
         return !!(mc && mc.Dvr && mc.Dvr.length);
       }, function () { return false; });
-      return Promise.all([PL.plex.sections(), dvrs]);
+      // external plugins are discovered before the tab bar is built (they may add tabs); capped wait
+      var plugins = PL.pluginHost && PL.pluginHost.autoStart ? Promise.race([
+        PL.pluginHost.autoStart(),
+        new Promise(function (r) { setTimeout(r, 3000); }),
+      ]) : null;
+      return Promise.all([PL.plex.sections(), dvrs, plugins]);
     }).then(function (res) {
       app.sections = res[0];
       app.hasLiveTv = res[1];
