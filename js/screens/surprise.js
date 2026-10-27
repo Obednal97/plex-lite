@@ -87,6 +87,8 @@
     });
   }
 
+  surprise.resolve = resolve;
+
   // filters (Library view): {genre, decade, unwatched}. Resolves {item, target, how, total, pool}.
   surprise.pick = function (section, filters) {
     filters = filters || {};
@@ -140,6 +142,9 @@
     this.el = PL.el('div', 'surprise is-spinning');
     this.gen = 0;
     this.alive = true;
+    // OK acts on release (like the library), so a held OK can't repeat into Spin again, or on
+    // into the details page or the player that a press opens
+    this.longPress = true;
     this.pick = null;
 
     var dice = PL.el('div', 'surprise-dice');
@@ -271,7 +276,8 @@
   // counts down against a deadline so a slow frame never stretches it.
   SurpriseScreen.prototype.startCountdown = function () {
     this.stopCountdown();
-    if (!PL.storage.get('surprise.autoplay', true)) {
+    // never count down unseen (the app went to the background, or another screen is on top)
+    if (!PL.storage.get('surprise.autoplay', true) || document.hidden || !this.visible || !this.alive) {
       this.setPlayLabel();
       return;
     }
@@ -287,6 +293,10 @@
     this.counting = true;
     var tick = function () {
       var left = Math.ceil((end - Date.now()) / 1000);
+      if (document.hidden || !self.visible) {
+        self.stopCountdown();
+        return;
+      }
       if (left <= 0) {
         self.play();
         return;
@@ -324,6 +334,8 @@
     if (this.pick) {
       PL.app.backdrop.set(this.art, 'detail');
       PL.app.backdrop.dim(1);
+    } else if (this.spinning) {
+      PL.app.backdrop.dim(0.35); // the library just un-dimmed it as it was parked
     }
   };
 
@@ -357,7 +369,7 @@
       this.buttons.key(code);
       return true;
     }
-    if (code === K.ENTER) {
+    if (code === K.ENTER || code === K.OK_LONG) {
       this.buttons.press();
       return true;
     }
