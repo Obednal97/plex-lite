@@ -1,0 +1,17 @@
+{
+  "id": "com.bednal.plexlite",
+  "version": "0.1.0",
+  "vendor": "tv-rebuild",
+  "type": "web",
+  "main": "index.html",
+  "title": "Plex Lite",
+  "appDescription": "A lightweight Plex client for this TV",
+  "icon": "img/icon.png",
+  "largeIcon": "img/largeIcon.png",
+  "iconColor": "#181818",
+  "bgColor": "#0f0f0f",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "requiredMemory": 120,
+  "trustLevel": "default"
+}

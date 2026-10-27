@@ -1,0 +1,368 @@
+// App shell: screen stack, tab bar, backdrop, key dispatch, boot.
+'use strict';
+
+(function () {
+  var app = PL.app = {
+    stack: [],
+    sections: [],
+    tabsFocused: false,
+  };
+
+  // ---- Backdrop: one fixed layer behind every screen, cross-fading between two images --------
+
+  function Backdrop(root) {
+    this.el = PL.el('div', 'backdrop');
+    this.imgs = [PL.el('img', 'backdrop-img'), PL.el('img', 'backdrop-img')];
+    this.front = 0;
+    this.url = null;
+    this.mode = 'none';
+    var self = this;
+    this.imgs.forEach(function (img) { self.el.appendChild(img); });
+    this.el.appendChild(PL.el('div', 'backdrop-shade'));
+    root.appendChild(this.el);
+  }
+
+  // mode: 'ambient' (blurred, full screen) | 'hero' (sharp, top right) | 'detail' (sharp, full) | 'none'
+  Backdrop.prototype.set = function (url, mode) {
+    if (mode && mode !== this.mode) {
+      this.el.className = 'backdrop backdrop-' + mode;
+      this.mode = mode;
+    }
+    if (url === this.url) return;
+    this.url = url;
+    var back = this.imgs[1 - this.front];
+    var front = this.imgs[this.front];
+    var self = this;
+    if (!url) {
+      front.classList.remove('shown');
+      back.classList.remove('shown');
+      return;
+    }
+    back.onload = function () {
+      if (self.url !== url) return;
+      back.classList.add('shown');
+      front.classList.remove('shown');
+      self.front = 1 - self.front;
+    };
+    back.onerror = function () { if (self.url === url) front.classList.remove('shown'); };
+    back.src = url;
+  };
+
+  Backdrop.prototype.dim = function (level) {
+    this.el.style.opacity = String(level);
+  };
+
+  // ---- Tab bar ---------------------------------------------------------------------------------
+
+  function TabBar(root) {
+    this.el = PL.el('div', 'tabbar');
+    this.pill = PL.el('div', 'tabbar-pill');
+    this.el.appendChild(this.pill);
+    root.appendChild(this.el);
+    this.tabs = [];
+    this.index = 0;
+    this.selected = 0;
+  }
+
+  TabBar.prototype.setTabs = function (tabs) {
+    PL.clear(this.pill);
+    this.tabs = tabs;
+    var self = this;
+    this.nodes = tabs.map(function (t, i) {
+      var n = PL.el('div', 'tab', t.label);
+      n.addEventListener('click', function () { self.index = i; app.selectTab(i); });
+      self.pill.appendChild(n);
+      return n;
+    });
+    this.paint();
+  };
+
+  TabBar.prototype.paint = function () {
+    var self = this;
+    this.nodes.forEach(function (n, i) {
+      n.classList.toggle('focused', app.tabsFocused && i === self.index);
+      n.classList.toggle('selected', i === self.selected);
+    });
+  };
+
+  TabBar.prototype.show = function (on) {
+    this.el.classList.toggle('hidden', !on);
+  };
+
+  TabBar.prototype.key = function (code) {
+    var K = PL.KEY;
+    if (code === K.LEFT || code === K.RIGHT) {
+      var next = PL.clamp(this.index + (code === K.RIGHT ? 1 : -1), 0, this.tabs.length - 1);
+      if (next !== this.index) {
+        this.index = next;
+        this.paint();
+      }
+      return true;
+    }
+    if (code === K.ENTER) {
+      app.selectTab(this.index);
+      return true;
+    }
+    if (code === K.DOWN) {
+      app.blurTabs();
+      return true;
+    }
+    return code === K.UP;
+  };
+
+  // ---- Screens -----------------------------------------------------------------------------------
+
+  // A screen: {el, key(code, event) -> bool, show(), hide(), destroy(), focusFromTabs(),
+  //            root: bool (shows the tab bar)}
+
+  app.top = function () {
+    return app.stack[app.stack.length - 1];
+  };
+
+  function enter(screen) {
+    var el = screen.el;
+    el.classList.add('screen', 'screen-enter');
+    app.layer.appendChild(el);
+    requestAnimationFrame(function () { requestAnimationFrame(function () { el.classList.remove('screen-enter'); }); });
+    app.tabs.show(!!screen.root);
+    if (screen.show) screen.show();
+  }
+
+  function park(screen) {
+    if (screen.hide) screen.hide();
+    screen.el.classList.add('screen-parked');
+  }
+
+  function unpark(screen) {
+    screen.el.classList.remove('screen-parked');
+    app.tabs.show(!!screen.root);
+    if (screen.show) screen.show();
+  }
+
+  app.push = function (screen) {
+    app.blurTabs(true);
+    var prev = app.top();
+    if (prev && !screen.overlay) park(prev);
+    app.stack.push(screen);
+    enter(screen);
+    if (screen.overlay && prev) app.tabs.show(!!prev.root);
+  };
+
+  app.pop = function () {
+    if (app.stack.length <= 1) return false;
+    var screen = app.stack.pop();
+    if (screen.hide) screen.hide();
+    if (screen.destroy) screen.destroy();
+    if (screen.el.parentNode) screen.el.parentNode.removeChild(screen.el);
+    if (screen.overlay) app.tabs.show(!!app.top().root);
+    else unpark(app.top());
+    return true;
+  };
+
+  app.setRoot = function (screen) {
+    while (app.stack.length) {
+      var s = app.stack.pop();
+      if (s.hide) s.hide();
+      if (s.destroy) s.destroy();
+      if (s.el.parentNode) s.el.parentNode.removeChild(s.el);
+    }
+    app.stack.push(screen);
+    enter(screen);
+  };
+
+  app.focusTabs = function () {
+    if (!app.top() || !app.top().root) return false;
+    app.tabsFocused = true;
+    app.tabs.index = app.tabs.selected;
+    app.tabs.paint();
+    app.tabs.el.classList.add('tabbar-active');
+    if (app.top().onTabsFocus) app.top().onTabsFocus();
+    return true;
+  };
+
+  app.blurTabs = function (silent) {
+    if (!app.tabsFocused) return;
+    app.tabsFocused = false;
+    app.tabs.paint();
+    app.tabs.el.classList.remove('tabbar-active');
+    if (!silent && app.top() && app.top().focusFromTabs) app.top().focusFromTabs();
+  };
+
+  app.selectTab = function (i) {
+    var tab = app.tabs.tabs[i];
+    if (!tab) return;
+    app.tabs.selected = i;
+    app.tabs.index = i;
+    PL.storage.set('tab', tab.id);
+    app.blurTabs(true);
+    app.setRoot(tab.make());
+    app.tabs.paint();
+  };
+
+  // ---- Keys --------------------------------------------------------------------------------------
+
+  var fastTimer = null;
+
+  function onKey(e) {
+    var t0 = performance.now();
+    handleKey(e);
+    var ms = performance.now() - t0;
+    if (ms > 30) PL.log('slow key', e.keyCode, Math.round(ms) + 'ms');
+  }
+
+  function handleKey(e) {
+    var code = e.keyCode;
+    if (e.repeat) {
+      document.body.classList.add('fast');
+      clearTimeout(fastTimer);
+      fastTimer = setTimeout(function () { document.body.classList.remove('fast'); }, 160);
+    }
+    var t = e.target;
+    var typing = t && t.tagName === 'INPUT';
+    if (typing && !PL.isBack(code) && code !== PL.KEY.DOWN && code !== PL.KEY.UP && code !== PL.KEY.ENTER) return;
+    if (code === PL.KEY.BLUE && !typing) {
+      perf.toggle();
+      e.preventDefault();
+      return;
+    }
+    var screen = app.top();
+    var handled = false;
+    if (app.tabsFocused) {
+      if (PL.isBack(code)) {
+        PL.exitApp();
+        handled = true;
+      } else {
+        handled = app.tabs.key(code);
+      }
+    } else if (screen && screen.key) {
+      handled = screen.key(code, e);
+    }
+    if (!handled && PL.isBack(code)) {
+      if (app.stack.length > 1) app.pop();
+      else if (!(screen && screen.root && app.focusTabs())) PL.exitApp();
+      handled = true;
+    }
+    if (handled || (code >= 37 && code <= 40)) e.preventDefault();
+  }
+
+  // ---- Performance overlay (Blue button) ---------------------------------------------------
+
+  var perf = {
+    el: null,
+    on: false,
+    frames: 0,
+    worst: 0,
+    last: 0,
+    windowStart: 0,
+    toggle: function () {
+      perf.on = !perf.on;
+      PL.storage.set('perf', perf.on);
+      perf.apply();
+    },
+    apply: function () {
+      if (!perf.el) {
+        perf.el = PL.el('div', 'perf');
+        document.body.appendChild(perf.el);
+      }
+      perf.el.style.display = perf.on ? 'block' : 'none';
+      if (perf.on) {
+        perf.last = perf.windowStart = performance.now();
+        perf.frames = 0;
+        perf.worst = 0;
+        requestAnimationFrame(perf.tick);
+      }
+    },
+    tick: function (now) {
+      if (!perf.on) return;
+      perf.frames++;
+      perf.worst = Math.max(perf.worst, now - perf.last);
+      perf.last = now;
+      if (now - perf.windowStart >= 1000) {
+        var fps = Math.round(perf.frames * 1000 / (now - perf.windowStart));
+        var heap = performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) + 'MB' : '';
+        perf.el.textContent = fps + ' fps · worst ' + Math.round(perf.worst) + 'ms · ' + heap + ' · ' + document.getElementsByTagName('*').length + ' nodes';
+        perf.frames = 0;
+        perf.worst = 0;
+        perf.windowStart = now;
+      }
+      requestAnimationFrame(perf.tick);
+    },
+  };
+  app.perf = perf;
+
+  // ---- Boot --------------------------------------------------------------------------------------
+
+  app.message = function (title, body, actions) {
+    return PL.screens.message(title, body, actions);
+  };
+
+  app.buildTabs = function () {
+    var tabs = [{ id: 'search', label: 'Search', make: function () { return PL.screens.search(); } }];
+    app.sections.forEach(function (s) {
+      tabs.push({ id: 'section.' + s.key, label: s.title, make: function () { return PL.screens.library(s); } });
+    });
+    if (app.hasLiveTv) tabs.push({ id: 'livetv', label: 'Live TV', make: function () { return PL.screens.livetv(); } });
+    tabs.push({ id: 'settings', label: 'Settings', make: function () { return PL.screens.settings(); } });
+    app.tabs.setTabs(tabs);
+  };
+
+  // The tab to open on launch: the last one used, else the first library.
+  app.startTab = function () {
+    var ids = app.tabs.tabs.map(function (t) { return t.id; });
+    var last = ids.indexOf(PL.storage.get('tab', ''));
+    if (last >= 0 && ids[last] !== 'settings') return last;
+    return app.tabs.tabs.length > 1 ? 1 : 0;
+  };
+
+  app.start = function () {
+    if (!PL.plex.token) {
+      app.setRoot(PL.screens.signin(function () { app.start(); }));
+      return;
+    }
+    app.setRoot(PL.screens.loading('Connecting to your Plex server…'));
+    PL.plex.ensureServer().then(function () {
+      var dvrs = PL.plex.get('/livetv/dvrs', null, { timeout: 6000 }).then(function (mc) {
+        return !!(mc && mc.Dvr && mc.Dvr.length);
+      }, function () { return false; });
+      return Promise.all([PL.plex.sections(), dvrs]);
+    }).then(function (res) {
+      app.sections = res[0];
+      app.hasLiveTv = res[1];
+      app.buildTabs();
+      app.selectTab(app.startTab());
+      // warm the search index once the first screen has settled
+      if (PL.fuzzy) setTimeout(function () { PL.fuzzy.ensure(); }, 8000);
+    }).then(null, function (err) {
+      PL.warn('start failed', err && err.message);
+      if (err && err.status === 401) {
+        PL.plex.signOut();
+        app.start();
+        return;
+      }
+      app.setRoot(app.message('Can\'t reach Plex', PL.errorMessage(err), [
+        { label: 'Try again', kind: 'primary', action: app.start },
+        { label: 'Sign out', action: function () { PL.plex.signOut(); app.start(); } },
+      ]));
+    });
+  };
+
+  app.init = function () {
+    var root = document.getElementById('app');
+    app.backdrop = new Backdrop(root);
+    app.layer = PL.el('div', 'screens');
+    root.appendChild(app.layer);
+    app.tabs = new TabBar(root);
+    app.tabs.show(false);
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) return;
+      app.stack.slice().forEach(function (s) { if (s.onHidden) s.onHidden(); });
+    });
+    perf.on = !!PL.storage.get('perf', false);
+    if (perf.on) perf.apply();
+    PL.plex.init();
+    app.start();
+  };
+
+  document.addEventListener('DOMContentLoaded', app.init);
+})();

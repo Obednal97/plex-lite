@@ -1,0 +1,1165 @@
+// Video player: library items (direct play or server stream) and Live TV channels.
+'use strict';
+
+(function () {
+  var screens = PL.screens = PL.screens || {};
+  var K = PL.KEY;
+  var SCRUB_W = 1728;
+  var OSD_HIDE_MS = 4000;
+  var SEEK_COMMIT_MS = 800;
+  var TIMELINE_MS = 10000;
+
+  // What this TV decodes in hardware. The decision call must not send hasMDE, otherwise the
+  // server trusts the client and "direct plays" DTS. Only AC3/E-AC3 in the transcode target
+  // keeps 5.1 for the soundbar (with AAC listed the server picks AAC).
+  var PROFILE_EXTRA = [
+    'add-direct-play-profile(type=videoProfile&container=mkv,mp4,mov,m4v,mpegts,ts&videoCodec=h264,hevc,mpeg2video,vp9&audioCodec=aac,ac3,eac3,mp3,flac,opus)',
+    'add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mpegts&videoCodec=h264,hevc&audioCodec=ac3,eac3)',
+    'add-limitation(scope=videoCodec&scopeName=hevc&type=upperBound&name=video.bitDepth&value=10)',
+  ].join('+');
+
+  // With a text subtitle the server streams the video as a copy and serves WebVTT segments.
+  var PROFILE_EXTRA_VTT = PROFILE_EXTRA +
+    '+add-transcode-target(type=subtitleProfile&context=streaming&protocol=hls&container=webvtt&subtitleCodec=webvtt)';
+
+  var TEXT_SUBS = { srt: 1, subrip: 1, ass: 1, ssa: 1, vtt: 1, webvtt: 1, mov_text: 1, tx3g: 1, text: 1, smi: 1 };
+
+  function streamsOf(item, mediaIndex) {
+    var media = item && item.Media && (item.Media[mediaIndex || 0] || item.Media[0]);
+    var part = media && media.Part && media.Part[0];
+    return part ? part.Stream || [] : [];
+  }
+
+  function selectedSubtitle(item, mediaIndex) {
+    return streamsOf(item, mediaIndex).filter(function (s) { return s.streamType === 3 && s.selected; })[0] || null;
+  }
+
+  function selectedAudioId(item, mediaIndex) {
+    var a = streamsOf(item, mediaIndex).filter(function (s) { return s.streamType === 2 && s.selected; })[0];
+    return a ? a.id : null;
+  }
+
+  // 'none' | 'external' (text file on the server) | 'embedded' (text inside the video) | 'image' (PGS/VobSub)
+  function subtitleKind(stream) {
+    if (!stream) return 'none';
+    if (!TEXT_SUBS[String(stream.codec || '').toLowerCase()]) return 'image';
+    return stream.key ? 'external' : 'embedded';
+  }
+
+  // Direct play always gets the file's first audio track, so another choice needs a server stream.
+  function hasAlternateAudio(item, mediaIndex) {
+    var audio = streamsOf(item, mediaIndex).filter(function (s) { return s.streamType === 2; });
+    var chosen = audio.filter(function (s) { return s.selected; })[0];
+    return !!chosen && audio.indexOf(chosen) > 0;
+  }
+
+  function parseClock(t) {
+    var m = /(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})/.exec(t);
+    if (!m) return null;
+    return (Number(m[1] || 0) * 3600) + Number(m[2]) * 60 + Number(m[3]) + Number((m[4] + '00').slice(0, 3)) / 1000;
+  }
+
+  function cleanCueText(t) {
+    return t.replace(/\{[^}]*\}/g, '').replace(/\\N/gi, '\n').replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').trim();
+  }
+
+  // SRT, WebVTT and ASS/SSA (styling stripped) -> [{start, end, text}] sorted by start.
+  function parseSubtitles(text) {
+    var cues = [];
+    text = String(text || '').replace(/\r\n?/g, '\n');
+    if (/^\s*\[Script Info\]/i.test(text) || /^Dialogue:/m.test(text)) {
+      text.split('\n').forEach(function (line) {
+        if (line.indexOf('Dialogue:') !== 0) return;
+        var f = line.slice(9).split(',');
+        if (f.length < 10) return;
+        var start = parseClock(f[1].trim() + '0');
+        var end = parseClock(f[2].trim() + '0');
+        var body = cleanCueText(f.slice(9).join(','));
+        if (start != null && end != null && body) cues.push({ start: start, end: end, text: body });
+      });
+    } else {
+      text.split(/\n{2,}/).forEach(function (block) {
+        var lines = block.split('\n');
+        for (var i = 0; i < lines.length; i++) {
+          if (lines[i].indexOf('-->') === -1) continue;
+          var parts = lines[i].split('-->');
+          var start = parseClock(parts[0]);
+          var end = parseClock(parts[1]);
+          var body = cleanCueText(lines.slice(i + 1).join('\n'));
+          if (start != null && end != null && body) cues.push({ start: start, end: end, text: body });
+          return;
+        }
+      });
+    }
+    cues.sort(function (a, b) { return a.start - b.start; });
+    return cues;
+  }
+
+  function endsAt(secondsLeft) {
+    var d = new Date(Date.now() + secondsLeft * 1000);
+    var two = function (n) { return (n < 10 ? '0' : '') + n; };
+    return two(d.getHours()) + ':' + two(d.getMinutes());
+  }
+
+  var PILL_MS = 10000;
+  var CREDITS_FALLBACK_SEC = 30;
+
+  function setting(key, dflt) {
+    var v = PL.storage.get(key, dflt);
+    return typeof v === 'boolean' ? v : dflt;
+  }
+
+  // Intro markers, plus the end-credits start. Some shows carry several mid-episode "credits"
+  // markers, so only the final one (or the last one in the last 30% of the runtime) counts.
+  function parseMarkers(item) {
+    var list = item.Marker || [];
+    var intros = list.filter(function (m) { return m.type === 'intro' && m.endTimeOffset > m.startTimeOffset; })
+      .map(function (m) { return { start: m.startTimeOffset / 1000, end: m.endTimeOffset / 1000 }; });
+    var credits = list.filter(function (m) { return m.type === 'credits'; })
+      .sort(function (a, b) { return a.startTimeOffset - b.startTimeOffset; });
+    var fin = credits.filter(function (m) { return m.final; })[0] || credits[credits.length - 1];
+    var creditsStart = null;
+    var fromMarker = false;
+    if (fin && (fin.final || !item.duration || fin.startTimeOffset >= item.duration * 0.7)) {
+      creditsStart = fin.startTimeOffset / 1000;
+      fromMarker = true;
+    } else if (item.type === 'episode' && item.duration) {
+      creditsStart = Math.max(0, item.duration / 1000 - CREDITS_FALLBACK_SEC);
+    }
+    return { intros: intros, creditsStart: creditsStart, creditsFromMarker: fromMarker };
+  }
+
+  function Player(item, opts) {
+    opts = opts || {};
+    this.item = item;
+    this.full = null;
+    this.live = opts.live || null;
+    this.startOffset = opts.offset || 0;
+    this.mediaIndex = opts.mediaIndex || 0;
+    this.chapters = [];
+    this.subs = { kind: 'none', id: null, cues: [], shown: '', segs: {}, timer: null };
+    this.gen = 0;
+    this.state = 'idle';
+    this.mode = null;
+    this.base = 0;
+    this.session = null;
+    this.queue = opts.queue && opts.queue.items && opts.queue.items.length ? opts.queue : null;
+    this.retried = false;
+    this.pendingSeek = null;
+    this.seekPresses = 0;
+    this.lastSeekAt = 0;
+    this.lastReported = null;
+    this.build();
+  }
+
+  Player.prototype.build = function () {
+    var el = this.el = PL.el('div', 'player');
+    this.video = PL.el('video');
+    el.appendChild(this.video);
+
+    this.status = PL.el('div', 'player-status');
+    this.statusText = PL.el('div', 'player-status-text');
+    this.status.appendChild(PL.ui.spinner());
+    this.status.appendChild(this.statusText);
+    el.appendChild(this.status);
+
+    var osd = this.osd = PL.el('div', 'osd faded');
+    osd.appendChild(PL.el('div', 'osd-shade'));
+    var text = PL.el('div', 'osd-text');
+    this.eyebrow = PL.el('div', 'osd-eyebrow');
+    this.title = PL.el('div', 'osd-title');
+    text.appendChild(this.eyebrow);
+    text.appendChild(this.title);
+    osd.appendChild(text);
+    var scrub = this.scrub = PL.el('div', 'scrub');
+    this.bufferBar = PL.el('div', 'scrub-buffer');
+    this.playedBar = PL.el('div', 'scrub-played');
+    this.head = PL.el('div', 'scrub-head');
+    this.head.appendChild(PL.el('div', 'scrub-thumb'));
+    this.bubble = PL.el('div', 'scrub-bubble');
+    this.head.appendChild(this.bubble);
+    this.ticks = PL.el('div', 'scrub-ticks');
+    [this.bufferBar, this.playedBar, this.ticks, this.head].forEach(function (n) { scrub.appendChild(n); });
+    osd.appendChild(scrub);
+    var times = PL.el('div', 'osd-times');
+    this.elapsed = PL.el('span', 'left');
+    this.remaining = PL.el('span', 'right');
+    times.appendChild(this.elapsed);
+    times.appendChild(this.remaining);
+    osd.appendChild(times);
+    this.subEl = PL.el('div', 'subs');
+    el.appendChild(this.subEl);
+    el.appendChild(osd);
+
+    this.upnext = PL.el('div', 'upnext upnext-hidden');
+    this.upnextLabel = PL.el('div', 'upnext-label');
+    this.upnextTitle = PL.el('div', 'upnext-title');
+    this.upnextHint = PL.el('div', 'upnext-hint', 'OK to play now · Back to stop');
+    this.upnext.appendChild(this.upnextLabel);
+    this.upnext.appendChild(this.upnextTitle);
+    this.upnext.appendChild(this.upnextHint);
+    el.appendChild(this.upnext);
+
+    this.pill = PL.el('div', 'skip-pill skip-pill-hidden');
+    el.appendChild(this.pill);
+
+    var v = this.video;
+    var self = this;
+    var on = function (name, fn) { v.addEventListener(name, fn); };
+    on('loadedmetadata', function () {
+      if (self.mode === 'direct' && self.directStartSec > 0) {
+        self.directSeek(self.directStartSec);
+        self.directStartSec = 0;
+      }
+    });
+    on('seeked', function () { self.onSeeked(); });
+    on('playing', function () {
+      self.setStatus(null);
+      self.state = 'playing';
+      self.report();
+      self.showOsd();
+    });
+    on('pause', function () {
+      if (v.ended || (self.state !== 'playing' && self.state !== 'paused')) return;
+      self.state = 'paused';
+      self.report();
+      self.showOsd();
+    });
+    on('waiting', function () {
+      if (self.state === 'playing') self.setStatus('', true);
+    });
+    on('timeupdate', function () {
+      self.verifySeek();
+      if (!self.osdHidden) self.paintScrub();
+      self.renderSubs();
+      self.checkMarkers();
+    });
+    on('progress', function () { if (!self.osdHidden) self.paintScrub(); });
+    on('ended', function () { self.onEnded(); });
+    on('error', function () { self.onVideoError(); });
+  };
+
+  // ---- Status / OSD --------------------------------------------------------------------------
+
+  // text === null hides it; '' shows only the spinner (buffering).
+  Player.prototype.setStatus = function (text, spinning) {
+    if (text === null) {
+      this.status.classList.add('player-status-hidden');
+      return;
+    }
+    this.status.classList.remove('player-status-hidden');
+    this.status.classList.toggle('player-status-error', !spinning);
+    this.statusText.textContent = text;
+  };
+
+  Player.prototype.showOsd = function () {
+    var self = this;
+    this.osdHidden = false;
+    this.osd.classList.remove('faded');
+    this.subEl.classList.add('subs-raised');
+    this.paintScrub();
+    clearTimeout(this.osdTimer);
+    if (this.state === 'playing' && this.pendingSeek == null) {
+      this.osdTimer = setTimeout(function () { self.hideOsd(); }, OSD_HIDE_MS);
+    }
+  };
+
+  Player.prototype.hideOsd = function () {
+    clearTimeout(this.osdTimer);
+    this.osdHidden = true;
+    this.osd.classList.add('faded');
+    this.subEl.classList.remove('subs-raised');
+  };
+
+  Player.prototype.paintText = function () {
+    PL.clear(this.eyebrow);
+    if (this.live) {
+      var ch = this.live.channel;
+      this.eyebrow.appendChild(PL.el('span', 'osd-live', 'LIVE'));
+      this.eyebrow.appendChild(document.createTextNode((ch.vcn ? ch.vcn + '  ' : '') + (ch.title || '')));
+      this.title.textContent = this.programme || ch.title || '';
+      return;
+    }
+    var f = this.full || this.item;
+    if (f.type === 'episode') {
+      var ep = PL.fmt.episode(f);
+      this.eyebrow.textContent = (f.grandparentTitle || '') + (ep ? ' · ' + ep : '');
+    } else {
+      this.eyebrow.textContent = f.year ? String(f.year) : '';
+    }
+    this.title.textContent = f.title || '';
+  };
+
+  Player.prototype.durationSec = function () {
+    var f = this.full || this.item;
+    if (f && f.duration) return f.duration / 1000;
+    var d = this.video.duration;
+    return isFinite(d) ? d + (this.mode === 'transcode' ? this.base : 0) : 0;
+  };
+
+  // Where playback is meant to be: during a (re)start currentTime is still 0.
+  Player.prototype.intendedPosition = function () {
+    var pos = this.position();
+    if (!(this.video.currentTime > 0)) pos = Math.max(pos, this.lastOffsetSec || 0);
+    if (this.seekReq) pos = Math.max(pos, this.seekReq.target);
+    return pos;
+  };
+
+  Player.prototype.position = function () {
+    var t = this.video.currentTime || 0;
+    return this.mode === 'transcode' ? this.base + t : t;
+  };
+
+  Player.prototype.paintScrub = function () {
+    if (this.live) {
+      this.scrub.style.visibility = 'hidden';
+      this.elapsed.textContent = '';
+      this.remaining.textContent = '';
+      return;
+    }
+    this.scrub.style.visibility = '';
+    var dur = this.durationSec();
+    var pos = this.pendingSeek != null ? this.pendingSeek : this.position();
+    var frac = dur ? PL.clamp(pos / dur, 0, 1) : 0;
+    var played = dur ? PL.clamp(this.position() / dur, 0, 1) : 0;
+    var b = this.video.buffered;
+    var bufEnd = b && b.length ? b.end(b.length - 1) + (this.mode === 'transcode' ? this.base : 0) : 0;
+    this.playedBar.style.transform = 'scaleX(' + played.toFixed(4) + ')';
+    this.bufferBar.style.transform = 'scaleX(' + (dur ? PL.clamp(bufEnd / dur, 0, 1) : 0).toFixed(4) + ')';
+    this.head.style.transform = 'translate3d(' + Math.round(frac * SCRUB_W) + 'px,0,0)';
+    this.bubble.textContent = PL.fmt.clock(pos);
+    this.elapsed.textContent = PL.fmt.clock(pos);
+    this.remaining.textContent = dur ? '−' + PL.fmt.clock(Math.max(0, dur - pos)) + '  ·  Ends at ' + endsAt(Math.max(0, dur - pos)) : '';
+  };
+
+  // ---- Starting playback ---------------------------------------------------------------------
+
+  Player.prototype.show = function () {
+    PL.app.backdrop.set(null, 'none');
+    if (this.state === 'idle') this.begin();
+  };
+
+  Player.prototype.begin = function () {
+    var self = this;
+    if (this.state === 'stopped') return;
+    if (this.live) {
+      this.tune(this.live.channel);
+      return;
+    }
+    var gen = ++this.gen;
+    this.setStatus('Loading…', true);
+    PL.plex.get('/library/metadata/' + this.item.ratingKey, { includeMarkers: 1, includeChapters: 1, checkFiles: 0 }).then(function (mc) {
+      var full = mc && mc.Metadata && mc.Metadata[0];
+      if (!full) throw new Error('This item is no longer on the server');
+      if (gen !== self.gen) return;
+      self.full = full;
+      self.markers = parseMarkers(full);
+      self.markerState = { introDone: {}, creditsHandled: false, pillShownAt: 0, pillKind: null };
+      if (!full.Media || !full.Media[self.mediaIndex]) self.mediaIndex = 0;
+      self.loadChapters(full);
+      self.paintText();
+      if (self.queue) self.alignQueue(full);
+      else if (full.type === 'episode') self.loadQueue(full);
+      // resuming from a saved position: back up 5 s so the scene is recognisable
+      self.start(self.startOffset > 0 ? Math.max(0, self.startOffset - 5000) : 0);
+    }, function (err) { if (gen === self.gen) self.fail(err); });
+  };
+
+  Player.prototype.alignQueue = function (full) {
+    var q = this.queue;
+    var cur = q.items[q.index];
+    if (cur && cur.ratingKey === full.ratingKey) return;
+    for (var i = 0; i < q.items.length; i++) if (q.items[i].ratingKey === full.ratingKey) { q.index = i; return; }
+  };
+
+  Player.prototype.loadChapters = function (full) {
+    var dur = (full.duration || 0) / 1000;
+    this.chapters = (full.Chapter || []).map(function (c, i) {
+      return { start: (c.startTimeOffset || 0) / 1000, end: (c.endTimeOffset || 0) / 1000, title: c.tag || ('Chapter ' + (i + 1)) };
+    }).sort(function (a, b) { return a.start - b.start; });
+    PL.clear(this.ticks);
+    if (!dur) return;
+    var self = this;
+    this.chapters.forEach(function (c) {
+      if (c.start < 1 || c.start >= dur) return;
+      var t = PL.el('div', 'scrub-tick');
+      t.style.transform = 'translate3d(' + Math.round(c.start / dur * SCRUB_W) + 'px,0,0)';
+      self.ticks.appendChild(t);
+    });
+  };
+
+  Player.prototype.openChapters = function () {
+    var self = this;
+    var pos = this.position();
+    var current = 0;
+    this.chapters.forEach(function (c, i) { if (pos >= c.start) current = i; });
+    PL.app.push(screens.sheet([{
+      heading: 'Chapters',
+      rows: this.chapters.map(function (c, i) {
+        return {
+          label: c.title, sub: PL.fmt.clock(c.start), checked: i === current,
+          action: function () { if (self.state !== 'stopped') self.seekTo(c.start); },
+        };
+      }),
+    }], { focus: current }));
+  };
+
+  Player.prototype.loadQueue = function (full) {
+    var self = this;
+    PL.plex.createPlayQueue(full).then(function (mc) {
+      var items = mc.Metadata || [];
+      var idx = mc.playQueueSelectedItemOffset || 0;
+      for (var i = 0; i < items.length; i++) if (items[i].ratingKey === full.ratingKey) { idx = i; break; }
+      self.queue = { items: items, index: idx };
+    }, function (err) { PL.warn('play queue failed', err && err.message); });
+  };
+
+  Player.prototype.streamParams = function (offsetSec, transcode) {
+    var kind = this.live ? 'none' : subtitleKind(selectedSubtitle(this.full, this.mediaIndex));
+    var burn = kind === 'image';
+    if (kind === 'embedded') transcode = true;
+    if (!this.live && hasAlternateAudio(this.full, this.mediaIndex)) transcode = true;
+    var p = {
+      path: this.live ? this.liveKey : '/library/metadata/' + this.full.ratingKey,
+      mediaIndex: this.live ? 0 : this.mediaIndex,
+      partIndex: 0,
+      protocol: 'hls',
+      fastSeek: 1,
+      directPlay: transcode || burn || this.live ? 0 : 1,
+      directStream: 1,
+      directStreamAudio: 1,
+      videoQuality: 100,
+      videoResolution: '3840x2160',
+      maxVideoBitrate: 200000,
+      location: 'lan',
+      subtitleSize: 100,
+      audioBoost: 100,
+      // 'none' keeps a selected text subtitle away from the server (it would burn it in);
+      // we draw text subtitles ourselves.
+      subtitles: burn ? 'burn' : kind === 'embedded' ? 'auto' : this.live ? 'auto' : 'none',
+      advancedSubtitles: kind === 'embedded' ? 'text' : undefined,
+      session: this.session,
+      'X-Plex-Session-Identifier': this.session,
+      'X-Plex-Client-Profile-Name': 'Generic',
+      'X-Plex-Client-Profile-Extra': kind === 'embedded' ? PROFILE_EXTRA_VTT : PROFILE_EXTRA,
+    };
+    if (offsetSec > 0) p.offset = Math.floor(offsetSec);
+    return p;
+  };
+
+  // offsetMs: where to start. Asks the server how to play, then points the video at it.
+  Player.prototype.start = function (offsetMs) {
+    var self = this;
+    if (this.state === 'stopped') return;
+    this.teardownVideo();
+    this.stopTranscode();
+    var gen = ++this.gen;
+    // Live TV: Plex binds the tuned stream to the session id sent with the tune, so playback must
+    // reuse it (a different id gets "Failed to find consumer" and no segments).
+    this.session = this.live && this.liveSession ? this.liveSession : PL.uuid();
+    this.state = 'loading';
+    this.lastReported = null;
+    this.setStatus(this.live ? 'Starting ' + (this.live.channel.title || 'channel') + '…' : 'Loading…', true);
+    var offsetSec = (offsetMs || 0) / 1000;
+    this.lastOffsetSec = offsetSec;
+    this.everStarted = true;
+    this.seekReq = null;
+    var transcode = this.retried;
+    var params = this.streamParams(offsetSec, transcode);
+    PL.plex.get('/video/:/transcode/universal/decision', params, { timeout: 30000 }).then(function (mc) {
+      if (gen !== self.gen) return;
+      var code = mc.generalDecisionCode;
+      if (code && code >= 2000) throw new Error(mc.generalDecisionText || 'The server cannot play this item');
+      var media = mc.Metadata && mc.Metadata[0] && mc.Metadata[0].Media && mc.Metadata[0].Media[0];
+      var part = media && media.Part && media.Part[0];
+      if (part && part.decision === 'directplay' && !self.live) {
+        self.mode = 'direct';
+        self.base = 0;
+        self.directStartSec = offsetSec;
+        self.video.src = PL.plex.url(part.key);
+      } else {
+        self.mode = 'transcode';
+        self.base = self.live ? 0 : offsetSec;
+        self.video.src = PL.plex.url('/video/:/transcode/universal/start.m3u8', params);
+      }
+      PL.log('play', self.mode, self.live ? 'live' : self.full.ratingKey, 'at', Math.round(offsetSec) + 's');
+      if (!self.live) self.setupSubs();
+      var p = self.video.play();
+      if (p && p.catch) p.catch(function (e) { PL.warn('play() rejected', e && e.message); });
+      self.startTimeline();
+    }).catch(function (err) { if (gen === self.gen) self.fail(err); });
+  };
+
+  Player.prototype.startTimeline = function () {
+    var self = this;
+    clearInterval(this.timelineTimer);
+    this.timelineTimer = setInterval(function () { self.report(true); }, TIMELINE_MS);
+  };
+
+  // force: send even if the state has not changed (the periodic heartbeat).
+  Player.prototype.report = function (force, stateOverride, atSec) {
+    var state = stateOverride || (this.state === 'playing' ? 'playing' : this.state === 'paused' ? 'paused' : 'buffering');
+    if (!force && state === this.lastReported) return;
+    this.lastReported = state;
+    var params;
+    if (this.live) {
+      if (!this.liveMeta) return;
+      params = { ratingKey: this.liveMeta.ratingKey, key: this.liveMeta.key, state: state, time: Math.round((atSec != null ? atSec : this.position()) * 1000) };
+    } else {
+      if (!this.full) return;
+      params = {
+        ratingKey: this.full.ratingKey,
+        key: '/library/metadata/' + this.full.ratingKey,
+        state: state,
+        time: Math.round((atSec != null ? atSec : this.position()) * 1000),
+        duration: this.full.duration || Math.round(this.durationSec() * 1000),
+      };
+      var qi = this.queue && this.queue.items[this.queue.index];
+      if (qi && qi.ratingKey === this.full.ratingKey && qi.playQueueItemID) params.playQueueItemID = qi.playQueueItemID;
+    }
+    params['X-Plex-Session-Identifier'] = this.session;
+    PL.plex.timeline(params).catch(function (err) { PL.warn('timeline failed', err && err.message); });
+  };
+
+  // ---- Subtitles (drawn by the app) ---------------------------------------------------------------
+
+  Player.prototype.subtitleState = function () {
+    var st = selectedSubtitle(this.full, this.mediaIndex);
+    return { kind: subtitleKind(st), stream: st, audio: selectedAudioId(this.full, this.mediaIndex) };
+  };
+
+  // Called after every (re)start: loads cues for the selected text subtitle, if any.
+  Player.prototype.setupSubs = function () {
+    var want = this.subtitleState();
+    var sub = this.subs;
+    clearInterval(sub.timer);
+    sub.timer = null;
+    sub.segs = {};
+    sub.audio = want.audio;
+    var id = want.stream ? want.stream.id : null;
+    if (sub.id !== id || sub.kind !== want.kind) {
+      sub.cues = [];
+      this.showSubText('');
+    }
+    sub.kind = want.kind;
+    sub.id = id;
+    if (want.kind === 'external') this.loadExternalSubs(want.stream);
+    else if (want.kind === 'embedded' && this.mode === 'transcode') this.pollHlsSubs();
+  };
+
+  Player.prototype.loadExternalSubs = function (stream) {
+    var self = this;
+    var gen = this.gen;
+    if (this.subs.cues.length && this.subs.loadedId === stream.id) return;
+    PL.http('GET', PL.plex.url(stream.key, { encoding: 'utf-8' }), { text: true, timeout: 20000 }).then(function (text) {
+      if (gen !== self.gen || self.subs.id !== stream.id) return;
+      self.subs.cues = parseSubtitles(text);
+      self.subs.loadedId = stream.id;
+      PL.log('subtitles', stream.codec, self.subs.cues.length, 'cues');
+      self.renderSubs();
+    }, function (err) { PL.warn('subtitle load failed', err && err.message); PL.toast('Could not load these subtitles'); });
+  };
+
+  // Embedded text subtitles arrive as WebVTT segments of the HLS session; fetch the ones around
+  // the playhead every few seconds.
+  Player.prototype.pollHlsSubs = function () {
+    var self = this;
+    var session = this.session;
+    var tick = function () {
+      if (self.session !== session || self.state === 'stopped') return;
+      var dir = '/video/:/transcode/universal/session/' + session + '/vtt-base/';
+      PL.http('GET', PL.plex.url(dir + 'index.m3u8'), { text: true, timeout: 8000 }).then(function (m3u8) {
+        if (self.session !== session) return;
+        var t = 0;
+        var segs = [];
+        var dur = 0;
+        String(m3u8).split('\n').forEach(function (line) {
+          line = line.trim();
+          if (line.indexOf('#EXTINF:') === 0) dur = parseFloat(line.slice(8)) || 0;
+          else if (line && line.charAt(0) !== '#') { segs.push({ name: line, start: t, end: t + dur }); t += dur; }
+        });
+        var now = self.video.currentTime || 0;
+        segs.filter(function (sg) { return sg.end > now - 10 && sg.start < now + 40; }).forEach(function (sg) {
+          self.fetchVttSegment(dir, sg, session);
+        });
+      }, function () { /* not ready yet */ });
+    };
+    tick();
+    this.subs.timer = setInterval(tick, 4000);
+  };
+
+  Player.prototype.fetchVttSegment = function (dir, sg, session) {
+    var self = this;
+    var st = this.subs.segs[sg.name] || (this.subs.segs[sg.name] = { tries: 0, done: false, busy: false });
+    if (st.done || st.busy || st.tries >= 4) return;
+    st.busy = true;
+    st.tries++;
+    var base = this.base;
+    PL.http('GET', PL.plex.url(dir + sg.name), { text: true, timeout: 8000 }).then(function (text) {
+      st.busy = false;
+      if (self.session !== session) return;
+      var cues = parseSubtitles(text);
+      if (!cues.length) return; // empty until the transcoder reaches it, or a silent stretch
+      st.done = true;
+      // cue times may be relative to the stream (which starts at `base`) or to the file
+      var relative = Math.abs(cues[0].start - sg.start) < Math.abs(cues[0].start - (base + sg.start));
+      var add = relative ? base : 0;
+      var have = {};
+      self.subs.cues.forEach(function (c) { have[c.start.toFixed(2) + c.text] = 1; });
+      cues.forEach(function (c) {
+        var cue = { start: c.start + add, end: c.end + add, text: c.text };
+        if (!have[cue.start.toFixed(2) + cue.text]) self.subs.cues.push(cue);
+      });
+      self.subs.cues.sort(function (a, b) { return a.start - b.start; });
+      self.renderSubs();
+    }, function () { st.busy = false; });
+  };
+
+  Player.prototype.renderSubs = function () {
+    var cues = this.subs.cues;
+    if (this.subs.kind === 'none' || this.subs.kind === 'image' || !cues.length) {
+      if (this.subs.shown) this.showSubText('');
+      return;
+    }
+    var t = this.position();
+    var lo = 0;
+    var hi = cues.length - 1;
+    var idx = -1;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      if (cues[mid].start <= t) { idx = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    var lines = [];
+    for (var i = idx; i >= 0 && i > idx - 6; i--) {
+      if (cues[i].end > t) lines.unshift(cues[i].text);
+    }
+    this.showSubText(lines.join('\n').split('\n').slice(0, 3).join('\n'));
+  };
+
+  Player.prototype.showSubText = function (text) {
+    if (text === this.subs.shown) return;
+    this.subs.shown = text;
+    this.subEl.textContent = text;
+    this.subEl.style.display = text ? 'block' : 'none';
+  };
+
+  // After the track sheet: switch text subtitles in place; restart only when the stream must change.
+  Player.prototype.onTracksChanged = function () {
+    if (this.state === 'stopped' || !this.full) return;
+    var now = this.subtitleState();
+    var old = this.subs;
+    var restart = now.audio !== old.audio;
+    if (now.kind === 'image' || old.kind === 'image') restart = restart || now.kind !== old.kind || (now.stream && now.stream.id) !== old.id;
+    if (now.kind === 'embedded' && !(this.mode === 'transcode' && old.kind === 'embedded' && old.id === now.stream.id)) restart = true;
+    if (restart) {
+      this.start(this.intendedPosition() * 1000);
+      return;
+    }
+    this.setupSubs();
+    this.renderSubs();
+  };
+
+  // ---- Live TV -------------------------------------------------------------------------------
+
+  Player.prototype.tune = function (channel) {
+    var self = this;
+    if (this.state === 'stopped') return;
+    this.teardownVideo();
+    this.stopTranscode();
+    this.releaseLive();
+    var gen = ++this.gen;
+    this.live.channel = channel;
+    this.programme = '';
+    this.liveMeta = null;
+    this.state = 'loading';
+    this.paintText();
+    this.showOsd();
+    this.setStatus('Tuning ' + (channel.title || 'channel') + '…', true);
+    var session = PL.uuid();
+    this.liveSession = session;
+    PL.plex.request('POST', '/livetv/dvrs/' + this.live.dvrKey + '/channels/' + encodeURIComponent(channel.identifier) + '/tune',
+      { 'X-Plex-Session-Identifier': session }, { timeout: 45000 }).then(function (mc) {
+      var sub = mc && mc.MediaSubscription && mc.MediaSubscription[0];
+      var op = sub && sub.MediaGrabOperation && sub.MediaGrabOperation[0];
+      var meta = op && op.Metadata;
+      if (!meta || !meta.key) throw new Error('The tuner did not start this channel');
+      if (gen !== self.gen) {
+        self.releaseLiveMeta(meta);
+        return;
+      }
+      self.liveMeta = meta;
+      self.liveKey = meta.key;
+      // the stream path names the consumer the server attached: /livetv/sessions/<uuid>/<id>/index.m3u8
+      var part = meta.Media && meta.Media[0] && meta.Media[0].Part && meta.Media[0].Part[0];
+      var m = part && /\/livetv\/sessions\/[^/]+\/([^/?]+)\//.exec(part.key || '');
+      self.liveSession = m ? m[1] : session;
+      self.liveUuid = meta.Media && meta.Media[0] && meta.Media[0].uuid;
+      var now = sub.Timeline && sub.Timeline.Metadata && sub.Timeline.Metadata[0];
+      if (now) self.programme = now.grandparentTitle ? now.grandparentTitle + ' · ' + now.title : now.title;
+      self.paintText();
+      self.start(0);
+    }).catch(function (err) { if (gen === self.gen) self.fail(err); });
+  };
+
+  Player.prototype.changeChannel = function (dir) {
+    var list = this.live.channels || [];
+    if (!list.length) return;
+    var self = this;
+    this.live.index = ((this.live.index || 0) + dir + list.length) % list.length;
+    this.live.channel = list[this.live.index];
+    this.programme = '';
+    this.paintText();
+    this.showOsd();
+    clearTimeout(this.channelTimer);
+    this.channelTimer = setTimeout(function () { self.tune(self.live.channel); }, 600);
+  };
+
+  Player.prototype.releaseLiveMeta = function (meta) {
+    var uuid = meta && meta.Media && meta.Media[0] && meta.Media[0].uuid;
+    if (uuid) PL.plex.request('DELETE', '/transcode/sessions/' + uuid).catch(function () {});
+  };
+
+  Player.prototype.releaseLive = function () {
+    if (this.liveUuid) {
+      PL.plex.request('DELETE', '/transcode/sessions/' + this.liveUuid).catch(function () {});
+      this.liveUuid = null;
+    }
+  };
+
+  // ---- Seeking ---------------------------------------------------------------------------------
+
+  Player.prototype.seekBy = function (code) {
+    if (this.live || !this.full || this.state === 'loading') return;
+    var now = Date.now();
+    this.seekPresses = now - this.lastSeekAt < 400 ? this.seekPresses + 1 : 0;
+    this.lastSeekAt = now;
+    var step = code === K.FF || code === K.REW ? 30 : this.seekPresses > 8 ? 60 : this.seekPresses > 3 ? 30 : 10;
+    var dir = code === K.RIGHT || code === K.FF ? 1 : -1;
+    var dur = this.durationSec();
+    var from = this.pendingSeek != null ? this.pendingSeek : this.position();
+    this.pendingSeek = PL.clamp(from + dir * step, 0, Math.max(0, dur - 5));
+    this.scrub.classList.add('seeking');
+    this.showOsd();
+    var self = this;
+    clearTimeout(this.seekTimer);
+    this.seekTimer = setTimeout(function () { self.commitSeek(); }, SEEK_COMMIT_MS);
+  };
+
+  Player.prototype.cancelSeek = function () {
+    clearTimeout(this.seekTimer);
+    this.pendingSeek = null;
+    this.scrub.classList.remove('seeking');
+    this.showOsd();
+  };
+
+  Player.prototype.commitSeek = function () {
+    var target = this.pendingSeek;
+    this.pendingSeek = null;
+    this.scrub.classList.remove('seeking');
+    if (target == null) return;
+    if (this.mode === 'direct') {
+      this.directSeek(target);
+      this.showOsd();
+    } else {
+      this.start(target * 1000);
+    }
+  };
+
+  // webOS snaps direct-play seeks back to the previous keyframe. If a seek lands more than 1 s
+  // early, seek once more by the shortfall (capped) so we land on the keyframe after the target.
+  Player.prototype.directSeek = function (target) {
+    this.seekReq = { target: target, retried: false, first: null };
+    this.video.currentTime = target;
+  };
+
+  // The webOS pipeline reports the requested time on 'seeked', then resumes from the previous
+  // keyframe (seen 6-10 s early). So the landing is judged on the playback that follows: if it
+  // resumed more than 3 s short, seek once more, past the target by the shortfall (playbackRate
+  // trick-play freezes on this TV, so exact landing is not possible).
+  Player.prototype.onSeeked = function () {
+    var req = this.seekReq;
+    if (!req || this.mode !== 'direct') return;
+    req.seekedAt = Date.now();
+    if (!this.osdHidden) this.paintScrub();
+  };
+
+  Player.prototype.verifySeek = function () {
+    var req = this.seekReq;
+    if (!req || req.seekedAt == null || this.mode !== 'direct') return;
+    var now = this.video.currentTime;
+    var short = req.target - now;
+    if (short > 3 && !req.retried) {
+      req.retried = true;
+      req.first = now;
+      req.seekedAt = null;
+      this.video.currentTime = req.target + Math.min(12, short);
+      return;
+    }
+    if (Date.now() - req.seekedAt > 1500) {
+      PL.log('seek', req.target.toFixed(1), (req.first == null ? now : req.first).toFixed(1), now.toFixed(1));
+      this.seekReq = null;
+    }
+  };
+
+  // ---- Markers: skip intro / credits ------------------------------------------------------------
+
+  Player.prototype.showPill = function (kind, label) {
+    var st = this.markerState;
+    if (st.pillKind === kind) return;
+    st.pillKind = kind;
+    st.pillShownAt = Date.now();
+    this.pill.textContent = label;
+    this.pill.classList.remove('skip-pill-hidden');
+  };
+
+  Player.prototype.hidePill = function () {
+    if (this.markerState) this.markerState.pillKind = null;
+    this.pill.classList.add('skip-pill-hidden');
+  };
+
+  // Runs on every timeupdate (about 4 times a second).
+  Player.prototype.checkMarkers = function () {
+    var m = this.markers;
+    var st = this.markerState;
+    if (this.live || !m || !st || this.state !== 'playing' || this.pendingSeek != null) return;
+    var pos = this.position();
+    var intro = null;
+    for (var i = 0; i < m.intros.length; i++) {
+      if (pos >= m.intros[i].start && pos < m.intros[i].end - 1) { intro = m.intros[i]; intro.id = i; break; }
+    }
+    if (intro && !st.introDone[intro.id]) {
+      if (setting('autoSkipIntro', false)) {
+        st.introDone[intro.id] = true;
+        this.seekTo(intro.end);
+        PL.toast('Skipped intro', 2000);
+        return;
+      }
+      if (st.pillKind !== 'intro') {
+        st.introTarget = intro.end;
+        this.showPill('intro', 'Skip Intro');
+      } else if (Date.now() - st.pillShownAt > PILL_MS) {
+        st.introDone[intro.id] = true;
+        this.hidePill();
+      }
+      return;
+    }
+    if (st.pillKind === 'intro') this.hidePill();
+
+    var inCredits = m.creditsStart != null && pos >= m.creditsStart;
+    if (!inCredits) {
+      if (st.creditsHandled) {
+        // seeked back out of the credits: allow them to trigger again
+        st.creditsHandled = false;
+        if (this.upnextNext && this.state === 'playing') this.hideUpNext();
+        if (st.pillKind === 'credits') this.hidePill();
+      }
+      return;
+    }
+    if (st.creditsHandled) {
+      if (st.pillKind === 'credits' && Date.now() - st.pillShownAt > PILL_MS) this.hidePill();
+      return;
+    }
+    st.creditsHandled = true;
+    var next = this.nextItem();
+    var auto = setting('autoSkipCredits', false);
+    if (next) {
+      if (auto) this.playNext();
+      else this.showUpNext(next);
+      return;
+    }
+    if (!m.creditsFromMarker) return;
+    if (auto) this.finishCredits();
+    else this.showPill('credits', 'Skip Credits');
+  };
+
+  Player.prototype.finishCredits = function () {
+    if (this.full) PL.plex.setWatched(this.full.ratingKey, true).catch(function () {});
+    this.exit();
+  };
+
+  Player.prototype.activatePill = function () {
+    var st = this.markerState;
+    if (!st || !st.pillKind) return false;
+    var kind = st.pillKind;
+    this.hidePill();
+    if (kind === 'intro') {
+      for (var i = 0; i < this.markers.intros.length; i++) {
+        if (this.markers.intros[i].end === st.introTarget) st.introDone[i] = true;
+      }
+      this.seekTo(st.introTarget);
+    } else {
+      this.finishCredits();
+    }
+    return true;
+  };
+
+  Player.prototype.seekTo = function (sec) {
+    if (this.mode === 'direct') this.directSeek(sec);
+    else this.start(sec * 1000);
+  };
+
+  // ---- Ending, errors, next episode -----------------------------------------------------------
+
+  Player.prototype.markWatchedIfDone = function (pos) {
+    var dur = this.durationSec();
+    if (this.live || !this.full || !dur || pos / dur < 0.9) return;
+    PL.plex.setWatched(this.full.ratingKey, true).catch(function () {});
+  };
+
+  Player.prototype.nextItem = function () {
+    var q = this.queue;
+    return q && q.items[q.index + 1] ? q.items[q.index + 1] : null;
+  };
+
+  Player.prototype.onEnded = function () {
+    if (this.live) {
+      this.fail(new Error('The channel stopped'));
+      return;
+    }
+    var dur = this.durationSec();
+    this.report(true, 'stopped');
+    this.markWatchedIfDone(dur);
+    this.stopTranscode();
+    clearInterval(this.timelineTimer);
+    this.state = 'ended';
+    this.hidePill();
+    var next = this.nextItem();
+    if (!next) {
+      this.exit();
+      return;
+    }
+    if (setting('autoSkipCredits', false)) {
+      this.playNext();
+      return;
+    }
+    if (!this.upnextNext) this.showUpNext(next);
+    else this.upnextHint.textContent = 'OK to play now · Back to stop';
+  };
+
+  // Shown at the end credits (video still playing) or when the video ends.
+  Player.prototype.showUpNext = function (next) {
+    var self = this;
+    var left = 10;
+    var countdown = setting('autoplayNext', true);
+    clearTimeout(this.upnextTimer);
+    this.hideOsd();
+    this.hidePill();
+    this.upnextNext = next;
+    this.upnextTitle.textContent = (PL.fmt.episode(next) ? PL.fmt.episode(next) + ' · ' : '') + (next.title || '');
+    this.upnextHint.textContent = this.state === 'ended' ? 'OK to play now · Back to stop' : 'OK to play now · Back to keep watching';
+    var tick = function () {
+      self.upnextLabel.textContent = 'Up next in ' + left;
+      if (left-- <= 0) {
+        self.playNext();
+        return;
+      }
+      self.upnextTimer = setTimeout(tick, 1000);
+    };
+    this.upnext.classList.remove('upnext-hidden');
+    if (countdown) tick();
+    else this.upnextLabel.textContent = 'Up next';
+  };
+
+  Player.prototype.hideUpNext = function () {
+    clearTimeout(this.upnextTimer);
+    this.upnextNext = null;
+    this.upnext.classList.add('upnext-hidden');
+  };
+
+  Player.prototype.playNext = function () {
+    var next = this.upnextNext || this.nextItem();
+    this.hideUpNext();
+    this.hidePill();
+    if (!next) return this.exit();
+    if (this.state !== 'ended') {
+      // leaving during the credits: this one counts as watched
+      var pos = this.position();
+      this.gen++;
+      clearInterval(this.timelineTimer);
+      this.report(true, 'stopped');
+      if (this.full) PL.plex.setWatched(this.full.ratingKey, true).catch(function () {});
+      this.teardownVideo();
+      this.stopTranscode();
+      PL.log('next episode from credits at', Math.round(pos) + 's');
+    }
+    this.markers = null;
+    this.markerState = null;
+    this.mediaIndex = 0;
+    this.chapters = [];
+    PL.clear(this.ticks);
+    clearInterval(this.subs.timer);
+    this.subs = { kind: 'none', id: null, cues: [], shown: '', segs: {}, timer: null };
+    this.showSubText('');
+    this.everStarted = false;
+    this.lastOffsetSec = 0;
+    this.queue.index++;
+    this.item = next;
+    this.full = null;
+    this.retried = false;
+    this.startOffset = 0;
+    this.state = 'idle';
+    this.begin();
+  };
+
+  Player.prototype.onVideoError = function () {
+    if (!this.video.getAttribute('src') || this.state === 'stopped' || this.state === 'error' || this.state === 'ended') return;
+    var err = this.video.error;
+    PL.warn('video error', err && err.code, this.mode);
+    if (this.mode === 'direct' && !this.retried) {
+      this.retried = true;
+      this.start(this.intendedPosition() * 1000);
+      return;
+    }
+    this.fail(new Error('This video could not be played on the TV' + (err ? ' (code ' + err.code + ')' : '')));
+  };
+
+  Player.prototype.fail = function (err) {
+    PL.warn('playback failed', err && err.message);
+    this.state = 'error';
+    clearInterval(this.timelineTimer);
+    this.teardownVideo();
+    this.stopTranscode();
+    this.setStatus(PL.errorMessage(err) + '  ·  Press Back to return', false);
+    PL.toast(PL.errorMessage(err));
+  };
+
+  // ---- Stopping --------------------------------------------------------------------------------
+
+  Player.prototype.teardownVideo = function () {
+    var v = this.video;
+    if (!v.getAttribute('src')) return;
+    v.pause();
+    v.removeAttribute('src');
+    v.load();
+  };
+
+  Player.prototype.stopTranscode = function () {
+    if (this.session && this.mode === 'transcode') {
+      var session = this.session;
+      PL.plex.get('/video/:/transcode/universal/stop', { session: session }).catch(function () {});
+    }
+  };
+
+  Player.prototype.stop = function () {
+    if (this.state === 'stopped') return;
+    var wasPlaying = (this.everStarted || !!this.lastReported) && this.lastReported !== 'stopped';
+    var pos = this.intendedPosition();
+    this.gen++;
+    clearInterval(this.timelineTimer);
+    clearTimeout(this.osdTimer);
+    clearTimeout(this.seekTimer);
+    clearTimeout(this.channelTimer);
+    clearInterval(this.subs.timer);
+    this.showSubText('');
+    this.hideUpNext();
+    this.hidePill();
+    if (wasPlaying) {
+      this.report(true, 'stopped', pos);
+      this.markWatchedIfDone(pos);
+    }
+    this.state = 'stopped';
+    this.teardownVideo();
+    this.stopTranscode();
+    this.releaseLive();
+  };
+
+  // Removes this player even if sheets are open above it.
+  Player.prototype.exit = function () {
+    this.stop();
+    if (this.exited) return;
+    this.exited = true;
+    if (PL.app.stack.indexOf(this) === -1) return;
+    while (PL.app.top() !== this) {
+      if (!PL.app.pop()) return;
+    }
+    PL.app.pop();
+  };
+
+  Player.prototype.onHidden = function () {
+    if (!this.exited) this.exit();
+  };
+  Player.prototype.hide = function () {};
+  Player.prototype.destroy = function () { this.stop(); };
+
+  // ---- Keys -------------------------------------------------------------------------------------
+
+  Player.prototype.togglePause = function (want) {
+    var v = this.video;
+    if (this.state !== 'playing' && this.state !== 'paused') return;
+    var play = want == null ? v.paused : want;
+    if (play) {
+      var p = v.play();
+      if (p && p.catch) p.catch(function () {});
+    } else {
+      v.pause();
+    }
+    this.showOsd();
+  };
+
+  Player.prototype.key = function (code) {
+    var self = this;
+    if (this.upnextNext) {
+      if (code === K.ENTER || code === K.PLAY || code === K.PLAY_PAUSE) {
+        this.playNext();
+        return true;
+      }
+      if (this.state === 'ended' || code === K.STOP) {
+        if (PL.isBack(code) || code === K.STOP) { this.hideUpNext(); this.exit(); }
+        return true;
+      }
+      if (PL.isBack(code)) {
+        this.hideUpNext();
+        return true;
+      }
+    }
+    if (code === K.ENTER && this.pendingSeek == null && this.markerState && this.markerState.pillKind) {
+      this.activatePill();
+      return true;
+    }
+    if (PL.isBack(code)) {
+      if (this.pendingSeek != null) this.cancelSeek();
+      else if (!this.osdHidden && this.state === 'playing') this.hideOsd();
+      else this.exit();
+      return true;
+    }
+    if (code === K.STOP) { this.exit(); return true; }
+    if (this.state === 'error') return true;
+    switch (code) {
+      case K.ENTER:
+      case K.PLAY_PAUSE:
+        if (this.pendingSeek != null) this.commitSeek();
+        else this.togglePause();
+        break;
+      case K.PLAY: this.togglePause(true); break;
+      case K.PAUSE: this.togglePause(false); break;
+      case K.LEFT:
+      case K.RIGHT:
+      case K.FF:
+      case K.REW:
+        if (this.live) this.showOsd();
+        else this.seekBy(code);
+        break;
+      case K.UP:
+        if (!this.osdHidden && this.chapters.length > 1 && !this.live) this.openChapters();
+        else this.showOsd();
+        break;
+      case K.DOWN:
+        if (!this.live && this.full) {
+          screens.trackSheet(this.full, function () { self.onTracksChanged(); }, this.mediaIndex);
+        } else {
+          this.showOsd();
+        }
+        break;
+      case K.CH_UP:
+      case K.CH_DOWN:
+        if (this.live) this.changeChannel(code === K.CH_UP ? 1 : -1);
+        break;
+      default:
+        break;
+    }
+    return true;
+  };
+
+  screens.player = function (item, opts) { return new Player(item, opts); };
+})();

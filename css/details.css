@@ -1,0 +1,43 @@
+/* Details page additions: cast & crew portraits and the trailer icon. Chrome 53 safe. */
+
+.card-person .card-inner { border-radius: 50%; background: var(--glass); border: 1px solid var(--glass-edge); }
+.card-person .card-img { border-radius: 50%; }
+.card-person .card-edge { border-radius: 50%; }
+.person-initials {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 50%;
+  text-align: center; line-height: 178px; font-size: 56px; font-weight: 600; color: var(--text-2);
+}
+/* the shared focus shadow is a rounded rectangle, so the focused portrait carries its own */
+.card-person.focused .card-inner { transform: scale(1.08); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.55); }
+.card-person.focused .card-edge { background: linear-gradient(155deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 45%); }
+
+.person-meta { margin-left: -16px; width: 212px; text-align: center; }
+.person-meta .card-title { font-size: 24px; line-height: 30px; font-weight: 600; }
+.person-meta .card-sub { font-size: 21px; line-height: 28px; color: var(--text-2); }
+.card-person.focused .person-meta { transform: translate3d(0, 12px, 0); }
+
+/* film frame with a play triangle */
+.icon-trailer::before {
+  content: ""; position: absolute; left: 0; top: 4px; width: 28px; height: 20px;
+  border: 3px solid currentColor; border-radius: 4px;
+}
+.icon-trailer::after {
+  content: ""; position: absolute; left: 11px; top: 9px; border-style: solid;
+  border-width: 5px 0 5px 8px; border-color: transparent transparent transparent currentColor;
+}
+
+/* ratings: small outlined text badges after the media badges */
+.rating-badges { display: inline-block; margin-left: 6px; vertical-align: 2px; }
+.rating-badge {
+  display: inline-block; margin-right: 8px; padding: 0 8px; height: 26px; line-height: 24px; border-radius: 6px;
+  font-size: 17px; font-weight: 600; color: var(--text-2); background: var(--glass); border: 1px solid var(--glass-edge);
+}
+
+/* two offset frames */
+.icon-versions::before { content: ""; position: absolute; left: 7px; top: 1px; width: 20px; height: 16px; border: 3px solid currentColor; border-radius: 3px; opacity: 0.5; }
+.icon-versions::after { content: ""; position: absolute; left: 1px; top: 9px; width: 20px; height: 16px; border: 3px solid currentColor; border-radius: 3px; }
+
+/* check inside a frame (season) */
+.icon-season-check::before, .icon-season-uncheck::before { content: ""; position: absolute; left: 1px; top: 1px; width: 26px; height: 26px; border: 3px solid currentColor; border-radius: 6px; }
+.icon-season-check::after { content: ""; position: absolute; left: 11px; top: 6px; width: 6px; height: 12px; border: solid currentColor; border-width: 0 3px 3px 0; transform: rotate(45deg); }
+.icon-season-uncheck::after { content: ""; position: absolute; left: 7px; top: 13px; width: 14px; height: 3px; background: currentColor; }

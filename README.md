@@ -1,0 +1,35 @@
+# Plex Lite
+
+A fast, lightweight Plex client for LG TVs running webOS, built because the official Plex app is
+slow on older LG sets. It is plain JavaScript written for the TV's own browser engine (webOS 4.5 /
+Chrome 53): no framework, a minimal DOM, GPU-only animation, and server-side image resizing.
+
+Status: private, in active development. Personal details will be removed before it goes public.
+
+## Features
+
+- Libraries with Recommended, Library (sort, genre, decade, unwatched) and Collections views
+- Title pages with cast & crew, trailers and extras, ratings, versions, seasons and episodes
+- Player: direct play (H.264/HEVC 10-bit in MKV/MP4) or server streaming when needed, resume,
+  seeking, audio and subtitle choice, chapters, skip intro/credits, autoplay with Up Next
+- Fuzzy search as you type (typo-tolerant), plus episodes and people from the server
+- Live TV guide and playback through Plex Live TV & DVR
+- Plex Home profile switching, sign-in with a plex.tv/link code
+
+## Development
+
+- `tools/deploy.sh [--dev]` builds the .ipk and installs it on the TV over SSH (`ssh lgtv`, root via
+  Homebrew Channel). `--dev` embeds a Plex token from `~/.secrets/plex.env` and must never be committed.
+- `tools/check.mjs` checks the code against Chrome 53 (needs acorn in `~/.cache/plexlite-tools`).
+- `tools/tvdebug.mjs` talks to the TV's web runtime over DevTools (eval, key presses, traces, screenshots).
+- `tools/shots.mjs` screenshots every page at 0 s, 3 s and 10 s for visual review.
+- `tools/devserver.mjs` serves the app on the desktop with a Plex proxy that keeps the token server-side.
+- `node test/fuzzy.test.mjs` runs the search tests.
+
+## Credits
+
+- [Hearth](https://github.com/rudra-avatar/Hearth) (MIT) and the launchers it builds on
+  ([webos-launcher](https://github.com/partridgeworks/webos-launcher), [glasshouse](https://github.com/rorygallagher2024/glasshouse))
+- [webOS Homebrew Channel](https://github.com/webosbrew/webos-homebrew-channel) and the webosbrew community
+- [faultmanager-autoroot](https://github.com/throwaway96/faultmanager-autoroot) for rooting webOS TVs
+- Plex for the Plex Media Server API. This project is not affiliated with or endorsed by Plex or LG.

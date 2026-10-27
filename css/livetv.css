@@ -1,0 +1,3 @@
+/* Live TV: logo plates stay dark glass until the logo has loaded, then turn light. */
+.channel .channel-logo { background: rgba(255, 255, 255, 0.10); transition: background-color 200ms ease; }
+.channel .channel-logo.loaded { background: #f4f4f6; }

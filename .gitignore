@@ -1,0 +1,9 @@
+# never commit tokens or dev builds (dev builds embed a Plex token)
+js/dev-config.js
+*.ipk
+*.env
+.secrets/
+node_modules/
+.DS_Store
+.playwright-mcp/
+shots/
