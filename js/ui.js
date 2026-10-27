@@ -787,7 +787,7 @@
     this.opts = opts;
     this.cols = opts.columns || 7;
     // captions show under the focused poster only, so a row needs room for one caption + air
-    this.geo = { w: 250, h: 375, pitch: 280, rowPitch: 470, scale: 1.09 };
+    this.geo = { w: 250, h: 375, pitch: 296, rowPitch: 500, scale: 1.09 };
     this.items = [];
     this.total = opts.total || 0;
     this.index = 0;

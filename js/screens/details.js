@@ -550,8 +550,9 @@
 
   DetailsScreen.prototype.dimForScroll = function () {
     if (!this.visible) return;
+    // dim the sharp art once the title block scrolls away or focus is past the episodes/related rows
     var clipped = this.head && this.head.el.classList.contains('zone-clipped');
-    PL.app.backdrop.dim(clipped ? 0.35 : 1);
+    PL.app.backdrop.dim(clipped || this.stack.index >= 3 ? 0.3 : 1);
   };
 
   DetailsScreen.prototype.hide = function () {

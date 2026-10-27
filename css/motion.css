@@ -100,7 +100,7 @@
 .title-art.loaded img { opacity: 1; }
 .title-art .title-art-text { position: absolute; left: 0; bottom: 0; opacity: 0; transition: opacity 200ms linear; }
 .title-art.fallback .title-art-text { opacity: 1; }
-.hero .title-art { width: 760px; height: 120px; }
-.details-head-zone .title-art { width: 760px; height: 200px; }
+.hero .title-art { width: 760px; height: 120px; margin-bottom: 24px; }
+.details-head-zone .title-art { width: 760px; height: 200px; margin-bottom: 20px; }
 .title-art.small { width: 520px; height: 96px; margin-bottom: 10px; }
 .title-art-text.hero-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 860px; }
