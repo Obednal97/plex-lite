@@ -26,6 +26,15 @@ Nothing else is bundled: no frameworks, fonts, images or npm packages. The app i
 - [acorn](https://github.com/acornjs/acorn) and acorn-walk (MIT), used by `tools/check.mjs` and
   installed separately.
 
+## Demo library and screenshots, not bundled
+
+The README screenshots (`docs/screenshots/`) and the demo server (`tools/demo/`) use Blender open
+movies (CC BY / CC BY-SA, Blender Foundation | www.blender.org), public-domain films, NASA works and
+images from Wikimedia Commons. None of them ship in the app. `tools/demo/library.json` records only
+where each file comes from; the artwork is downloaded to a cache outside the repo. Every work, author
+and licence is listed in [docs/screenshots/CREDITS.md](docs/screenshots/CREDITS.md), which also
+gives the licence of the screenshots themselves.
+
 ## Works with
 
 - [webOS Homebrew Channel](https://github.com/webosbrew/webos-homebrew-channel) (MIT) and the
