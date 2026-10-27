@@ -14,7 +14,7 @@ lets the Plex server resize artwork. It stays smooth on hardware the official ap
 | --- | --- |
 | ![TV Shows, Recommended: hero art for Caminandes above a Continue Watching row](docs/screenshots/tv-recommended.jpg) | ![Sintel's title page: title art, synopsis, Resume and Trailer buttons, More Like This](docs/screenshots/movie-details.jpg) |
 | ![NASA ScienceCasts' title page: season tabs and episode cards](docs/screenshots/show-details.jpg) | ![Search: "sprit" already finds Sprite Fright and Spring](docs/screenshots/search.jpg) |
-| ![The player paused on Sintel: title, seek bar and the row of buttons](docs/screenshots/player.jpg) | ![Surprise Me revealing Tears of Steel with a countdown](docs/screenshots/surprise.jpg) |
+| ![The player paused on Sintel: title, chapter-segmented seek bar, Subtitles icon and tabs](docs/screenshots/player.jpg) | ![Surprise Me revealing Tears of Steel with a countdown](docs/screenshots/surprise.jpg) |
 
 <sub>Shown with a demo library of Blender open movies and public-domain films ([credits](docs/screenshots/CREDITS.md)).
 More in [Screenshots](#screenshots).</sub>
@@ -26,8 +26,9 @@ More in [Screenshots](#screenshots).</sub>
 - **Title pages**: cast and crew, trailers and extras, ratings, versions, seasons and episodes, and
   a page for each person
 - **Player**: direct play (H.264/HEVC including 10-bit, in MKV/MP4) or server transcoding when
-  needed. Resume, a seek bar you can scrub, buttons for subtitles, audio, chapters and the next
-  episode, Skip Intro and Skip Credits, and autoplay with Up Next (see [Player](#player)).
+  needed. Resume, a chapter-segmented seek bar you can jump along or scrub with a preview,
+  subtitle and audio menus that keep the video playing, Info / Chapters / Episodes tabs, Skip Intro
+  and Skip Credits, and an end-of-episode card with autoplay (see [Player](#player)).
 - **Search as you type**: typo-tolerant fuzzy search over your libraries, plus episodes and people
   from the server
 - **Live TV**: guide and playback through Plex Live TV & DVR
@@ -63,30 +64,35 @@ about 1 KB) and then only the page of titles around the target, however far down
 
 ## Player
 
-Any key brings up the controls: the title, a seek bar with the elapsed and remaining time, and a
-row of buttons (Play/Pause, back 10 s, forward 30 s, then Subtitles, Audio, Chapters and Next
-episode when the title has them). They hide after 4 seconds while playing and stay up while
-paused.
+Nothing is on screen while you watch. Any key brings up the controls: the title, a seek bar split
+into the title's chapters, the elapsed and remaining time, round icons for Subtitles, Audio (with
+more than one track) and Next episode, and tabs for Info, Chapters and Episodes. They hide after 5
+seconds while playing and stay up while paused, scrubbing or with a menu or tab open.
 
-| Key | Controls hidden | Seek bar focused | Buttons focused |
+| Key | Watching (controls hidden) | Seek bar | Icons, menus, tabs |
 | --- | --- | --- | --- |
-| OK | Skip Intro / Credits or Up Next when shown, else show the controls | Pause or play (or seek now, while scrubbing) | Press the button |
-| Left / Right | Start scrubbing (Right skips when Skip Intro / Credits or Up Next is shown) | Scrub: tap for 10 s, hold to go faster | Move between buttons |
-| Up / Down | Show the controls | Down: to the buttons. Up: to Skip Intro / Up Next if shown | Up: back to the seek bar |
-| Back | Dismiss Skip Intro or Up Next, else leave the player | Cancel the scrub, else hide the controls | Hide the controls |
-| Play, Pause, Play/Pause | Play or pause | | |
+| Left / Right | Jump back 10 s / forward 30 s (and show the controls) | Jump back 10 s / forward 30 s at once; hold to scrub with a preview. Paused: move the scrub target | Move between icons, tabs or cards |
+| OK | Skip Intro / Credits or the end card's button when shown, else show the controls | Pause or play; while scrubbing, jump to the target and play | Open the menu, choose, play the chapter or episode |
+| Up / Down | Show the controls | Up: the icons. Down: the tabs | Back towards the bar (Down from icons, Up from tabs) |
+| Back | Dismiss Skip Intro or the end card, else leave the player | Return from a scrub, else hide the controls | Close the menu or tab |
+| Play, Pause, Play/Pause | Play or pause (OK after scrubbing) | | |
 | Fast-forward, Next track | In an intro: jump to its end. In marked end credits: next episode (or finish). Otherwise forward 30 s | | |
 | Rewind, Previous track | Back 10 s | | |
 | Stop | Leave the player | | |
 
-Scrubbing moves a time bubble along the bar and seeks once, when you let go (or press OK): the TV
-can only start playback at keyframes, and a stream restart is slow, so one seek is better than one
-per press. Skip Intro and Skip Credits appear from Plex's intro and credits markers, which the server
-creates when intro and credits detection is on (Plex settings, Library). The button has the focus while it is shown, stays
-for 10 seconds, and comes back whenever you open the controls during the intro or credits. With
-the Magic Remote, point and click: on the seek bar to jump there (hover to see the time), on a
-button, or on Skip Intro. The LG Magic Remote (MR19) has Play and Pause keys but no fast-forward,
-so use OK or Right on Skip Intro there.
+Scrubbing pauses the picture and moves a target along the bar; a teal tick marks where you were,
+and OK jumps there (Back returns). When the server makes preview thumbnails (Plex settings,
+Library, "Generate video preview thumbnails"), a frame rides above the target; otherwise its time
+does. The TV can only start playback at keyframes, so a jump can land a few seconds off.
+Subtitles and Audio open a small menu above their icon while the video keeps playing; picture
+subtitles (PGS, VobSub) are burned in by the server. Skip Intro and Skip Credits appear from Plex's
+intro and credits markers, which the server creates when intro and credits detection is on (Plex
+settings, Library). The button has the focus while it is shown, stays for 10 seconds, and comes back
+whenever you open the controls during the intro or credits. At the end credits of an episode with a
+next one, a card offers Watch Credits and Next Episode (counting down when autoplay is on). With
+the Magic Remote, point and click: hovering focuses, the seek bar jumps where you click (hover to
+see the time). The LG Magic Remote (MR19) has Play and Pause keys but no fast-forward, so use OK on
+Skip Intro there.
 
 ## Surprise Me
 
@@ -123,8 +129,9 @@ differently from the TV's Chrome 53. Credits and licences: [docs/screenshots/CRE
 | ![The Sort by sheet over the library grid](docs/screenshots/movies-sort-sheet.jpg) | ![The Genre filter sheet](docs/screenshots/movies-genre-sheet.jpg) |
 | ![Movies, Collections: collage posters](docs/screenshots/movies-collections.jpg) | ![Sintel's title page scrolled to Extras and Cast & Crew](docs/screenshots/movie-details-cast.jpg) |
 | ![Cary Grant's person page: his films in the library](docs/screenshots/person.jpg) | ![Hold OK on a card: the quick-actions sheet for Tears of Steel](docs/screenshots/quick-actions.jpg) |
-| ![Scrubbing in Sintel: the time bubble shows the target and the jump](docs/screenshots/player-scrub.jpg) | ![The player's buttons with Subtitles focused](docs/screenshots/player-buttons.jpg) |
-| ![Skip Intro on a Caminandes episode](docs/screenshots/skip-intro.jpg) | ![Up Next over the end of a Caminandes episode](docs/screenshots/up-next.jpg) |
+| ![Scrubbing in Sintel: a preview frame and its time ride above the target](docs/screenshots/player-scrub.jpg) | ![The Subtitles menu open above its icon](docs/screenshots/player-subtitles.jpg) |
+| ![The Chapters tab: the controls slide up for a row of chapter cards](docs/screenshots/player-chapters.jpg) | |
+| ![Skip Intro on a Caminandes episode](docs/screenshots/skip-intro.jpg) | ![The end card over the credits of a Caminandes episode](docs/screenshots/up-next.jpg) |
 | ![Live TV: channels with what's on now and next](docs/screenshots/live-tv.jpg) | ![Settings](docs/screenshots/settings.jpg) |
 | ![Settings, Profile: the Plex Home "Who's watching?" sheet](docs/screenshots/settings-profiles.jpg) | ![Sign-in with a plex.tv/link code](docs/screenshots/signin.jpg) |
 

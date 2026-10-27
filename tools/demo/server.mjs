@@ -17,7 +17,7 @@
 // ~/.cache/plexlite/demo-media), PLEXLITE_DEMO_LIVETV=0 to hide Live TV.
 // Content and licences: tools/demo/library.json and docs/screenshots/CREDITS.md.
 import { createServer } from 'node:http';
-import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
@@ -162,6 +162,31 @@ function subtitles(res, streamId) {
   return send(res, 200, cues.join('\n'), 'text/plain; charset=utf-8');
 }
 
+// Preview thumbnails (Plex's /library/parts/<id>/indexes/sd/<ms>): frames from
+// PLEXLITE_DEMO_MEDIA/previews/<video>/<seconds>.jpg when someone has made them, else the title's
+// backdrop for every time. Titles with neither answer 404, as a server without previews would.
+const previewDirs = new Map();
+function previewFrames(video) {
+  if (!previewDirs.has(video)) {
+    const dir = join(MEDIA_DIR, 'previews', video);
+    const list = existsSync(dir) ? readdirSync(dir).filter((f) => /^\d+\.jpg$/.test(f)).map((f) => ({ sec: Number(f.slice(0, -4)), file: join(dir, f) })) : [];
+    previewDirs.set(video, list.sort((a, b) => a.sec - b.sec));
+  }
+  return previewDirs.get(video);
+}
+
+function preview(res, partId, ms) {
+  const found = partById(partId);
+  if (!found || !found.part.video) return send(res, 404, 'no such part', 'text/plain');
+  const frames = previewFrames(found.part.video);
+  const sec = Number(ms) / 1000;
+  let file = null;
+  for (const f of frames) if (f.sec <= sec + 1) file = f.file;
+  if (!file && frames.length) file = frames[0].file;
+  if (!file) file = imageFile(found.item.art || '');
+  return file ? send(res, 200, readFileSync(file), TYPES[extname(file)]) : send(res, 404, 'no preview', 'text/plain');
+}
+
 function partById(id) {
   for (const it of model.items.values()) {
     for (const m of it.Media || []) for (const p of m.Part) if (String(p.id) === String(id)) return { item: it, part: p };
@@ -269,6 +294,7 @@ function pms(req, res, path, q) {
   if ((m = /^\/library\/parts\/(\d+)\/\d+\/file\.webm$/.exec(path))) return video(req, res, m[1]);
   if (method === 'PUT' && /^\/library\/parts\/\d+$/.test(path)) return send(res, 200, '');
   if ((m = /^\/library\/streams\/(\d+)$/.exec(path))) return subtitles(res, m[1]);
+  if ((m = /^\/library\/parts\/(\d+)\/indexes\/sd\/(\d+)$/.exec(path))) return preview(res, m[1], m[2]);
   if (path === '/library/sections') {
     return send(res, 200, container({ size: 2, title1: 'Plex Library', Directory: model.sections.map((s) => ({ ...s, allowSync: false, art: '', thumb: '' })) }));
   }

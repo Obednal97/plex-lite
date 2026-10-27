@@ -19,16 +19,29 @@ releases are fixes only.
 
 ### Changed
 
-- Player controls rebuilt: they appear on any key and hide after 4 seconds (they stay while
-  paused). A focusable seek bar scrubs with Left/Right (tap 10 s, hold to speed up) behind a time
-  bubble and seeks once on release. A row of buttons below it: Play/Pause, back 10 s, forward
-  30 s, Subtitles, Audio, Chapters and Next episode. Down and Up no longer jump straight to the
-  subtitle and chapter menus. Pointer: click the bar to seek there, hover for the time.
-- Skip Intro / Skip Credits is now a large button that has the focus while it is shown (OK or
-  Right skips), returns whenever the controls are opened during the intro or credits, and can be
-  clicked with the Magic Remote. Fast-forward (or a keyboard's next-track key) jumps to the end of
-  an intro or skips the credits, and moves forward 30 s elsewhere.
-- Up Next is a card with a "Play next episode" button and works with the pointer.
+- Player rebuilt after the Apple TV app (with some Netflix): nothing on screen while watching;
+  any key brings up the title, a seek bar split into chapters, the times ("−5:35 · Ends at 21:14"),
+  round Subtitles / Audio / Next episode icons and Info / Chapters / Episodes tabs. They hide after
+  5 seconds and stay while paused. Left/Right jump back 10 s / forward 30 s straight away (taps add
+  up); holding them, or Left/Right while paused, scrubs with a preview (Plex's preview thumbnails
+  when the server makes them, else the time) and OK jumps there, Back returns. OK pauses.
+- Subtitles and audio change from a small menu above their icon while the video keeps playing;
+  picture subtitles are marked as burned in by the server. Subtitle size (Small, Medium, Large) is
+  under "Size and style".
+- Down from the bar opens tabs: Info (synopsis, Start from the beginning, what is playing and
+  whether the server converts it), Chapters (cards with thumbnails when Plex has them; OK seeks)
+  and Episodes (the season; OK plays one).
+- Skip Intro / Skip Credits is a large focused button (OK skips) with a line showing the time
+  left; it returns, above the icons, whenever the controls are opened during the intro or credits.
+  Fast-forward (or a keyboard's next-track key) jumps to the end of an intro or skips the credits,
+  and moves forward 30 s elsewhere.
+- At the end credits of an episode with a next one, an end card shows what is next with Watch
+  Credits and a "Next Episode in 10" countdown (if autoplay is on). Movies and last episodes keep
+  Skip Credits.
+- Magic Remote: hovering focuses, clicking presses; hover the bar for the time (and preview),
+  click it to seek there.
+- The demo server advertises preview thumbnails and serves index frames
+  (`/library/parts/<id>/indexes/sd/<ms>`).
 
 ## [0.1.0] - 2026-10-27 (first public release)
 
