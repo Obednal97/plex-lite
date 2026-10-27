@@ -3,7 +3,8 @@
 'use strict';
 
 (function () {
-  var PLEX_TV = 'https://plex.tv';
+  // dev tools (tools/demo/server.mjs) can point plex.tv calls at a local mock
+  var PLEX_TV = (window.PL_DEV && window.PL_DEV.plexTv) || 'https://plex.tv';
   var VIDEO_TYPES = { movie: 1, show: 1, season: 1, episode: 1, mixed: 1, clip: 1 };
 
   var plex = PL.plex = {

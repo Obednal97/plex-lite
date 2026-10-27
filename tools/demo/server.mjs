@@ -1,0 +1,435 @@
+#!/usr/bin/env node
+// Demo Plex server: runs Plex Lite on the desktop against a small library of openly licensed films
+// (Blender open movies and public-domain classics), with no Plex account, server or token.
+//
+//   node tools/demo/fetch-media.mjs     # once: downloads the artwork listed in library.json
+//   node tools/demo/server.mjs          # http://127.0.0.1:8930  (add ?signin for the sign-in screen)
+//
+// It serves the app, plus:
+//   a mock Plex Media Server at the root (/identity, /library, /hubs, /photo, ...): sections, hubs,
+//              metadata, search, collections, Live TV guide, play queues, photo transcoding and
+//              direct play (the WebM files on Wikimedia Commons), with watched state in memory.
+//              The app's own files never collide with Plex paths, so one origin serves both.
+//   /plextv/*  a mock plex.tv: user, Home users, resources (this server) and link-code pins
+// The page gets window.PL_DEV pointing the app at both, the same hook tools/devserver.mjs uses.
+//
+// Settings (environment): PORT (8930), PLEXLITE_DEMO_MEDIA (artwork cache, default
+// ~/.cache/plexlite/demo-media), PLEXLITE_DEMO_LIVETV=0 to hide Live TV.
+// Content and licences: tools/demo/library.json and docs/screenshots/CREDITS.md.
+import { createServer } from 'node:http';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { extname, join, normalize } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as art from './art.mjs';
+import { loadLibrary } from './model.mjs';
+
+const HERE = fileURLToPath(new URL('.', import.meta.url));
+const APP = fileURLToPath(new URL('../..', import.meta.url));
+const PORT = Number(process.env.PORT || 8930);
+const SELF = `127.0.0.1:${PORT}`;
+const BASE = `http://${SELF}`;
+const MEDIA_DIR = (process.env.PLEXLITE_DEMO_MEDIA || '~/.cache/plexlite/demo-media').replace(/^~\//, homedir() + '/');
+const LIVETV = process.env.PLEXLITE_DEMO_LIVETV !== '0';
+const MACHINE_ID = 'demo0000000000000000000000000000000000ff';
+const SERVER_NAME = 'Demo Library';
+const TOKEN = 'demo-token';
+const PROVIDER = 'tv.plex.providers.epg.demo';
+const PMS_PATH = /^\/(identity|library|hubs|photo|video|playQueues|:|livetv|media|transcode|tv\.plex\.providers\.[^/]+)(\/|$)/;
+
+const model = loadLibrary(join(HERE, 'library.json'));
+const lib = model.lib;
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg',
+  '.svg': 'image/svg+xml', '.json': 'application/json', '.webm': 'video/webm', '.ico': 'image/x-icon' };
+
+// ---- helpers -------------------------------------------------------------------------------------
+
+function send(res, status, body, type, extra) {
+  const buf = Buffer.isBuffer(body) ? body : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
+  res.writeHead(status, { 'Content-Type': type || 'application/json', 'Content-Length': buf.length, 'Cache-Control': 'no-store', ...extra });
+  res.end(buf);
+}
+
+const container = (fields) => ({ MediaContainer: { size: 0, ...fields } });
+
+// Internal fields (_*) never leave the server; lists drop the heavy parts like Plex does.
+function clean(item, opts = {}) {
+  const out = {};
+  for (const [k, v] of Object.entries(item)) {
+    if (k.startsWith('_') || v === undefined) continue;
+    if (opts.list && (k === 'Role' || k === 'Writer' || k === 'Extras' || k === 'Country')) continue;
+    if (k === 'Extras') continue;
+    out[k] = v;
+  }
+  if (opts.list && out.Director) out.Director = out.Director.slice(0, 1);
+  return out;
+}
+
+function page(items, q, map = (i) => clean(i, { list: true })) {
+  const start = Number(q.get('X-Plex-Container-Start') || 0);
+  const size = q.has('X-Plex-Container-Size') ? Number(q.get('X-Plex-Container-Size')) : items.length;
+  const slice = items.slice(start, start + size).map(map);
+  return container({ size: slice.length, totalSize: items.length, offset: start, Metadata: slice });
+}
+
+// ---- images --------------------------------------------------------------------------------------
+
+function mediaFile(id) {
+  for (const ext of ['.jpg', '.png']) {
+    const f = join(MEDIA_DIR, id + ext);
+    if (existsSync(f)) return f;
+  }
+  return null;
+}
+
+const dataUriCache = new Map();
+function dataUri(file) {
+  if (!dataUriCache.has(file)) {
+    const type = file.endsWith('.png') ? 'image/png' : 'image/jpeg';
+    dataUriCache.set(file, `data:${type};base64,${readFileSync(file).toString('base64')}`);
+  }
+  return dataUriCache.get(file);
+}
+
+// Generated art for a "gen:<kind>/<key>" ref, or for a media ref whose file isn't downloaded yet.
+function generated(ref) {
+  const [kind, key] = ref.split('/');
+  const item = [...model.items.values()].find((i) => i._id === key);
+  const title = item ? item.title : key;
+  if (kind === 'poster') return art.poster(title, item && item.year, key);
+  if (kind === 'logo') return art.logo(title, item && item._src.logoStyle);
+  if (kind === 'channel') {
+    const ch = (lib.channels || [])[Number(key)];
+    return ch ? art.channel(ch.short || ch.title, ch.title) : null;
+  }
+  if (kind === 'collection') {
+    const col = model.items.get(key);
+    if (!col) return null;
+    // members' posters, real or generated, as data URIs (an SVG image can't fetch anything)
+    const imgs = col._members.map((m) => {
+      const file = imageFile(m.thumb);
+      return file ? dataUri(file) : `data:image/svg+xml;base64,${Buffer.from(art.poster(m.title, m.year, m._id)).toString('base64')}`;
+    });
+    return imgs.length >= 2 ? art.collage(col.title, imgs, col.title) : art.poster(col.title, `${col.childCount} films`, col.title);
+  }
+  return art.still(key || ref);
+}
+
+function imageFile(path) {
+  const ref = model.images.get(path);
+  return ref && ref.startsWith('media:') ? mediaFile(ref.slice(6)) : null;
+}
+
+// /photo/:/transcode?url=<plex image path>&width&height[&blur&opacity&background]. Real files are
+// sent as they are (the browser scales them; cards use object-fit) except for blurred ambients.
+function photo(res, q) {
+  const path = q.get('url') || '';
+  const ref = model.images.get(path.split('?')[0]);
+  if (!ref) return send(res, 404, 'unknown image', 'text/plain');
+  const file = imageFile(path.split('?')[0]);
+  const w = Math.round(Number(q.get('width')) || 480);
+  const h = Math.round(Number(q.get('height')) || 270);
+  if (q.get('blur')) {
+    const src = file ? dataUri(file) : `data:image/svg+xml;base64,${Buffer.from(generated(ref.startsWith('gen:') ? ref.slice(4) : 'art/' + ref)).toString('base64')}`;
+    return send(res, 200, art.ambient(src, w, h, Number(q.get('blur')) / 2, Number(q.get('opacity') || 100), q.get('background') || '000000'), 'image/svg+xml');
+  }
+  if (file) return send(res, 200, readFileSync(file), TYPES[extname(file)]);
+  if (ref.startsWith('media:')) {
+    // not downloaded: logos fall back to the app's text title, everything else to generated art
+    if (path.includes('/clearLogo/')) return send(res, 404, 'logo not downloaded', 'text/plain');
+    const kind = path.includes('/thumb/') && !path.includes('/people/') ? 'poster' : 'art';
+    const owner = [...model.items.values()].find((i) => i.thumb === path || i.art === path);
+    if (path.includes('/people/')) return send(res, 404, 'photo not downloaded', 'text/plain');
+    return send(res, 200, generated(`${owner && owner.type === 'episode' ? 'art' : kind}/${owner ? owner._id || owner.ratingKey : path}`), 'image/svg+xml');
+  }
+  const body = generated(ref.slice(4));
+  return body ? send(res, 200, body, 'image/svg+xml') : send(res, 404, 'no image', 'text/plain');
+}
+
+// ---- video ---------------------------------------------------------------------------------------
+
+function partById(id) {
+  for (const it of model.items.values()) {
+    for (const m of it.Media || []) for (const p of m.Part) if (String(p.id) === String(id)) return { item: it, part: p };
+  }
+  return null;
+}
+
+// A local copy (PLEXLITE_DEMO_MEDIA/videos/<id>.webm) is served with range support; otherwise the
+// browser is redirected to the file on Wikimedia Commons.
+function video(req, res, partId) {
+  const found = partById(partId);
+  const src = found && found.part.video && lib.videos[found.part.video];
+  if (!src) return send(res, 404, 'this demo title has no video', 'text/plain');
+  const local = join(MEDIA_DIR, 'videos', found.part.video + '.webm');
+  if (!existsSync(local)) {
+    res.writeHead(302, { Location: src.url });
+    return res.end();
+  }
+  const size = statSync(local).size;
+  const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range || '');
+  if (!m) {
+    res.writeHead(200, { 'Content-Type': 'video/webm', 'Content-Length': size, 'Accept-Ranges': 'bytes' });
+    return createReadStream(local).pipe(res);
+  }
+  const start = m[1] ? Number(m[1]) : size - Number(m[2]);
+  const end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+  res.writeHead(206, { 'Content-Type': 'video/webm', 'Content-Length': end - start + 1, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes' });
+  createReadStream(local, { start, end }).pipe(res);
+}
+
+// ---- Plex Media Server ------------------------------------------------------------------------
+
+const queues = new Map();
+let queueId = 100;
+let queueItemId = 5000;
+
+function metadataFor(item, q) {
+  const out = clean(item);
+  if (item.type === 'show' && q.get('includeOnDeck') === '1') {
+    const deck = model.onDeck(item);
+    if (deck) out.OnDeck = { Metadata: [clean(deck)] };
+  }
+  if (q.get('includeExtras') === '1' && item.Extras && item.Extras.length) {
+    out.Extras = { size: item.Extras.length, Metadata: item.Extras.map((x) => clean(x)) };
+    const trailer = item.Extras.find((x) => x.subtype === 'trailer');
+    if (trailer) out.primaryExtraKey = trailer.key;
+  }
+  if (q.get('includeMarkers') === '1' && item._markers) {
+    out.Marker = item._markers.map((m, i) => ({ id: i + 1, type: m.type, startTimeOffset: m.start * 1000,
+      endTimeOffset: (m.end || item.duration / 1000) * 1000, final: m.type === 'credits' ? true : undefined }));
+  }
+  if (q.get('includeChapters') === '1' && item._src && item._src.chapters) {
+    const ch = item._src.chapters;
+    out.Chapter = ch.map((c, i) => ({ id: i + 1, tag: c.title, index: i + 1, startTimeOffset: c.start * 1000,
+      endTimeOffset: (ch[i + 1] ? ch[i + 1].start : item.duration / 1000) * 1000 }));
+  }
+  return out;
+}
+
+function playQueue(q, items, selected) {
+  const id = queueId++;
+  const list = items.map((it) => ({ ...clean(it, { list: true }), playQueueItemID: queueItemId++ }));
+  const sel = list.find((x) => x.ratingKey === selected.ratingKey) || list[0];
+  const mc = container({ size: list.length, playQueueID: id, playQueueSelectedItemID: sel.playQueueItemID,
+    playQueueSelectedItemOffset: list.indexOf(sel), playQueueTotalCount: list.length, playQueueShuffled: q.get('shuffle') === '1', Metadata: list });
+  queues.set(String(id), mc);
+  return mc;
+}
+
+function guide(q) {
+  if (!LIVETV) return container({});
+  const before = Number(q.get('beginsAt<') || Infinity);
+  const after = Number(q.get('endsAt>') || -Infinity);
+  const startAfter = Number(q.get('beginsAt>') || -Infinity);
+  const channelId = q.get('channel');
+  const out = [];
+  (lib.channels || []).forEach((ch, n) => {
+    const id = n + 1;
+    if (channelId && String(channelId) !== String(id)) return;
+    for (const slot of model.schedule(ch)) {
+      if (!(slot.beginsAt < before && slot.endsAt > after && slot.beginsAt > startAfter)) continue;
+      const it = slot.item;
+      const prog = it.type === 'episode'
+        ? { type: 'episode', title: it.title, grandparentTitle: it.grandparentTitle, parentIndex: it.parentIndex, index: it.index,
+          thumb: it.thumb, grandparentThumb: it.grandparentThumb }
+        : { type: 'movie', title: it.title, year: it.year, thumb: it.art };
+      prog.ratingKey = `live-${id}-${slot.beginsAt}`;
+      prog.key = `/${PROVIDER}/metadata/${prog.ratingKey}`;
+      prog.Genre = (ch.genres || []).map((g) => ({ tag: g })).concat((it.Genre || (model.items.get(it.grandparentRatingKey) || {}).Genre || []).map((g) => ({ tag: g.tag })));
+      prog.Media = [{ channelIdentifier: `demo-${id}`, channelID: id, channelVcn: String(ch.vcn), channelTitle: ch.title,
+        channelThumb: model.imagePath(`/library/channels/${id}/thumb`, `gen:channel/${n}`), beginsAt: slot.beginsAt, endsAt: slot.endsAt }];
+      out.push(prog);
+    }
+  });
+  return page(out, q, (x) => x);
+}
+
+function pms(req, res, path, q) {
+  const method = req.method;
+  if (path === '/identity') return send(res, 200, container({ machineIdentifier: MACHINE_ID, version: '1.41.0.0-demo', claimed: true }));
+  const token = q.get('X-Plex-Token') || req.headers['x-plex-token'] || '';
+  if (!token.startsWith('demo')) return send(res, 401, 'unauthorised', 'text/plain');
+  let m;
+  if (path === '/photo/:/transcode') return photo(res, q);
+  if ((m = /^\/library\/parts\/(\d+)\/\d+\/file\.webm$/.exec(path))) return video(req, res, m[1]);
+  if (method === 'PUT' && /^\/library\/parts\/\d+$/.test(path)) return send(res, 200, '');
+  if (path === '/library/sections') {
+    return send(res, 200, container({ size: 2, title1: 'Plex Library', Directory: model.sections.map((s) => ({ ...s, allowSync: false, art: '', thumb: '' })) }));
+  }
+  if ((m = /^\/library\/sections\/(\d+)\/all$/.exec(path))) {
+    return send(res, 200, page(model.filter(model.sectionItems(m[1], q.get('type')), q), q));
+  }
+  if ((m = /^\/library\/sections\/(\d+)\/(genre|decade|actor|director|writer|country)$/.exec(path))) {
+    const dirs = model.tagDirectory(m[1], m[2]);
+    return send(res, 200, container({ size: dirs.length, Directory: dirs }));
+  }
+  if ((m = /^\/library\/sections\/(\d+)\/collections$/.exec(path))) {
+    return send(res, 200, page(m[1] === '1' ? model.collections : [], q));
+  }
+  if ((m = /^\/library\/collections\/(\d+)\/children$/.exec(path))) {
+    const col = model.items.get(m[1]);
+    return col ? send(res, 200, page(col._members, q)) : send(res, 404, 'no such collection', 'text/plain');
+  }
+  if ((m = /^\/hubs\/sections\/(\d+)$/.exec(path))) {
+    const hubs = model.sectionHubs(m[1]).map((h) => ({ ...h, Metadata: h.Metadata.map((i) => clean(i, { list: true })) }));
+    return send(res, 200, container({ size: hubs.length, Hub: hubs }));
+  }
+  if (path === '/hubs') {
+    const hubs = ['1', '2'].reduce((a, k) => a.concat(model.sectionHubs(k)), []).map((h) => ({ ...h, Metadata: h.Metadata.map((i) => clean(i, { list: true })) }));
+    return send(res, 200, container({ size: hubs.length, Hub: hubs }));
+  }
+  if (path === '/hubs/search') {
+    const hubs = model.search(q.get('query')).map((h) => (h.Metadata ? { ...h, Metadata: h.Metadata.map((i) => clean(i, { list: true })) } : h));
+    return send(res, 200, container({ size: hubs.length, Hub: hubs }));
+  }
+  if ((m = /^\/library\/metadata\/(\d+)(\/children|\/related)?$/.exec(path))) {
+    const item = model.items.get(m[1]);
+    if (!item) return send(res, 404, 'no such item', 'text/plain');
+    if (m[2] === '/children') {
+      if (item.type === 'show') return send(res, 200, page(item._seasons, q));
+      if (item.type === 'season') return send(res, 200, page(item._episodes, q));
+      return send(res, 200, container({}));
+    }
+    if (m[2] === '/related') {
+      const hubs = model.related(item).map((h) => ({ ...h, Metadata: h.Metadata.map((i) => clean(i, { list: true })) }));
+      return send(res, 200, container({ size: hubs.length, Hub: hubs }));
+    }
+    return send(res, 200, container({ size: 1, Metadata: [metadataFor(item, q)] }));
+  }
+  if (path === '/:/scrobble' || path === '/:/unscrobble') {
+    const item = model.items.get(q.get('key'));
+    const on = path === '/:/scrobble';
+    const leaves = !item ? [] : item.type === 'show' ? model.episodesOf(item) : item.type === 'season' ? item._episodes : [item];
+    leaves.forEach((e) => { e.viewCount = on ? 1 : undefined; e.viewOffset = undefined; e.lastViewedAt = on ? Math.floor(Date.now() / 1000) : undefined; });
+    refreshCounts();
+    return send(res, 200, '');
+  }
+  if (path === '/:/timeline') {
+    const item = model.items.get(q.get('ratingKey'));
+    const time = Number(q.get('time') || 0);
+    if (item && item.duration && (q.get('state') === 'stopped' || q.get('state') === 'paused')) {
+      if (time > item.duration * 0.9) { item.viewCount = 1; item.viewOffset = undefined; } else if (time > 60000) item.viewOffset = time;
+      item.lastViewedAt = Math.floor(Date.now() / 1000);
+      refreshCounts();
+    }
+    return send(res, 200, container({}));
+  }
+  if (path === '/playQueues' && method === 'POST') {
+    const rk = (/\/library\/metadata\/(\d+)/.exec(q.get('uri') || '') || [])[1];
+    const item = model.items.get(rk);
+    if (!item) return send(res, 404, 'no such item', 'text/plain');
+    const show = item.type === 'show' ? item : item.type === 'episode' ? model.items.get(item.grandparentRatingKey) : null;
+    let items = show ? model.episodesOf(show) : [item];
+    if (q.get('shuffle') === '1') items = model.sort(items, 'random');
+    return send(res, 200, playQueue(q, items, item.type === 'show' ? items[0] : item));
+  }
+  if ((m = /^\/playQueues\/(\d+)$/.exec(path))) {
+    return queues.has(m[1]) ? send(res, 200, queues.get(m[1])) : send(res, 404, 'no such queue', 'text/plain');
+  }
+  if (path === '/video/:/transcode/universal/decision') {
+    const rk = (/\/library\/metadata\/(\d+)/.exec(q.get('path') || '') || [])[1];
+    const item = model.items.get(rk);
+    const media = item && item.Media && (item.Media[Number(q.get('mediaIndex') || 0)] || item.Media[0]);
+    const part = media && media.Part[0];
+    if (!part || !part.video) {
+      return send(res, 200, container({ generalDecisionCode: 2000, generalDecisionText: 'This demo title has no video file. Try Big Buck Bunny, Sintel or Tears of Steel.' }));
+    }
+    return send(res, 200, container({ generalDecisionCode: 1000, generalDecisionText: 'Direct play OK.',
+      Metadata: [{ ...clean(item, { list: true }), Media: [{ ...media, Part: [{ ...part, decision: 'directplay' }] }] }] }));
+  }
+  if (path === '/video/:/transcode/universal/stop' || /^\/transcode\/sessions\//.test(path)) return send(res, 200, '');
+  if (path === '/livetv/dvrs') {
+    return send(res, 200, container(LIVETV ? { size: 1, Dvr: [{ key: '1', uuid: 'demo-dvr', title: 'Demo tuner', lineupTitle: 'Demo channels' }] } : {}));
+  }
+  if (path === '/media/providers') {
+    return send(res, 200, container({ MediaProvider: [{ identifier: 'com.plexapp.plugins.library', protocols: 'stream,download' }]
+      .concat(LIVETV ? [{ identifier: PROVIDER, protocols: 'livetv', title: 'Live TV & DVR' }] : []) }));
+  }
+  if (path === `/${PROVIDER}/grid`) return send(res, 200, guide(q));
+  if (/^\/livetv\/dvrs\/\d+\/channels\/.+\/tune$/.test(path)) {
+    return send(res, 503, 'Live TV playback is not available in the demo', 'text/plain');
+  }
+  return send(res, 404, `the demo server does not implement ${method} ${path}`, 'text/plain');
+}
+
+function refreshCounts() {
+  for (const show of model.shows) {
+    for (const s of show._seasons) s.viewedLeafCount = s._episodes.filter((e) => e.viewCount).length;
+    show.viewedLeafCount = show._seasons.reduce((a, s) => a + s.viewedLeafCount, 0);
+  }
+}
+
+// ---- plex.tv -------------------------------------------------------------------------------------
+
+const pins = new Map();
+const user = lib.user || { title: 'Demo' };
+const homeUsers = lib.homeUsers || [{ title: user.title, admin: true }];
+
+function plextv(req, res, path) {
+  let m;
+  if (path === '/api/v2/user') {
+    return send(res, 200, { id: 1, uuid: 'demo-user-0', username: user.title.toLowerCase(), title: user.title, email: 'demo@example.com', authToken: TOKEN });
+  }
+  if (path === '/api/v2/home/users') {
+    return send(res, 200, { id: 1, name: `${user.title}'s Home`, users: homeUsers.map((u, i) => ({ id: i + 1, uuid: `demo-user-${i}`, title: u.title,
+      username: u.admin ? user.title.toLowerCase() : '', admin: !!u.admin, restricted: !!u.restricted, protected: !!u.protected, home: true, thumb: '' })) });
+  }
+  if ((m = /^\/api\/v2\/home\/users\/([\w-]+)\/switch$/.exec(path)) && req.method === 'POST') {
+    return send(res, 200, { authToken: `demo-${m[1]}` });
+  }
+  if (path === '/api/v2/resources') {
+    return send(res, 200, [{
+      name: SERVER_NAME, product: 'Plex Media Server', productVersion: '1.41.0.0-demo', platform: 'Demo', clientIdentifier: MACHINE_ID,
+      provides: 'server', owned: true, accessToken: TOKEN, httpsRequired: false, presence: true,
+      connections: [{ protocol: 'http', address: '127.0.0.1', port: PORT, uri: BASE, local: true, relay: false }],
+    }]);
+  }
+  if (path === '/api/v2/pins' && req.method === 'POST') {
+    const pin = { id: 4242 + pins.size, code: 'DEMO', createdAt: Date.now() };
+    pins.set(String(pin.id), pin);
+    return send(res, 201, { id: pin.id, code: pin.code, authToken: null, expiresIn: 900 });
+  }
+  if ((m = /^\/api\/v2\/pins\/(\d+)$/.exec(path))) {
+    const pin = pins.get(m[1]);
+    if (!pin) return send(res, 404, { errors: [{ message: 'not found' }] });
+    // the demo "approves" a code after 30 seconds, so the whole sign-in flow can be tried
+    return send(res, 200, { id: pin.id, code: pin.code, authToken: Date.now() - pin.createdAt > 30000 ? TOKEN : null });
+  }
+  return send(res, 404, { errors: [{ message: `the demo plex.tv does not implement ${path}` }] });
+}
+
+// ---- HTTP ------------------------------------------------------------------------------------------
+
+createServer(async (req, res) => {
+  // same DNS-rebinding guard as tools/devserver.mjs
+  const origin = req.headers.origin;
+  if (req.headers.host !== SELF || (origin && origin !== BASE)) return send(res, 403, '', 'text/plain');
+  const url = new URL(req.url, BASE);
+  let path;
+  try { path = decodeURIComponent(url.pathname); } catch { return send(res, 400, '', 'text/plain'); }
+  try {
+    if (path === '/js/dev-config.js') {
+      // ?signin on the page: start signed out, to see (and try) the plex.tv/link flow
+      const signin = /[?&]signin\b/.test(req.headers.referer || '');
+      const server = { name: SERVER_NAME, machineId: MACHINE_ID, uri: BASE, token: TOKEN, kind: 'lan-http' };
+      const dev = signin ? { clientId: 'demo-client', plexTv: `${BASE}/plextv` } : { token: TOKEN, clientId: 'demo-client', server, plexTv: `${BASE}/plextv` };
+      return send(res, 200, `window.PL_DEV = ${JSON.stringify(dev)};\n`, 'text/javascript');
+    }
+    if (PMS_PATH.test(path)) return pms(req, res, path, url.searchParams);
+    if (path.startsWith('/plextv/')) return plextv(req, res, path.slice(7));
+    const file = normalize(join(APP, path === '/' ? 'index.html' : path));
+    if (!file.startsWith(APP) || file.includes('/tools/') || file.includes('/.git')) return send(res, 403, '', 'text/plain');
+    const body = await readFile(file);
+    return send(res, 200, body, TYPES[extname(file)] || 'application/octet-stream');
+  } catch (e) {
+    if (e.code === 'ENOENT' || e.code === 'EISDIR') return send(res, 404, 'not found', 'text/plain');
+    console.error(e);
+    return send(res, 500, 'demo server error', 'text/plain');
+  }
+}).listen(PORT, '127.0.0.1', () => {
+  const missing = Object.keys(lib.media || {}).filter((id) => !mediaFile(id)).length;
+  console.log(`Plex Lite demo on ${BASE}  (${model.movies.length} movies, ${model.shows.length} shows)`);
+  if (missing) console.log(`${missing} artwork files not downloaded yet: run node tools/demo/fetch-media.mjs (placeholders until then)`);
+});

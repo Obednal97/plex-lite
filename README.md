@@ -10,6 +10,15 @@ lets the Plex server resize artwork. It stays smooth on hardware the official ap
 > Plex Lite is an independent project. It is not affiliated with, endorsed by or sponsored by
 > Plex, Inc. or LG Electronics. You need your own Plex Media Server and Plex account.
 
+| | |
+| --- | --- |
+| ![TV Shows, Recommended: hero art for Caminandes above a Continue Watching row](docs/screenshots/tv-recommended.jpg) | ![Sintel's title page: title art, synopsis, Resume and Trailer buttons, More Like This](docs/screenshots/movie-details.jpg) |
+| ![NASA ScienceCasts' title page: season tabs and episode cards](docs/screenshots/show-details.jpg) | ![Search: "sprit" already finds Sprite Fright and Spring](docs/screenshots/search.jpg) |
+| ![The player paused on Sintel, with the progress rail](docs/screenshots/player.jpg) | ![Surprise Me revealing Tears of Steel with a countdown](docs/screenshots/surprise.jpg) |
+
+<sub>Shown with a demo library of Blender open movies and public-domain films ([credits](docs/screenshots/CREDITS.md)).
+More in [Screenshots](#screenshots).</sub>
+
 ## Features
 
 - **Libraries**: Recommended, Library (sort, genre, decade, unwatched) and Collections views for
@@ -54,22 +63,23 @@ cancels.
 
 ## Screenshots
 
-*To do before the first public release.* Take them against a demo library (public-domain or
-Creative Commons films such as the Blender open movies), never a personal one. Needed, all at
-1920x1080:
+All at 1920x1080, from the desktop build against the demo library in `tools/demo/` (Blender open
+movies, public-domain classics and NASA shorts; no personal library). Desktop Chromium draws a little
+differently from the TV's Chrome 53. Credits and licences: [docs/screenshots/CREDITS.md](docs/screenshots/CREDITS.md).
 
-1. Home / Recommended row for Movies, with a focused card
-2. Library view with the sort sheet open
-3. A movie's title page (hero art, actions, cast row)
-4. A show's title page scrolled to seasons and episodes
-5. Search with a misspelled query still finding the title
-6. Player with the info overlay (progress, audio and subtitle buttons)
-7. Live TV guide
-8. Settings
-9. The sign-in screen with a plex.tv/link code
+| | |
+| --- | --- |
+| ![Movies, Recommended: Sintel in the hero, Continue Watching below](docs/screenshots/movies-recommended.jpg) | ![Movies, Library: a six-column poster grid with sort and filter chips](docs/screenshots/movies-library.jpg) |
+| ![The Sort by sheet over the library grid](docs/screenshots/movies-sort-sheet.jpg) | ![The Genre filter sheet](docs/screenshots/movies-genre-sheet.jpg) |
+| ![Movies, Collections: collage posters](docs/screenshots/movies-collections.jpg) | ![Sintel's title page scrolled to Extras and Cast & Crew](docs/screenshots/movie-details-cast.jpg) |
+| ![Cary Grant's person page: his films in the library](docs/screenshots/person.jpg) | ![Hold OK on a card: the quick-actions sheet for Tears of Steel](docs/screenshots/quick-actions.jpg) |
+| ![Up Next over the end of a Caminandes episode](docs/screenshots/up-next.jpg) | ![Live TV: channels with what's on now and next](docs/screenshots/live-tv.jpg) |
+| ![Settings](docs/screenshots/settings.jpg) | ![Settings, Profile: the Plex Home "Who's watching?" sheet](docs/screenshots/settings-profiles.jpg) |
+| ![Sign-in with a plex.tv/link code](docs/screenshots/signin.jpg) | |
 
-`tools/shots.mjs` captures most of these from a TV (all but the player and sign-in; see
-[Development](#development)).
+To retake them: `node tools/demo/fetch-media.mjs`, then `node tools/demo/shots.mjs` (see
+[Development](#development)). `tools/shots.mjs` takes review screenshots on a real TV, which show your
+own library: don't publish those.
 
 ## Requirements
 
@@ -179,6 +189,8 @@ account belongs in the repo.
 | `node tools/check.mjs` | Checks JS and CSS against Chrome 53 and that the versions match. Run it before every commit. |
 | `node test/fuzzy.test.mjs` | Search tests and a small benchmark. |
 | `node tools/devserver.mjs` | Serves the app on the desktop at http://127.0.0.1:8920 with a read-only Plex proxy. The browser never sees your real token. |
+| `node tools/demo/server.mjs` | Runs the app on the desktop at http://127.0.0.1:8930 against a mock Plex server and plex.tv with a demo library of openly licensed films, so no Plex account or server is needed. Run `node tools/demo/fetch-media.mjs` once first for the artwork. See [tools/demo/README.md](tools/demo/README.md). |
+| `node tools/demo/shots.mjs` | Retakes the README screenshots in `docs/screenshots/` from the demo server (needs `playwright-core`, installed outside the repo). |
 | `node tools/tvdebug.mjs …` | Talks to the TV's web runtime over DevTools: eval, key presses, logs, traces, screenshots. Needs `ssh -f -N -L 19998:127.0.0.1:9998 "$PLEXLITE_TV_SSH"`. |
 | `node tools/shots.mjs <dir>` | Screenshots every page at 0, 3 and 10 seconds for visual review. |
 | `python3 tools/make-icons-js.py <phosphor-core>` | Regenerates `js/icons.js` from `@phosphor-icons/core`. |
