@@ -72,7 +72,11 @@
 
   // Hover moves the focus only while the Magic Remote's pointer is showing (rows sliding under a
   // hidden cursor must not steal it).
-  function ui() { return PL.ui; }
+  // "Ann Lee" -> "AL" (the monogram for a person without a photo)
+  function initialsOf(name) {
+    var parts = String(name || '').split(/\s+/).filter(Boolean);
+    return ((parts[0] ? parts[0].charAt(0) : '') + (parts.length > 1 ? parts[parts.length - 1].charAt(0) : '')).toUpperCase();
+  }
 
   function pointing() { return document.body.classList.contains('pointer'); }
 
@@ -1108,9 +1112,24 @@
     tab.cards = people.map(function (p, i) {
       var c = { node: null, run: function () {} }; // OK does nothing for now: no leaving mid-playback
       c.build = function () {
-        var n = c.node = ui().makePersonCard({ name: p.name, role: p.role, thumb: p.thumb }, 'person', CAST_GEO);
-        if (p.guest) n.querySelector('.person-meta').appendChild(PL.el('div', 'card-sub cast-guest', 'Guest star'));
-        n.style.transform = 'translate3d(' + (i * CAST_STEP) + 'px,0,0)';
+        // the details page's round people card, built lean for the player (no stacking contexts or
+        // per-part transitions: those doubled the cost of a focus move on the TV)
+        var n = c.node = PL.el('div', 'ccard');
+        var art = PL.el('div', 'ccard-art');
+        art.appendChild(PL.el('div', 'ccard-initials', initialsOf(p.name)));
+        if (p.thumb) {
+          var img = PL.el('img', 'ccard-img');
+          img.onload = function () { img.classList.add('loaded'); };
+          img.onerror = function () { img.style.visibility = 'hidden'; };
+          img.src = PL.plex.image(p.thumb, CAST_GEO.w, CAST_GEO.h);
+          art.appendChild(img);
+        }
+        art.appendChild(PL.el('div', 'ccard-rim'));
+        n.appendChild(art);
+        n.appendChild(PL.el('div', 'ccard-name', p.name));
+        if (p.role) n.appendChild(PL.el('div', 'ccard-role', p.role));
+        if (p.guest) n.appendChild(PL.el('div', 'ccard-guest', 'Guest star'));
+        n.style.left = (i * CAST_STEP) + 'px';
         n.addEventListener('mouseenter', function () {
           if (!pointing() || self.osdHidden) return;
           tab.index = i;
@@ -1135,6 +1154,22 @@
     this.fillTab(tab);
     this.setZone('tabs');
     clearTimeout(this.osdTimer);
+    this.prebuildTabs();
+  };
+
+  // While the tabs are up and the remote is idle, fill the other tabs' rows (hidden), so moving to
+  // one only shows it.
+  Player.prototype.prebuildTabs = function () {
+    var self = this;
+    clearTimeout(this.prebuildTimer);
+    this.prebuildTimer = setTimeout(function () {
+      if (!self.tabOpen() || self.state === 'stopped') return;
+      if (Date.now() - (self.lastKeyAt || 0) < 200) { self.prebuildTabs(); return; }
+      var next = self.tabs.filter(function (t) { return !t.built && t.id !== 'info'; })[0];
+      if (!next) return;
+      self.fillTab(next);
+      self.prebuildTabs(); // one tab per idle moment
+    }, 250);
   };
 
   Player.prototype.closeTab = function (quiet) {
@@ -1250,9 +1285,14 @@
     var visible = tab.visible || ROW_VISIBLE;
     tab.first = L.rowStart(tab.first, tab.index, tab.cards.length, visible);
     PL.translate(tab.track, -tab.first * step, 0);
+    var later = [];
     for (var i = Math.max(0, tab.first - 1); i < Math.min(tab.cards.length, tab.first + visible + 2); i++) {
       var c = tab.cards[i];
-      if (c.build && !c.node) c.build();
+      if (c.build && !c.node) {
+        // cards entering the edge of the view are made after this key's frame
+        if (tab.shownOnce) later.push(c);
+        else c.build();
+      }
       if (c.loaded || !c.img) continue;
       c.loaded = true;
       var img = PL.el('img', 'pcard-img');
@@ -1261,6 +1301,13 @@
       c.art.insertBefore(img, c.art.firstChild);
     }
     var self = this;
+    tab.shownOnce = true;
+    if (later.length) {
+      setTimeout(function () {
+        later.forEach(function (c) { if (!c.node) c.build(); });
+        self.paintCards(tab);
+      }, 0);
+    }
     tab.cards.forEach(function (c, j) {
       if (!c.node) return;
       c.node.classList.toggle('focused', self.zone === 'cards' && !self.osdHidden && j === tab.index);

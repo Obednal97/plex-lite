@@ -83,7 +83,9 @@ which swaps the list for Small / Medium / Large (stored like other settings). Au
   metadata is fetched once per show per session, after playback starts), one entry per person, at most 40. Plex
   often copies a show's leads onto each episode, so an episode role counts as a guest only when the show's cast is
   known and the person isn't in its top ten. OK on a person does nothing for now (no leaving mid-playback);
-  Back / Up work as in the other tabs.
+  Back / Up work as in the other tabs. Built lean for the TV: the cards are placed with `left` (no layer each),
+  the circle is the only thing that scales and isn't an overflow clip, and the rows of the other tabs are made
+  while the remote is idle with the tabs up, so switching to one only shows it.
 
 **Skip Intro / Skip Credits (board 3):** controls hidden, a soft bottom-right radial scrim, one 80 px white pill
 "⏩ Skip Intro" at right 96 / bottom 96 with a 5 px teal line along its bottom showing how much of the segment is
