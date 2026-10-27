@@ -440,6 +440,43 @@
     });
   };
 
+  // ---- Sign-in lost mid-session (401) ---------------------------------------------------------
+
+  // plex.tv decides: if it rejects the account token too, the sign-in was revoked, so say so and
+  // offer the sign-in screen (nothing else keeps retrying with the dead token). If plex.tv still
+  // accepts it, the server's access token changed: rediscover the server once; a second 401 within
+  // a minute shows the same screen instead of looping.
+  var auth = { busy: false, refreshedAt: 0 };
+
+  function signedOutScreen(err) {
+    app.ready = false;
+    app.blurTabs(true);
+    app.setRoot(app.message('You\'ve been signed out of Plex',
+      'Plex no longer accepts this TV\'s sign-in (it may have been removed on plex.tv). Sign in again to keep watching.', [
+        { label: 'Sign in again', action: function () { PL.plex.signOut(); app.start(); } },
+        { label: 'Try again', action: function () { app.start(); } },
+      ]));
+    PL.warn('signed out mid-session', err && err.message);
+  }
+
+  PL.plex.onUnauthorized = function (err) {
+    if (!app.ready || auth.busy) return;
+    auth.busy = true;
+    PL.warn('401 mid-session', err && err.message);
+    PL.plex.user().then(function () {
+      if (Date.now() - auth.refreshedAt < 60000) throw err;
+      auth.refreshedAt = Date.now();
+      return PL.plex.ensureServer(true).then(function (server) {
+        auth.busy = false;
+        PL.toast('Reconnected to ' + server.name + '. Please try that again.');
+      });
+    }).then(null, function (e) {
+      auth.busy = false;
+      // anything but a 401 (plex.tv unreachable, server not found): leave things as they are
+      if (e && e.status === 401 && app.ready) signedOutScreen(e);
+    });
+  };
+
   app.init = function () {
     var root = document.getElementById('app');
     app.backdrop = new Backdrop(root);

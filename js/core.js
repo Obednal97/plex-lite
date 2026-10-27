@@ -239,6 +239,9 @@ PL.errorMessage = function (err) {
   if (err.status === 401) return 'Plex rejected the sign-in. Please sign in again.';
   if (err.timeout) return 'The Plex server took too long to answer.';
   if (err.status === 0) return 'Could not reach the Plex server.';
+  // HTTP errors carry the request URL in their message: don't put that on screen
+  if (err.status === 404) return 'This item is no longer on the server.';
+  if (err.status >= 400) return 'The Plex server returned an error (HTTP ' + err.status + ').';
   return err.message || String(err);
 };
 

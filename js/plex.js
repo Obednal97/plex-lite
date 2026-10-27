@@ -50,6 +50,15 @@
 
   // ---- plex.tv: sign-in and server discovery -------------------------------------------------
 
+  // A 401 from the media server means the token was revoked on plex.tv or the server's access token
+  // changed. The app decides what to do (plex.onUnauthorized); the request still fails as usual.
+  // (plex.tv requests are left out: their callers handle a rejected token themselves.)
+  plex.onUnauthorized = null;
+  plex.check401 = function (err) {
+    if (err && err.status === 401 && plex.onUnauthorized) plex.onUnauthorized(err);
+    throw err;
+  };
+
   plex.tvRequest = function (method, path, params, token) {
     var url = withParams(PLEX_TV + path, merge(plex.commonParams(token === undefined ? plex.token : token), params));
     return PL.http(method, url, { timeout: 15000 });
@@ -281,7 +290,7 @@
   plex.request = function (method, path, params, opts) {
     return PL.http(method, plex.url(path, params), opts).then(function (res) {
       return res && res.MediaContainer ? res.MediaContainer : res;
-    });
+    }, plex.check401);
   };
 
   plex.get = function (path, params, opts) { return plex.request('GET', path, params, opts); };

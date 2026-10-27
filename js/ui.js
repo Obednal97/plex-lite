@@ -630,7 +630,15 @@
       n.classList.toggle('selected', i === self.selected);
     });
     var rects = this.glider.measure(this.nodes);
-    if (!rects) return;
+    if (!rects) {
+      // built before it was in the page (details, library): place the plate once it is laid out,
+      // so the chosen chip has its plate before the row is first focused
+      if (!this.retry && (this.tries = (this.tries || 0) + 1) <= 30) {
+        this.retry = requestAnimationFrame(function () { self.retry = 0; self.paint(); });
+      }
+      return;
+    }
+    this.tries = 0;
     this.glider.plate(rects[this.selected]);
     this.glider.cap(this.focused ? rects[this.index] : null);
     // keep the focused chip on screen when there are many (long-running shows)
