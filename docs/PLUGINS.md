@@ -94,6 +94,12 @@ actions: function (item, ctx) {
 },
 ```
 
+### badges(item, ctx) → Promise<[{label, tone?}]>
+
+Up to two keyline badges added to a details page's meta line once they're known (e.g. Overseerr's
+"Downloading 45%"). `tone: 'accent'` draws it in the accent colour. `item` is the full Plex item
+(movie, show or episode, with `Guid`s). Called on every details page, so answer from a cache.
+
 ### onSelect(item, ctx)
 
 OK on an item from one of the plugin's shelves. A shelf can also carry its own `onSelect(item, ctx)`.
@@ -118,7 +124,11 @@ badge with `ctx.ui.badge(node, className, text)`.
 | `log`, `warn` | prefixed with the plugin id |
 | `storage.get/set/del` | localStorage scoped to `plugin.<id>.*` |
 | `http(method, url, opts)` | the app's XHR helper (abortable promise) |
-| `plexToken()` | the Plex account token; explicit so it can be permissioned later |
+| `plexToken()` | the active profile's Plex token; explicit so it can be permissioned later |
+| `profile()` | the active Plex Home profile `{uuid, title}`, or `null` for the account owner |
+| `plex.metadata(ratingKey)`, `plex.children(ratingKey)`, `plex.image(path, w, h)` | read-only lookups on the connected server |
+| `openItem(item)` | opens the details page for a Plex item (`{ratingKey, type, title}`) |
+| `push(screen)`, `pop()`, `backdrop(url)` | bundled plugins only: push a screen object (`{el, show, hide, key, destroy}`) built from `ctx.ui` (which also has `spinner`, `fadeInImage`, `KEY`, `isBack`) |
 | `service(method, params, serviceId?)` | calls one of the plugin's own `services` over the Luna bus |
 
 ## Tabs and screens (declarative)
@@ -207,9 +217,13 @@ ES2015 only: no `async`/`await`, object spread, `Object.entries/values`, `Promis
 
 ## Overseerr in brief
 
-- **Settings:** "Overseerr requests" → set the address → signs in with the Plex token through the
-  service ("Sign in with Plex").
+Full notes: [OVERSEERR.md](OVERSEERR.md).
+
+- **Settings:** "Overseerr" → set the address → signs in with the active Plex profile's token through
+  the service. Each Plex Home profile has its own Overseerr session.
 - **Search:** `searchRows` queries `/api/v1/search`, hides titles already available, badges
-  Requested / Processing / Partly available.
+  Requested / Processing / Partly available / Downloading n%.
 - **onSelect:** a sheet to request a movie, all/remaining seasons or a single season
   (`POST /api/v1/request`).
+- **Downloading:** `shelfRows` (a Downloading shelf), `badges` (details) and a Downloading screen.
+- **Report a problem:** `actions` (details pill + hold-OK) → `POST /api/v1/issue`.
