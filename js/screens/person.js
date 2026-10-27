@@ -61,9 +61,12 @@
     })).then(function (results) {
       if (!alive) return;
       var found = results.filter(function (r) { return r.items.length; });
-      summary.textContent = found.length
-        ? found.map(function (r) { return r.section.title + ' · ' + r.items.length; }).join('   ')
-        : '';
+      // "15 movies · 1 show"
+      summary.textContent = found.map(function (r) {
+        var n = r.items.length;
+        var noun = r.section.type === 'show' ? (n === 1 ? 'show' : 'shows') : (n === 1 ? 'movie' : 'movies');
+        return n + ' ' + noun;
+      }).join(' · ');
       if (!found.length) {
         status.textContent = 'Nothing with ' + (person.name || 'this person') + ' in your libraries';
         stack.setZones([head], 0);

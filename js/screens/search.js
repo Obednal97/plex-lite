@@ -69,10 +69,12 @@
     this.el.appendChild(clip);
     this.status = PL.el('div', 'search-status');
     this.el.appendChild(this.status);
+    var me = this;
     this.stack = new ui.VStack(this.results, {
       top: 150,
       keep: 3,
       anchor: function (i, top, zone) { return i === 0 ? top : Math.min(top, 1040 - zone.height); },
+      onFocusZone: function () { me.updateHeader(); },
     });
 
     var self = this;
@@ -428,6 +430,12 @@
     PL.app.push(screens.details(item));
   };
 
+  // the tab bar hides once the results are scrolled past their first row, like the library screens
+  SearchScreen.prototype.updateHeader = function () {
+    if (!this.visible || PL.app.tabsFocused) return;
+    PL.app.tabs.show(!(this.area === 'results' && this.stack.index > 0));
+  };
+
   SearchScreen.prototype.focusResults = function () {
     if (!this.stack.zones.length) return;
     this.area = 'results';
@@ -437,6 +445,7 @@
 
   SearchScreen.prototype.focusKeys = function () {
     this.area = 'keys';
+    PL.app.tabs.show(this.visible);
     this.stack.focus(false);
     this.shadow.hide();
     this.paintKeys();
