@@ -1799,11 +1799,18 @@
     this.setStatus('Tuning ' + (channel.title || 'channel') + '…', true);
     var session = PL.uuid();
     this.liveSession = session;
-    var tuned = released.then(function () {
+    // Plex frees the tuner a moment after it answers the release: a tune that comes back without a
+    // stream ("no tuner") is tried again a few times before it counts as a failure.
+    var attempt = function (n) {
       if (gen !== self.gen) return null;
       return PL.plex.request('POST', '/livetv/dvrs/' + self.live.dvrKey + '/channels/' + encodeURIComponent(channel.identifier) + '/tune',
-        { 'X-Plex-Session-Identifier': session }, { timeout: 45000 });
-    });
+        { 'X-Plex-Session-Identifier': session }, { timeout: 45000 }).then(function (mc) {
+        if (grabbed(mc) || n >= TUNE_RETRIES.length || gen !== self.gen) return mc;
+        PL.log('tune: no tuner yet, trying again in', TUNE_RETRIES[n] + 'ms');
+        return new Promise(function (resolve) { setTimeout(resolve, TUNE_RETRIES[n]); }).then(function () { return attempt(n + 1); });
+      });
+    };
+    var tuned = released.then(function () { return attempt(0); });
     // settles once this tune has answered (and, if superseded, been released)
     var pending = this.tunePending = tuned.then(function (mc) {
       if (gen === self.gen || !mc) return null;
@@ -1817,7 +1824,7 @@
       var sub = mc && mc.MediaSubscription && mc.MediaSubscription[0];
       var op = sub && sub.MediaGrabOperation && sub.MediaGrabOperation[0];
       var meta = op && op.Metadata;
-      if (!meta || !meta.key) throw new Error('The tuner did not start this channel');
+      if (!meta || !meta.key) throw new Error('The tuner is busy. Another Plex app may be watching live TV.');
       if (gen !== self.gen) return; // superseded: tunePending releases it
       self.liveMeta = meta;
       self.liveKey = meta.key;
@@ -1839,6 +1846,15 @@
       if (self.liveOsd) self.liveOsd.onState();
     });
   };
+
+  var TUNE_RETRIES = [600, 1200, 2000];
+
+  // A tune response that carries a stream to play.
+  function grabbed(mc) {
+    var sub = mc && mc.MediaSubscription && mc.MediaSubscription[0];
+    var op = sub && sub.MediaGrabOperation && sub.MediaGrabOperation[0];
+    return !!(op && op.Metadata && op.Metadata.key);
+  }
 
   // CH+ / CH−: the banner shows the next channel at once; the tune waits for the presses to stop.
   Player.prototype.changeChannel = function (dir) {

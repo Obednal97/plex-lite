@@ -27,8 +27,8 @@ releases are fixes only.
 - The live player has its own controls: a channel banner on every zap (logo, number, programme,
   progress, time left, what's next), a mini guide over the picture (Up/Down), number entry, last
   channel (an icon, or Red), and Favourite. Pausing shows how far behind live you are, with Go live.
-  Changing channel releases the old tuner session before tuning the next (one-tuner setups), and a
-  refused tune says so in words. Channel keys, numbers and the mini guide also work while tuning or
+  Changing channel releases the old tuner session before tuning the next (one-tuner setups), tries
+  again while the server frees the tuner, and a refused tune says so in words. Channel keys, numbers and the mini guide also work while tuning or
   after a failed tune.
 - The demo server's Live TV has 24 channels with realistic schedules, the lineup, programme details
   and playable tuning (one channel always fails, two have no guide data).

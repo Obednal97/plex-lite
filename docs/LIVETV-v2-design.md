@@ -157,7 +157,7 @@ again, which starts at the live edge). Which one the TV does is measured on the 
 | | OK | watch that channel (the guide closes, the banner shows it) |
 | | Back, Left | close |
 | | Yellow, 0–9 | favourite the focused channel · number entry |
-| Tuning / failed | every key above | still works: change channel, open the mini guide, type a number, or Back |
+| Tuning / failed | every key above | still works: change channel, open the mini guide, type a number. Back leaves at once after a failed tune (the banner stays up to say why) |
 
 Last channel = the channel that was playing before the current one (CH presses in quick succession count as one
 change). The guide remembers the channel you were watching and focuses it when you come back.
@@ -165,13 +165,27 @@ change). The guide remembers the channel you were watching and focuses it when y
 ## Tuner handling
 
 `tune()` stops the old stream, releases the old tuner session (`DELETE /transcode/sessions/<uuid>`) and waits for the
-answer (at most 2 s) before `POST …/tune`, so one tuner is free again first. A tune refused with an HTTP error says
+answer (at most 2.5 s, also waiting for a tune still in flight) before `POST …/tune`. Plex frees the tuner a moment
+after it answers the release, so a tune that comes back without a stream is tried again after 0.6, 1.2 and 2 s; after
+that it says "The tuner is busy. Another Plex app may be watching live TV." A tune refused with an HTTP error says
 "Couldn't tune Sports Arena. The tuner may be busy, or the channel is off air." Leaving the player releases the
-session as before. CH+/CH− presses within 600 ms tune only the last channel.
+session as before. CH+/CH− presses within 600 ms tune only the last channel, and none if they end where they began.
 
-## Measured on the TV
+## Measured on the TV (LG 65UM7100, webOS 4.5, 2026-10-27, a 350-channel lineup)
 
-See the end of this file once the TV run is done.
+- **Guide load:** first cells 1.2 s after opening the tab (lineup + the 3-hour block: ~1,200 programmes,
+  0.5 s fetch, 130 ms parse); the next blocks load in the background (60–100 ms parse each). ~270 DOM nodes,
+  29 cells, 10 rows at a time; JS heap 13 MB.
+- **Key to second frame:** guide Up/Down 50–94 ms, Left/Right 55–85 ms (168 ms when a cell bucket is rebuilt,
+  once per two hours of scrolling), CH page 108–119 ms, Back to now 85 ms, digits 31–57 ms. Live player: banner
+  icons 35–65 ms, mini guide open 193 ms (first build of its rows), mini guide moves 60–87 ms, OK to tune 84–112 ms,
+  CH+ to the new banner 62 ms, Red 77 ms, Back to the guide 266 ms.
+- **Tune to picture:** 9–14 s, almost all of it the server's `POST …/tune` answering (7–11 s, the proxy starting the
+  stream); decision 35 ms, first frame ~1.7 s after that. Not something the client can shorten.
+- **Pause buffer:** the TV's `<video>` reports `duration` NaN and a seekable range from 0 that grows with the stream
+  (since the tune), so pause, −10 s / +30 s jumps, Go live (seek to the edge) and Start over (when the programme
+  started after the tune) all work by seeking; resuming after a pause plays on from where it paused.
+- **Sessions:** after CH+, CH+ ×2, Red and a mini-guide tune, leaving the player left no live sessions on the server.
 
 ## Open questions for the owner
 
@@ -181,5 +195,7 @@ See the end of this file once the TV run is done.
 2. **Group prefixes.** IPTV titles like "UK - News One" are shown as "News One" when most channels carry such a prefix.
    Would you like the groups (UK, USA, sports…) as filters too?
 3. **Default filter.** The guide remembers the last filter. Should it always open on Favourites once you have some?
-4. **Buffer.** Plex keeps 90 minutes (`TranscoderLivePruneBuffer`). Forum reports say Plex's own players stall at that limit; long pauses were not tested here. Go live always works.
+4. **Tune time.** 9–14 s per channel change on your setup, nearly all in the server's tune call (the IPTV proxy
+   starting the stream). The proxy's buffer settings may shorten it; the app can't.
+5. **Buffer.** Plex keeps 90 minutes (`TranscoderLivePruneBuffer`). Forum reports say Plex's own players stall at that limit; long pauses were not tested here. Go live always works.
    that limit; ours goes live when the buffer runs out under it (not yet seen in a long test).

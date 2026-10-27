@@ -118,7 +118,7 @@ existing setting. Watch Credits or Back dismisses it and keeps playing. Movies a
 Controls hide after 5 s without a key while playing. They stay while paused, scrubbing, or while a menu or tab is open.
 The Magic Remote pointer keeps working: hovering focuses, clicking presses, clicking the bar seeks there.
 
-Live TV keeps its current behaviour; it uses the same title block and scrim but no bar segments, tabs or scrubbing.
+Live TV has its own controls in the same family: see [LIVETV-v2-design.md](LIVETV-v2-design.md).
 
 ## Left to the builder
 

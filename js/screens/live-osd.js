@@ -278,6 +278,9 @@
     });
     var keep = list.map(function (x) { return x.id; }).indexOf(was);
     this.iconIndex = keep >= 0 ? keep : Math.min(this.iconIndex, list.length - 1);
+    // Go live has just appeared: it is what Up should reach first
+    if (list[0].id === 'live' && this.hadLive !== true) this.iconIndex = 0;
+    this.hadLive = list[0].id === 'live';
     this.paintZone();
   };
 
