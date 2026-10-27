@@ -14,7 +14,7 @@ lets the Plex server resize artwork. It stays smooth on hardware the official ap
 | --- | --- |
 | ![TV Shows, Recommended: hero art for Caminandes above a Continue Watching row](docs/screenshots/tv-recommended.jpg) | ![Sintel's title page: title art, synopsis, Resume and Trailer buttons, More Like This](docs/screenshots/movie-details.jpg) |
 | ![NASA ScienceCasts' title page: season tabs and episode cards](docs/screenshots/show-details.jpg) | ![Search: "sprit" already finds Sprite Fright and Spring](docs/screenshots/search.jpg) |
-| ![The player paused on Sintel, with the progress rail](docs/screenshots/player.jpg) | ![Surprise Me revealing Tears of Steel with a countdown](docs/screenshots/surprise.jpg) |
+| ![The player paused on Sintel: title, seek bar and the row of buttons](docs/screenshots/player.jpg) | ![Surprise Me revealing Tears of Steel with a countdown](docs/screenshots/surprise.jpg) |
 
 <sub>Shown with a demo library of Blender open movies and public-domain films ([credits](docs/screenshots/CREDITS.md)).
 More in [Screenshots](#screenshots).</sub>
@@ -26,8 +26,8 @@ More in [Screenshots](#screenshots).</sub>
 - **Title pages**: cast and crew, trailers and extras, ratings, versions, seasons and episodes, and
   a page for each person
 - **Player**: direct play (H.264/HEVC including 10-bit, in MKV/MP4) or server transcoding when
-  needed. Resume, seeking, audio and subtitle choice, chapters, skip intro and credits, and
-  autoplay with Up Next.
+  needed. Resume, a seek bar you can scrub, buttons for subtitles, audio, chapters and the next
+  episode, Skip Intro and Skip Credits, and autoplay with Up Next (see [Player](#player)).
 - **Search as you type**: typo-tolerant fuzzy search over your libraries, plus episodes and people
   from the server
 - **Live TV**: guide and playback through Plex Live TV & DVR
@@ -60,6 +60,33 @@ by Title), because letters don't mark positions in a list sorted by date or rati
 
 A jump costs one small request when the filters change (Plex's `firstCharacter` counts per letter,
 about 1 KB) and then only the page of titles around the target, however far down it is.
+
+## Player
+
+Any key brings up the controls: the title, a seek bar with the elapsed and remaining time, and a
+row of buttons (Play/Pause, back 10 s, forward 30 s, then Subtitles, Audio, Chapters and Next
+episode when the title has them). They hide after 4 seconds while playing and stay up while
+paused.
+
+| Key | Controls hidden | Seek bar focused | Buttons focused |
+| --- | --- | --- | --- |
+| OK | Skip Intro / Credits or Up Next when shown, else show the controls | Pause or play (or seek now, while scrubbing) | Press the button |
+| Left / Right | Start scrubbing (Right skips when Skip Intro / Credits or Up Next is shown) | Scrub: tap for 10 s, hold to go faster | Move between buttons |
+| Up / Down | Show the controls | Down: to the buttons. Up: to Skip Intro / Up Next if shown | Up: back to the seek bar |
+| Back | Dismiss Skip Intro or Up Next, else leave the player | Cancel the scrub, else hide the controls | Hide the controls |
+| Play, Pause, Play/Pause | Play or pause | | |
+| Fast-forward, Next track | In an intro: jump to its end. In marked end credits: next episode (or finish). Otherwise forward 30 s | | |
+| Rewind, Previous track | Back 10 s | | |
+| Stop | Leave the player | | |
+
+Scrubbing moves a time bubble along the bar and seeks once, when you let go (or press OK): the TV
+can only start playback at keyframes, and a stream restart is slow, so one seek is better than one
+per press. Skip Intro and Skip Credits appear from Plex's intro and credits markers, which the server
+creates when intro and credits detection is on (Plex settings, Library). The button has the focus while it is shown, stays
+for 10 seconds, and comes back whenever you open the controls during the intro or credits. With
+the Magic Remote, point and click: on the seek bar to jump there (hover to see the time), on a
+button, or on Skip Intro. The LG Magic Remote (MR19) has Play and Pause keys but no fast-forward,
+so use OK or Right on Skip Intro there.
 
 ## Surprise Me
 
@@ -96,9 +123,10 @@ differently from the TV's Chrome 53. Credits and licences: [docs/screenshots/CRE
 | ![The Sort by sheet over the library grid](docs/screenshots/movies-sort-sheet.jpg) | ![The Genre filter sheet](docs/screenshots/movies-genre-sheet.jpg) |
 | ![Movies, Collections: collage posters](docs/screenshots/movies-collections.jpg) | ![Sintel's title page scrolled to Extras and Cast & Crew](docs/screenshots/movie-details-cast.jpg) |
 | ![Cary Grant's person page: his films in the library](docs/screenshots/person.jpg) | ![Hold OK on a card: the quick-actions sheet for Tears of Steel](docs/screenshots/quick-actions.jpg) |
-| ![Up Next over the end of a Caminandes episode](docs/screenshots/up-next.jpg) | ![Live TV: channels with what's on now and next](docs/screenshots/live-tv.jpg) |
-| ![Settings](docs/screenshots/settings.jpg) | ![Settings, Profile: the Plex Home "Who's watching?" sheet](docs/screenshots/settings-profiles.jpg) |
-| ![Sign-in with a plex.tv/link code](docs/screenshots/signin.jpg) | |
+| ![Scrubbing in Sintel: the time bubble shows the target and the jump](docs/screenshots/player-scrub.jpg) | ![The player's buttons with Subtitles focused](docs/screenshots/player-buttons.jpg) |
+| ![Skip Intro on a Caminandes episode](docs/screenshots/skip-intro.jpg) | ![Up Next over the end of a Caminandes episode](docs/screenshots/up-next.jpg) |
+| ![Live TV: channels with what's on now and next](docs/screenshots/live-tv.jpg) | ![Settings](docs/screenshots/settings.jpg) |
+| ![Settings, Profile: the Plex Home "Who's watching?" sheet](docs/screenshots/settings-profiles.jpg) | ![Sign-in with a plex.tv/link code](docs/screenshots/signin.jpg) |
 
 To retake them: `node tools/demo/fetch-media.mjs`, then `node tools/demo/shots.mjs` (see
 [Development](#development)). `tools/shots.mjs` takes review screenshots on a real TV, which show your

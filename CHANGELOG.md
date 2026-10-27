@@ -17,6 +17,19 @@ releases are fixes only.
   jump loads only the titles around the target. Z–A sorts flip it; other sorts hide it.
 - The demo server answers `firstCharacter`.
 
+### Changed
+
+- Player controls rebuilt: they appear on any key and hide after 4 seconds (they stay while
+  paused). A focusable seek bar scrubs with Left/Right (tap 10 s, hold to speed up) behind a time
+  bubble and seeks once on release. A row of buttons below it: Play/Pause, back 10 s, forward
+  30 s, Subtitles, Audio, Chapters and Next episode. Down and Up no longer jump straight to the
+  subtitle and chapter menus. Pointer: click the bar to seek there, hover for the time.
+- Skip Intro / Skip Credits is now a large button that has the focus while it is shown (OK or
+  Right skips), returns whenever the controls are opened during the intro or credits, and can be
+  clicked with the Magic Remote. Fast-forward (or a keyboard's next-track key) jumps to the end of
+  an intro or skips the credits, and moves forward 30 s elsewhere.
+- Up Next is a card with a "Play next episode" button and works with the pointer.
+
 ## [0.1.0] - 2026-10-27 (first public release)
 
 ### Added

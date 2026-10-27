@@ -25,6 +25,14 @@ USED = {
     'close': ('regular', 'x'),
     'report': ('regular', 'flag'),
     'download': ('regular', 'download-simple'),
+    # player controls
+    'pause': ('fill', 'pause-fill'),
+    'back': ('regular', 'arrow-arc-left'),
+    'forward': ('regular', 'arrow-arc-right'),
+    'audio': ('regular', 'speaker-high'),
+    'chapters': ('regular', 'list-numbers'),
+    'next': ('fill', 'skip-forward-fill'),
+    'skip': ('fill', 'fast-forward-fill'),
 }
 
 pkg = Path(sys.argv[1])

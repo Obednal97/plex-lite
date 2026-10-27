@@ -33,7 +33,11 @@ without artwork get generated posters until `fetch-media.mjs` has run.
 Settings: `PORT` (8930), `PLEXLITE_DEMO_MEDIA`, `PLEXLITE_DEMO_LIVETV=0` (no Live TV tab) and
 `PLEXLITE_DEMO_SEED` (repeatable `sort=random`, for Surprise Me and Shuffle).
 
-What it doesn't do: transcoding (everything direct plays), subtitles, Live TV playback (the guide
+Each title has one placeholder subtitle track (timed "Demo captions" cues), and two Caminandes
+episodes and Sintel carry intro markers and chapters, so Skip Intro and the Chapters menu can be
+tried.
+
+What it doesn't do: transcoding (everything direct plays), real subtitles, Live TV playback (the guide
 works; tuning a channel fails), PIN-protected profiles, and the Overseerr plugin.
 
 ## Screenshots

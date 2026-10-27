@@ -276,8 +276,8 @@
   };
 
   // Audio and subtitle choice for a playable item (mediaIndex: the version being played); calls
-  // onChange() after the server has the choice.
-  screens.trackSheet = function (item, onChange, mediaIndex) {
+  // onChange() after the server has the choice. only: 'audio' or 'subtitles' shows just that section.
+  screens.trackSheet = function (item, onChange, mediaIndex, only) {
     var media = item.Media && (item.Media[mediaIndex || 0] || item.Media[0]);
     var part = media && media.Part && media.Part[0];
     if (!part) {
@@ -297,7 +297,7 @@
     };
     var label = function (s) { return s.displayTitle || s.extendedDisplayTitle || s.language || ('Track ' + s.index); };
     var sections = [];
-    if (audio.length) {
+    if (audio.length && only !== 'subtitles') {
       sections.push({
         heading: 'Audio',
         rows: audio.map(function (s) {
@@ -318,7 +318,7 @@
         action: pick({ subtitleStreamID: s.id }, function () { subs.forEach(function (x) { x.selected = x === s; }); }),
       });
     });
-    sections.push({ heading: 'Subtitles', rows: subRows });
+    if (only !== 'audio') sections.push({ heading: 'Subtitles', rows: subRows });
     PL.app.push(screens.sheet(sections));
   };
 })();

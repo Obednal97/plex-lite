@@ -251,33 +251,7 @@ body.fast * { transition-duration: 90ms !important; transition-timing-function: 
 
 .player { background: #000; }
 .player video { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #000; }
-.osd { position: absolute; left: 0; bottom: 0; width: 1920px; height: 420px; transition: opacity 250ms var(--ease); }
-.osd.faded { opacity: 0; }
-.osd-shade { position: absolute; left: 0; bottom: 0; width: 1920px; height: 420px; background: linear-gradient(0deg, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0.5) 45%, rgba(0, 0, 0, 0) 100%); }
-.osd-text { position: absolute; left: 96px; bottom: 172px; width: 1500px; }
-.osd-eyebrow { font-size: 24px; line-height: 30px; color: var(--text-2); font-weight: 600; }
-.osd-title { font-size: 40px; line-height: 50px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.scrub { position: absolute; left: 96px; bottom: 112px; width: 1728px; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.3); }
-.scrub-buffer, .scrub-played { position: absolute; left: 0; top: 0; width: 1728px; height: 8px; border-radius: 4px; transform-origin: 0 0; }
-.scrub-buffer { background: rgba(255, 255, 255, 0.45); }
-.scrub-played { background: #fff; }
-.scrub-thumb { position: absolute; left: -10px; top: -6px; width: 20px; height: 20px; border-radius: 10px; background: #fff; opacity: 0; }
-.scrub-bubble {
-  position: absolute; left: -70px; top: -72px; width: 140px; height: 48px; line-height: 46px; border-radius: 24px; text-align: center;
-  background: var(--glass-dark); border: 1px solid var(--glass-edge); font-size: 24px; font-weight: 600; opacity: 0;
-}
-.seeking .scrub-thumb, .seeking .scrub-bubble { opacity: 1; }
-.osd-times { position: absolute; left: 96px; bottom: 60px; width: 1728px; height: 30px; font-size: 22px; color: var(--text-2); }
-.osd-times .right { position: absolute; right: 0; top: 0; }
-.osd-live { display: inline-block; padding: 0 10px; height: 28px; line-height: 28px; border-radius: 6px; background: #e33; color: #fff; font-size: 18px; font-weight: 700; letter-spacing: 0.08em; margin-right: 12px; }
-.player-status { position: absolute; left: 0; top: 480px; width: 1920px; text-align: center; font-size: 28px; color: var(--text-2); }
-.player-status .spinner { margin: 0 auto 24px; }
-.upnext {
-  position: absolute; right: 96px; bottom: 96px; width: 620px; padding: 28px; border-radius: 28px;
-  background: var(--glass-dark); border: 1px solid var(--glass-edge); border-top-color: var(--glass-edge-top);
-}
-.upnext-label { font-size: 22px; color: var(--text-2); font-weight: 600; }
-.upnext-title { font-size: 32px; line-height: 40px; font-weight: 700; margin: 6px 0 18px; }
+/* the overlay, seek bar, buttons, skip pill and Up Next are in player.css */
 
 /* ---- Search ------------------------------------------------------------------------------------- */
 

@@ -240,6 +240,9 @@
   }
 
   function onKeyUp(e) {
+    // screens that act on release (the player's seek bar) get every key-up
+    var s = app.top();
+    if (s && s.keyUp) s.keyUp(e.keyCode);
     if (e.keyCode !== PL.KEY.ENTER || !ok.down) return;
     ok.down = false;
     clearTimeout(ok.timer);
