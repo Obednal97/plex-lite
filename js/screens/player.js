@@ -70,6 +70,13 @@
   // hidden cursor must not steal it).
   function pointing() { return document.body.classList.contains('pointer'); }
 
+  // the width of an element's text (not of its box)
+  function textWidth(node) {
+    var r = document.createRange();
+    r.selectNodeContents(node);
+    return Math.min(node.clientWidth || 1100, Math.ceil(r.getBoundingClientRect().width));
+  }
+
   function indexOfKey(list, ratingKey) {
     for (var i = 0; i < (list || []).length; i++) if (list[i].ratingKey === ratingKey) return i;
     return -1;
@@ -667,6 +674,7 @@
       this.eyebrow.textContent = f.year ? String(f.year) : '';
     }
     this.title.textContent = f.title || '';
+    this.textRight = null; // measured again on the next scrub
   };
 
   Player.prototype.durationSec = function () {
@@ -745,6 +753,13 @@
       }
       this.setPainted('pvw', this.previewEl, 'width', w + 'px');
       this.setPainted('pv', this.previewEl, 'transform', 'translate3d(' + Math.round(px) + 'px,0,0)');
+      // the label fades the title out when it rides over it (one layout read per title)
+      if (this.textRight == null) this.textRight = Math.max(textWidth(this.title), textWidth(this.eyebrow));
+      var over = px < this.textRight + 24;
+      if (this.painted.over !== over) {
+        this.painted.over = over;
+        this.osd.classList.toggle('label-over-title', over);
+      }
       this.setPainted('pvt', this.previewTime, 'text', PL.fmt.clock(at));
       var atChapter = this.chapters.length > 1 ? L.chapterAt(this.chapters, at) : -1;
       this.setPainted('pvc', this.previewChapter, 'text', !withThumb && atChapter >= 0 ? this.chapters[atChapter].title : '');
@@ -953,7 +968,12 @@
     m.nodes.forEach(function (r, i) { r.node.classList.toggle('focused', i === m.index); });
     var r = m.nodes[m.index];
     if (!r || m.height <= m.clipH) return;
-    var shift = PL.clamp(r.top + r.h / 2 - m.clipH / 2, 0, m.height - m.clipH);
+    // keep the focused row near the middle, starting the view on a whole row (no half-cut row under
+    // the heading)
+    var want = PL.clamp(r.top + r.h / 2 - m.clipH / 2, 0, m.height - m.clipH);
+    var shift = 0;
+    for (var i = 0; i < m.nodes.length && m.nodes[i].top <= want; i++) shift = m.nodes[i].top;
+    if (want >= m.height - m.clipH) shift = m.height - m.clipH;
     PL.translate(m.list, 0, -shift);
   };
 
@@ -1682,12 +1702,17 @@
     var dur = this.durationSec();
     target = dur > 0 ? PL.clamp(target, 0, Math.max(0, dur - 5)) : Math.max(0, target);
     if (this.mode === 'direct') {
-      var req = this.seekReq;
-      if (req && req.seekedAt == null && Date.now() - req.at < 3000) {
-        this.jumpTarget = target;
-      } else {
-        this.jumpTarget = null;
-        this.directSeek(target);
+      // the bar moves first: setting the video's time stalls the TV for ~100 ms, so the seek goes
+      // out just after the next frame (and waits behind a seek that is still landing)
+      this.jumpTarget = target;
+      if (!this.flushPending) {
+        this.flushPending = true;
+        requestAnimationFrame(function () {
+          setTimeout(function () {
+            self.flushPending = false;
+            self.flushJump();
+          }, 0);
+        });
       }
     } else if (immediate) {
       clearTimeout(this.jumpTimer);
@@ -1703,6 +1728,15 @@
       }, JUMP_RESTART_MS);
     }
     this.paintSoon();
+  };
+
+  Player.prototype.flushJump = function () {
+    var t = this.jumpTarget;
+    if (t == null || this.mode !== 'direct' || this.state === 'stopped') return;
+    var req = this.seekReq;
+    if (req && req.seekedAt == null && Date.now() - req.at < 3000) return; // onSeeked sends it
+    this.jumpTarget = null;
+    this.directSeek(t);
   };
 
   Player.prototype.seekTo = function (sec) { this.seekNow(sec, true); };
@@ -1775,7 +1809,7 @@
     var s = this.scrubState;
     if (!s) return;
     this.endScrub();
-    var moved = Math.abs(s.target - this.position()) >= 1;
+    var moved = Math.abs(s.target - this.shownPosition()) >= 1;
     if (moved) this.seekNow(s.target, true);
     if (!moved || this.mode === 'direct') this.togglePause(true);
     this.showOsd('bar');
@@ -1785,7 +1819,7 @@
     var s = this.scrubState;
     if (!s) return;
     this.endScrub();
-    var moved = Math.abs(this.position() - s.real) >= 1;
+    var moved = Math.abs(this.shownPosition() - s.real) >= 1;
     if (moved) this.seekNow(s.real, true);
     if (s.wasPlaying && (!moved || this.mode === 'direct')) this.togglePause(true);
     this.showOsd('bar');
@@ -1847,9 +1881,14 @@
     var st = this.markerState;
     st.pill = { kind: kind, id: id, start: start, target: target, shownAt: Date.now(), timedOut: false };
     this.pillLabel.textContent = label;
-    // take the focus unless the remote is busy elsewhere in the controls
-    if (!this.osdHidden && this.zone === 'bar' && !this.scrubState) this.zone = 'cta';
+    if (this.mayTakeFocus()) this.zone = 'cta';
     this.paintZone();
+  };
+
+  // Skip / Up Next take the focus from the bar, but not while the remote is in use (a tap on the bar
+  // must not land on the pill that just appeared).
+  Player.prototype.mayTakeFocus = function () {
+    return !this.osdHidden && this.zone === 'bar' && !this.scrubState && Date.now() - (this.lastKeyAt || 0) > 2000;
   };
 
   Player.prototype.pillShown = function () {
@@ -2082,7 +2121,7 @@
     if (this.markerState) this.markerState.pill = null;
     this.upnextNext = next;
     this.ecIndex = 1;
-    if (!this.osdHidden && this.zone === 'bar' && !this.scrubState) this.zone = 'cta';
+    if (this.mayTakeFocus()) this.zone = 'cta';
     var ep = episodeCode(next);
     this.ecLabel.textContent = 'Up next' + (ep ? ' · ' + ep : '');
     this.ecTitle.textContent = next.title || '';
@@ -2292,6 +2331,7 @@
     // set). Only real key-downs count: the Magic Remote's wheel arrives as synthetic keys with no
     // key-up.
     var real = !!e && e.type === 'keydown';
+    this.lastKeyAt = Date.now();
     var held = repeat || (real && !!this.held[code]);
     if (real) this.held[code] = true;
     var back = PL.isBack(code);
