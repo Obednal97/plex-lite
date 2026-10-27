@@ -287,7 +287,7 @@
     var lastMove = 0;
     this.el.addEventListener('mousemove', function () {
       var now = Date.now();
-      if (now - lastMove < 250 || self.state === 'stopped') return;
+      if (now - lastMove < 250 || self.state === 'stopped' || self.state === 'ended') return;
       lastMove = now;
       self.showOsd();
     });
@@ -314,7 +314,7 @@
     });
     hit.addEventListener('click', function (e) {
       e.stopPropagation();
-      if (self.live || !self.full || self.osdHidden) return;
+      if (self.live || !self.full || self.osdHidden || (self.state !== 'playing' && self.state !== 'paused')) return;
       var sec = secAt(e);
       if (sec == null) return;
       self.pendingSeek = PL.clamp(sec, 0, Math.max(0, self.durationSec() - 5));
@@ -367,6 +367,9 @@
     this.osdHidden = true;
     this.osd.classList.add('faded');
     this.el.classList.remove('osd-open');
+    this.hoverSec = null;
+    this.scrub.classList.remove('hovering');
+    if (this.pendingSeek == null) this.endScrubLook();
     this.subEl.classList.remove('subs-raised');
     this.zone = 'bar';
     this.paintPill();
@@ -479,7 +482,8 @@
     }
     this.setPainted('vis', this.scrub, 'visibility', '');
     var dur = this.durationSec();
-    var now = this.position();
+    // while a stream (re)starts currentTime is 0 and base may be stale: show where it is going
+    var now = this.state === 'loading' ? this.intendedPosition() : this.position();
     var pos = this.pendingSeek != null ? this.pendingSeek : now;
     var frac = dur ? PL.clamp(pos / dur, 0, 1) : 0;
     var b = this.video.buffered;
@@ -1325,6 +1329,10 @@
   Player.prototype.fail = function (err) {
     PL.warn('playback failed', err && err.message);
     this.state = 'error';
+    clearTimeout(this.seekTimer);
+    this.pendingSeek = null;
+    this.hold = null;
+    this.endScrubLook();
     clearInterval(this.timelineTimer);
     this.teardownVideo();
     this.stopTranscode();
@@ -1427,7 +1435,8 @@
     }
     // Back: cancel a scrub, hide the overlay, dismiss Up Next or the skip pill, then leave
     if (PL.isBack(code)) {
-      if (this.pendingSeek != null) this.cancelSeek();
+      if (this.state === 'error' || this.state === 'loading') this.exit();
+      else if (this.pendingSeek != null) this.cancelSeek();
       else if (!this.osdHidden) this.hideOsd();
       else if (this.upnextNext) this.hideUpNext();
       else if (this.pillVisible) this.dismissPill();
