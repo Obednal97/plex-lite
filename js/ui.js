@@ -19,6 +19,8 @@
     poster: { w: 220, h: 330, pitch: 248, scale: 1.08 },
     wide: { w: 392, h: 220, pitch: 420, scale: 1.06 },
     season: { w: 180, h: 270, pitch: 204, scale: 1.08 },
+    // people: square photo shown as a circle (ui.makePersonCard)
+    person: { w: 180, h: 180, pitch: 212, scale: 1.08, round: true },
   };
 
   // ---- Item helpers ------------------------------------------------------------------------------
@@ -82,7 +84,9 @@
 
   // On a jump to another track the shadow is placed without a transition (re-enabled next frame)
   // rather than forcing a synchronous layout.
-  FocusShadow.prototype.place = function (parent, x, y, w, h, scale) {
+  // round: circular cards (people) get a circular shadow
+  FocusShadow.prototype.place = function (parent, x, y, w, h, scale, round) {
+    this.el.style.borderRadius = round ? '50%' : '';
     if (this.el.parentNode !== parent) {
       var el = this.el;
       el.classList.add('instant');
@@ -164,6 +168,43 @@
 
   ui.makeCard = makeCard;
 
+  // Round portrait cards (details Cast & Crew, Search People). Accepts a Plex role/person
+  // ({name|tag|title, thumb, role|sub}) so both callers can pass what they already have.
+  ui.PERSON_GEO = ui.GEOMETRY.person;
+
+  function initials(name) {
+    var parts = String(name || '').split(/\s+/).filter(Boolean);
+    var first = parts[0] ? parts[0].charAt(0) : '';
+    var last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : '';
+    return (first + last).toUpperCase();
+  }
+
+  ui.makePersonCard = function (person, kind, geo) {
+    geo = geo || ui.PERSON_GEO;
+    var name = person.name || person.tag || person.title || '';
+    var role = person.role || person.sub || '';
+    var card = PL.el('div', 'card card-person');
+    var inner = PL.el('div', 'card-inner');
+    inner.style.width = geo.w + 'px';
+    inner.style.height = geo.h + 'px';
+    inner.appendChild(PL.el('div', 'person-initials', initials(name)));
+    if (person.thumb) {
+      var img = PL.el('img', 'card-img');
+      img.width = geo.w;
+      img.height = geo.h;
+      img.onerror = function () { img.style.visibility = 'hidden'; };
+      img.src = PL.plex.image(person.thumb, geo.w, geo.h);
+      inner.appendChild(img);
+    }
+    inner.appendChild(PL.el('div', 'card-edge'));
+    card.appendChild(inner);
+    var meta = PL.el('div', 'card-meta person-meta');
+    meta.appendChild(PL.el('div', 'card-title', name));
+    if (role) meta.appendChild(PL.el('div', 'card-sub', role));
+    card.appendChild(meta);
+    return card;
+  };
+
   // ---- Shelf: a virtualised horizontal row ---------------------------------------------------
 
   // opts: {title, items, kind, total, loadMore(start) -> Promise<items>, onSelect(item, index),
@@ -242,7 +283,7 @@
       node.classList.toggle('focused', this.focused && i === this.index);
     }
     if (this.focused && this.opts.shadow) {
-      this.opts.shadow.place(this.track, this.index * pitch, 0, this.geo.w, this.geo.h, this.geo.scale);
+      this.opts.shadow.place(this.track, this.index * pitch, 0, this.geo.w, this.geo.h, this.geo.scale, this.geo.round);
     }
     if (last >= this.items.length - 4 && this.items.length < this.total) this.loadMore();
   };

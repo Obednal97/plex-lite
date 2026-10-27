@@ -91,7 +91,6 @@
   }
 
   var MAX_CAST = 30;
-  var PERSON_GEO = { w: 180, h: 180, pitch: 212, scale: 1.08 };
   var EXTRA_LABEL = {
     trailer: 'Trailer', behindTheScenes: 'Behind the scenes', deletedScene: 'Deleted scene', interview: 'Interview',
     featurette: 'Featurette', sceneOrSample: 'Scene', short: 'Short',
@@ -115,36 +114,6 @@
     (item.Director || []).forEach(function (d) { out.push({ id: d.id, name: d.tag, role: 'Director', thumb: d.thumb, filter: 'director' }); });
     (item.Writer || []).slice(0, 3).forEach(function (w) { out.push({ id: w.id, name: w.tag, role: 'Writer', thumb: w.thumb, filter: 'writer' }); });
     return out.filter(function (p) { return p.id != null && p.name; });
-  }
-
-  function initials(name) {
-    var parts = String(name).split(/\s+/).filter(Boolean);
-    var first = parts[0] ? parts[0].charAt(0) : '';
-    var last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : '';
-    return (first + last).toUpperCase();
-  }
-
-  function makePersonCard(person, kind, geo) {
-    var card = PL.el('div', 'card card-person');
-    var inner = PL.el('div', 'card-inner');
-    inner.style.width = geo.w + 'px';
-    inner.style.height = geo.h + 'px';
-    inner.appendChild(PL.el('div', 'person-initials', initials(person.name)));
-    if (person.thumb) {
-      var img = PL.el('img', 'card-img');
-      img.width = geo.w;
-      img.height = geo.h;
-      img.onerror = function () { img.style.visibility = 'hidden'; };
-      img.src = PL.plex.image(person.thumb, geo.w, geo.h);
-      inner.appendChild(img);
-    }
-    inner.appendChild(PL.el('div', 'card-edge'));
-    card.appendChild(inner);
-    var meta = PL.el('div', 'card-meta person-meta');
-    meta.appendChild(PL.el('div', 'card-title', person.name));
-    if (person.role) meta.appendChild(PL.el('div', 'card-sub', person.role));
-    card.appendChild(meta);
-    return card;
   }
 
   function extraLabel(extra) {
@@ -384,8 +353,8 @@
         title: 'Cast & Crew',
         items: this.cast,
         kind: 'person',
-        geometry: PERSON_GEO,
-        makeCard: makePersonCard,
+        geometry: ui.PERSON_GEO,
+        makeCard: ui.makePersonCard,
         onSelect: function (person) { self.openPerson(person); },
       }));
     }

@@ -330,7 +330,9 @@
     if (q) {
       var titles = this.titles();
       if (titles.length) sections.push({ id: 'titles', title: 'Movies & Shows', kind: 'poster', items: titles });
-      if (this.server.people.length) sections.push({ id: 'people', title: 'People', kind: 'season', items: this.server.people });
+      if (this.server.people.length) {
+        sections.push({ id: 'people', title: 'People', kind: 'poster', geometry: ui.PERSON_GEO, makeCard: ui.makePersonCard, items: this.server.people });
+      }
       if (this.server.episodes.length) sections.push({ id: 'episodes', title: 'Episodes', kind: 'wide', items: this.server.episodes });
       this.pluginRows.forEach(function (row) { if (row.items.length) sections.push(row); });
     }
@@ -378,6 +380,7 @@
         left: RESULTS_LEFT,
         shadow: self.shadow,
         makeCard: s.makeCard,
+        geometry: s.geometry,
         onFocusItem: function (item) { self.focusedItem(item); },
         onSelect: function (item) { self.open(item); },
       });
