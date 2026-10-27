@@ -27,10 +27,10 @@
 }
 
 /* ratings: small outlined text badges after the media badges */
-.rating-badges { display: inline-block; margin-left: 6px; vertical-align: 2px; }
+.rating-badges { display: block; margin: 10px 0 0; }
 .rating-badge {
   display: inline-block; margin-right: 8px; padding: 0 8px; height: 26px; line-height: 24px; border-radius: 6px;
-  font-size: 17px; font-weight: 600; color: var(--text-2); background: var(--glass); border: 1px solid var(--glass-edge);
+  font-size: 17px; font-weight: 600; color: var(--text-2); background: transparent; border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 /* two offset frames */
@@ -39,5 +39,9 @@
 
 /* check inside a frame (season) */
 .icon-season-check::before, .icon-season-uncheck::before { content: ""; position: absolute; left: 1px; top: 1px; width: 26px; height: 26px; border: 3px solid currentColor; border-radius: 6px; }
-.icon-season-check::after { content: ""; position: absolute; left: 11px; top: 6px; width: 6px; height: 12px; border: solid currentColor; border-width: 0 3px 3px 0; transform: rotate(45deg); }
-.icon-season-uncheck::after { content: ""; position: absolute; left: 7px; top: 13px; width: 14px; height: 3px; background: currentColor; }
+/* a framed "S" reads as "season", distinct from the plain watched check next to it */
+.icon-season-check::after, .icon-season-uncheck::after {
+  content: "S"; position: absolute; left: 0; top: 0; width: 28px; height: 28px; line-height: 28px; text-align: center;
+  font: 700 18px "LG Display", sans-serif;
+}
+.icon-season-uncheck::before { border-style: dashed; }

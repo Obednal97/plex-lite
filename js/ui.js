@@ -502,13 +502,13 @@
     var keep = this.opts.keep || 3;
     var self = this;
     this.zones.forEach(function (zone, i) {
+      zone.el.classList.toggle('zone-above', i < self.index);
       if (zone.skip) return;
       var near = Math.abs(i - self.index) <= keep;
       if (zone.attach) {
         if (near && !zone.attached) zone.attach();
         else if (!near && zone.attached) zone.detach();
       }
-      zone.el.classList.toggle('zone-above', i < self.index);
     });
     if (!z) return;
     var y = this.opts.anchor ? this.opts.anchor(this.index, z.top, z) : z.top;

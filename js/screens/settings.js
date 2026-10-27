@@ -61,6 +61,7 @@
       rows.forEach(function (r, i) { r.node.classList.toggle('focused', area === 'panel' && !PL.app.tabsFocused && i === index); });
       var shift = Math.max(0, (index + 1) * 88 - 88 * 8);
       PL.translate(panel, 0, -shift);
+      panelBox.classList.toggle('more', rows.length * 88 - shift > 88 * 8);
     }
 
     function reconnect() {

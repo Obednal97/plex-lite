@@ -35,9 +35,9 @@ const PAGES = {
   'show-details': run(goTab('section.2'),
     "PL.plex.get('/library/sections/2/all',{type:2,sort:'lastViewedAt:desc','X-Plex-Container-Size':1}).then(function(mc){var it=mc.Metadata[0];PL.app.push(PL.screens.details(it));return it.title;})"),
   'movie-details-scrolled': run(goTab('section.1') + "var d=PL.screens.details({ratingKey:'13492',type:'movie'});PL.app.push(d);" +
-    "setTimeout(function(){d.key(40);d.key(40);},2500);"),
+    "setTimeout(function(){d.key(40);d.key(40);d.key(40);},2500);"),
   'show-details-scrolled': run(goTab('section.2'),
-    "PL.plex.get('/library/sections/2/all',{type:2,sort:'lastViewedAt:desc','X-Plex-Container-Size':1}).then(function(mc){var d=PL.screens.details(mc.Metadata[0]);PL.app.push(d);setTimeout(function(){d.key(40);d.key(40);d.key(40);},2500);return mc.Metadata[0].title;})"),
+    "PL.plex.get('/library/sections/2/all',{type:2,sort:'lastViewedAt:desc','X-Plex-Container-Size':1}).then(function(mc){var d=PL.screens.details(mc.Metadata[0]);PL.app.push(d);setTimeout(function(){d.key(40);d.key(40);d.key(40);d.key(40);},2500);return mc.Metadata[0].title;})"),
   'search': run(goTab('search')),
   'livetv': run(goTab('livetv')),
   'settings': run(goTab('settings')),
