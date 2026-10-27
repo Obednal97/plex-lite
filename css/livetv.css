@@ -1,3 +1,156 @@
-/* Live TV: logo plates stay dark glass until the logo has loaded, then turn light. */
-.channel .channel-logo { background: rgba(255, 255, 255, 0.10); transition: background-color 200ms ease; }
-.channel .channel-logo.loaded { background: #f4f4f6; }
+/* Live TV (docs/LIVETV-v2-design.md): the guide grid on the Live TV tab and the live player's
+   banner, mini guide and number entry. Chrome 53: no grid, flex gap, clamp or backdrop-filter;
+   everything that moves is a transform or opacity. Loaded after player.css, before theme.css. */
+
+/* ---- The guide: filters 136, details 220-440, ruler 462, grid 506-1080 ------------------------- */
+
+.lg { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+
+.lg-detail { position: absolute; left: 96px; top: 222px; width: 1180px; }
+.lg-eyebrow { height: 32px; font-size: 26px; line-height: 32px; font-weight: 500; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lg-live { display: inline-block; padding: 0 10px; height: 28px; line-height: 28px; border-radius: 6px; background: #e33; color: #fff; font-size: 18px; font-weight: 700; letter-spacing: 0.08em; margin-right: 14px; vertical-align: 2px; }
+.lg-left { color: var(--resume); }
+.lg-title { margin-top: 8px; height: 58px; font-size: 48px; line-height: 58px; font-weight: 700; letter-spacing: -0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lg-sub { margin-top: 2px; height: 34px; font-size: 26px; line-height: 34px; font-weight: 500; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lg-summary {
+  margin-top: 10px; max-height: 72px; font-size: 26px; line-height: 36px; color: var(--reading); overflow: hidden;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+}
+
+.lg-art {
+  position: absolute; right: 96px; top: 214px; width: 400px; height: 225px; border-radius: 14px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.lg-art img { display: block; width: 400px; height: 225px; opacity: 0; transition: opacity 300ms var(--ease); }
+.lg-art.loaded img { opacity: 1; }
+
+/* the ruler: the day on the left, half hours over the grid, a teal "now" pill */
+.lg-ruler { position: absolute; left: 0; top: 462px; width: 1920px; height: 36px; }
+.lg-day { position: absolute; left: 96px; top: 0; width: 300px; font-size: 24px; line-height: 36px; font-weight: 600; color: var(--text-2); }
+.lg-ruler-clip { position: absolute; left: 412px; top: 0; width: 1412px; height: 36px; overflow: hidden; }
+.lg-ruler-track, .lg-track { position: absolute; left: 0; top: 0; transition: transform var(--t-scroll) var(--ease); }
+.lg-tick { position: absolute; left: 0; top: 0; padding-left: 12px; font-size: 24px; line-height: 36px; font-weight: 500; color: var(--text-3); white-space: nowrap; }
+.lg-tick::before { content: ""; position: absolute; left: 0; top: 10px; width: 2px; height: 16px; border-radius: 1px; background: rgba(255, 255, 255, 0.18); }
+.lg-now-pill {
+  position: absolute; left: -42px; top: 2px; width: 84px; height: 32px; line-height: 32px; border-radius: 16px; text-align: center;
+  background: var(--resume); color: var(--focus-ink); font-size: 22px; font-weight: 700;
+}
+
+/* the grid: channel plates on the left, programme cells on the right, each in a clip */
+.lg-grid { position: absolute; left: 0; top: 506px; width: 1920px; height: 574px; }
+.lg-chans { position: absolute; left: 96px; top: 0; width: 300px; height: 574px; overflow: hidden; }
+.lg-progs { position: absolute; left: 412px; top: 0; width: 1412px; height: 574px; overflow: hidden; }
+.lg-fade { position: absolute; left: 0; bottom: 0; width: 1920px; height: 96px; pointer-events: none; background: linear-gradient(180deg, rgba(43, 43, 46, 0) 0%, var(--ground) 100%); }
+.lg-now { position: absolute; left: -1px; top: 0; width: 2px; height: 574px; background: var(--resume); opacity: 0.85; }
+
+.lg-chan { position: absolute; left: 0; top: 0; width: 300px; height: 76px; }
+.lg-logo { position: absolute; left: 0; top: 6px; width: 120px; height: 64px; border-radius: 12px; background: rgba(255, 255, 255, 0.10); overflow: hidden; transition: background-color 200ms ease; }
+.lg-logo.loaded { background: #f4f4f6; }
+.lg-logo img { position: absolute; left: 8px; top: 4px; width: 104px; height: 56px; }
+.lg-logo-text, .live-logo-text { display: block; padding: 0 8px; font-size: 20px; line-height: 64px; font-weight: 700; text-align: center; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lg-num { position: absolute; left: 138px; top: 8px; font-size: 26px; line-height: 32px; font-weight: 700; color: var(--text-2); white-space: nowrap; }
+.lg-name { position: absolute; left: 138px; top: 40px; width: 162px; font-size: 22px; line-height: 28px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lg-chan.current .lg-num { color: var(--text); }
+.lg-chan.current .lg-name { color: var(--text-2); }
+.lg-fav, .live-fav { color: var(--resume); font-size: 20px; margin-left: 8px; vertical-align: 2px; }
+.live-fav { margin-left: 0; }
+
+.lg-row { position: absolute; left: 0; top: 0; height: 76px; }
+.lg-cell {
+  position: absolute; left: 0; top: 0; height: 76px; border-radius: 12px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.06); color: var(--text-2);
+  transition: background-color var(--t-state) linear, color var(--t-state) linear;
+}
+.lg-cell.on-now { background: rgba(255, 255, 255, 0.12); color: var(--text); }
+.lg-cell.empty { background: rgba(255, 255, 255, 0.03); color: var(--text-3); font-style: italic; }
+.lg-label { padding: 0 20px; font-size: 26px; line-height: 76px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lg-cell.focused { background: var(--focus); color: var(--focus-ink); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45); }
+.pointer .lg-cell, .pointer .lg-chan, .pointer .lmg-row { cursor: pointer; }
+
+.lg-status { position: absolute; left: 0; top: 700px; width: 1920px; text-align: center; font-size: 28px; color: var(--text-2); }
+.lg-status .spinner { margin: 0 auto 24px; }
+
+/* channel number entry: a lit-glass tile (over the artwork in the guide, top right in the player) */
+.lg-entry {
+  position: absolute; right: 96px; top: 214px; width: 400px; height: 225px; border-radius: 24px; text-align: center; box-sizing: border-box;
+  padding-top: 42px; background: linear-gradient(180deg, #3a3a40 0%, #28282e 100%);
+  border: 1px solid var(--rim); border-top-color: var(--rim-light); box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45);
+  transition: opacity 160ms linear; z-index: 4;
+}
+.lg-entry.entry-hidden { opacity: 0; transition: opacity 260ms linear; }
+.lg-entry-digits { font-size: 84px; line-height: 96px; font-weight: 700; letter-spacing: 8px; color: var(--text); }
+.lg-entry-name { margin-top: 8px; padding: 0 24px; font-size: 26px; line-height: 34px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-entry { top: 80px; z-index: 6; }
+
+/* ---- The live player: banner, mini guide ---------------------------------------------------------- */
+
+.live { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; pointer-events: none; }
+.live-player.paused .player-veil { opacity: 1; }
+
+.live-banner { position: absolute; left: 0; bottom: 0; width: 1920px; height: 0; opacity: 0; transition: opacity 250ms var(--ease); }
+.view-banner .live-banner { opacity: 1; pointer-events: auto; }
+.live-logo-host { position: absolute; left: 96px; bottom: 222px; width: 156px; height: 88px; }
+.live-logo { position: absolute; left: 0; top: 0; width: 156px; height: 88px; border-radius: 16px; overflow: hidden; background: rgba(255, 255, 255, 0.12); transition: background-color 200ms ease; }
+.live-logo.loaded { background: #f4f4f6; }
+.live-logo img { position: absolute; left: 10px; top: 8px; width: 136px; height: 72px; }
+.live-logo .live-logo-text { line-height: 88px; }
+.live-text { left: 280px; width: 1000px; }
+.osd-live-off { background: rgba(255, 255, 255, 0.22); }
+
+.live-tip {
+  position: absolute; left: 50%; bottom: 84px; width: 300px; margin-left: -150px; text-align: center; pointer-events: none;
+  opacity: 0; transition: opacity 120ms linear;
+}
+.live-tip { font-size: 0; }
+.round.focused .live-tip { opacity: 1; font-size: 22px; line-height: 30px; font-weight: 600; color: var(--text); text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8); }
+
+/* the programme's bar: aired (light), where we are (teal), the live edge (a tick when behind) */
+.live-bar { position: absolute; left: 96px; bottom: 168px; width: 1728px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); }
+.live-bar-avail, .live-bar-fill { position: absolute; left: 0; top: 0; width: 1728px; height: 6px; border-radius: 3px; transform-origin: 0 0; transform: scaleX(0); }
+.live-bar-avail { background: rgba(255, 255, 255, 0.30); }
+.live-bar-fill { background: var(--resume); }
+.live-bar-edge { position: absolute; left: 0; top: -5px; width: 0; height: 16px; opacity: 0; }
+.live-bar-edge::after { content: ""; position: absolute; left: -2px; top: 0; width: 4px; height: 16px; border-radius: 2px; background: var(--focus); }
+.behind .live-bar-edge { opacity: 1; }
+.live-bar-head { position: absolute; left: 0; top: -3px; width: 0; height: 12px; }
+.live-bar-head .bar-knob { opacity: 0; transform: scale(0.5); }
+.seekable.zone-bar .live-bar-head .bar-knob { opacity: 1; transform: none; }
+.no-times .live-bar { visibility: hidden; }
+.live .osd-times .right { max-width: 900px; overflow: hidden; text-overflow: ellipsis; }
+.live.is-paused .osd-glyph { display: inline-block; }
+.live.is-paused .osd-glyph .glyph { display: block; }
+
+.live .osd-hints { opacity: 1; }
+.live-hints { left: 96px; right: auto; }
+.live .osd-hint:first-child { margin-left: 0; }
+.live-icons .round { pointer-events: auto; }
+
+/* the mini guide: rows over a wedge on the left; the picture plays on the right */
+.live-guide { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; opacity: 0; transform: translate3d(-32px, 0, 0); transition: opacity 200ms var(--ease), transform var(--t-scroll) var(--ease); }
+.view-guide .live-guide { opacity: 1; transform: none; pointer-events: auto; }
+.live-wedge { position: absolute; left: 0; top: 0; width: 1240px; height: 1080px; background: linear-gradient(90deg, rgba(5, 5, 8, 0.94) 0%, rgba(5, 5, 8, 0.86) 50%, rgba(5, 5, 8, 0) 100%); }
+.live-guide-head { position: absolute; left: 96px; top: 80px; font-size: 22px; line-height: 30px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); }
+.live-guide-clip { position: absolute; left: 80px; top: 128px; width: 780px; height: 832px; overflow: hidden; }
+.live-guide-track { position: absolute; left: 0; top: 0; }
+.lmg-row {
+  position: absolute; left: 16px; top: 0; width: 748px; height: 96px; border-radius: 16px; color: var(--text);
+  transition: transform var(--t-scroll) var(--ease), background-color var(--t-state) linear;
+}
+.lmg-logo { position: absolute; left: 16px; top: 16px; width: 120px; height: 64px; border-radius: 12px; overflow: hidden; background: rgba(255, 255, 255, 0.10); }
+.lmg-logo.loaded { background: #f4f4f6; }
+.lmg-logo img { position: absolute; left: 8px; top: 4px; width: 104px; height: 56px; }
+.lmg-head, .lmg-now, .lmg-foot { position: absolute; left: 160px; width: 568px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lmg-head { top: 8px; font-size: 22px; line-height: 28px; color: var(--text-2); }
+.lmg-num { font-weight: 700; color: var(--text); }
+.lmg-now { top: 36px; font-size: 28px; line-height: 34px; font-weight: 600; }
+.lmg-foot { top: 70px; font-size: 22px; line-height: 22px; color: var(--text-3); }
+.lmg-bar { display: inline-block; position: relative; width: 96px; height: 4px; margin-right: 14px; vertical-align: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.22); overflow: hidden; }
+.lmg-fill { position: absolute; left: 0; top: 0; width: 96px; height: 4px; transform-origin: 0 0; background: var(--resume); }
+.lmg-row.watching .lmg-head::after { content: "  \00B7  Watching"; color: var(--resume); font-weight: 600; }
+.lmg-row.focused { background: var(--focus); color: var(--focus-ink); }
+.lmg-row.focused .lmg-head, .lmg-row.focused .lmg-num { color: rgba(8, 8, 10, 0.75); }
+.lmg-row.focused .lmg-foot { color: rgba(8, 8, 10, 0.6); }
+.lmg-row.focused .lmg-bar { background: rgba(8, 8, 10, 0.18); }
+.lmg-row.focused .lmg-fill { background: var(--focus-ink); }
+.lmg-row.focused.watching .lmg-head::after { color: #137f8a; }
+.live-guide-hints { left: 96px; right: auto; bottom: 44px; }

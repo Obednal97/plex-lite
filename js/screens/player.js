@@ -38,8 +38,9 @@
     next: { fill: true, parts: [['path', { d: 'M4 5.5v13l10-6.5z' }], ['rect', { x: 16, y: 5, width: 3.2, height: 14, rx: 1 }]] },
   };
 
+  // name: a key of GLYPHS, or a glyph definition of the same shape (Live TV draws its own).
   function glyph(name, size, weight) {
-    var g = GLYPHS[name];
+    var g = typeof name === 'string' ? GLYPHS[name] : name;
     var fill = !!g.parts; // {fill: true, parts} (an array's .fill is Array.prototype.fill)
     var parts = g.parts || g;
     var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -63,6 +64,8 @@
     });
     return svg;
   }
+
+  PL.glyph = glyph;
 
   // "S1 E2" (Special 3 for season 0)
   function episodeCode(it) {
@@ -250,6 +253,8 @@
     this.painted = {};        // last values written to the DOM, so unchanged ones aren't rewritten
     this.preview = { part: null, ok: false, want: null, loading: false, shown: null };
     this.build();
+    // a channel: the live controls (js/screens/live-osd.js) replace the bottom block
+    if (this.live) this.liveOsd = new PL.LiveOsd(this);
   }
 
   Player.prototype.build = function () {
@@ -433,6 +438,10 @@
       if (self.state === 'playing') self.setStatus('', true);
     });
     on('timeupdate', function () {
+      if (self.liveOsd) {
+        self.liveOsd.onTime();
+        return;
+      }
       self.verifySeek();
       if (!self.osdHidden) self.paintBar();
       self.renderSubs();
@@ -515,6 +524,10 @@
   // Shows the controls (or keeps them up) and re-arms the auto-hide. zone: where the focus lands;
   // by default the Skip / Up Next button when one is showing (it keeps the focus), else the bar.
   Player.prototype.showOsd = function (zone) {
+    if (this.liveOsd) {
+      this.liveOsd.showBanner();
+      return;
+    }
     var self = this;
     var wasHidden = this.osdHidden;
     if (wasHidden) {
@@ -668,6 +681,10 @@
   };
 
   Player.prototype.paintText = function () {
+    if (this.liveOsd) {
+      this.liveOsd.paintBanner();
+      return;
+    }
     PL.clear(this.eyebrow);
     if (this.live) {
       var ch = this.live.channel;
@@ -1754,24 +1771,36 @@
 
   // ---- Live TV -------------------------------------------------------------------------------
 
+  // Releases the old channel's tuner session first (the owner's tuner has one stream), then tunes.
+  // Plex binds the stream to the X-Plex-Session-Identifier sent here: playback must reuse the id the
+  // tuner answers with (see start()).
   Player.prototype.tune = function (channel) {
     var self = this;
     if (this.state === 'stopped') return;
+    clearTimeout(this.channelTimer);
+    var playing = this.live.channel;
+    if (this.liveTuned && playing && playing.identifier !== channel.identifier) this.lastChannel = playing;
     this.teardownVideo();
     this.stopTranscode();
-    this.releaseLive();
+    var released = this.releaseLive();
     var gen = ++this.gen;
     this.live.channel = channel;
     this.programme = '';
     this.liveMeta = null;
+    this.liveTuned = false;
     this.state = 'loading';
     this.paintText();
     this.showOsd();
+    if (this.liveOsd) this.liveOsd.onTune(channel);
     this.setStatus('Tuning ' + (channel.title || 'channel') + '…', true);
     var session = PL.uuid();
     this.liveSession = session;
-    PL.plex.request('POST', '/livetv/dvrs/' + this.live.dvrKey + '/channels/' + encodeURIComponent(channel.identifier) + '/tune',
-      { 'X-Plex-Session-Identifier': session }, { timeout: 45000 }).then(function (mc) {
+    released.then(function () {
+      if (gen !== self.gen) return null;
+      return PL.plex.request('POST', '/livetv/dvrs/' + self.live.dvrKey + '/channels/' + encodeURIComponent(channel.identifier) + '/tune',
+        { 'X-Plex-Session-Identifier': session }, { timeout: 45000 });
+    }).then(function (mc) {
+      if (!mc && gen !== self.gen) return;
       var sub = mc && mc.MediaSubscription && mc.MediaSubscription[0];
       var op = sub && sub.MediaGrabOperation && sub.MediaGrabOperation[0];
       var meta = op && op.Metadata;
@@ -1787,24 +1816,60 @@
       var m = part && /\/livetv\/sessions\/[^/]+\/([^/?]+)\//.exec(part.key || '');
       self.liveSession = m ? m[1] : session;
       self.liveUuid = meta.Media && meta.Media[0] && meta.Media[0].uuid;
+      self.liveTuned = true;
       var now = sub.Timeline && sub.Timeline.Metadata && sub.Timeline.Metadata[0];
       if (now) self.programme = now.grandparentTitle ? now.grandparentTitle + ' · ' + now.title : now.title;
       self.paintText();
       self.start(0);
-    }).catch(function (err) { if (gen === self.gen) self.fail(err); });
+    }).catch(function (err) {
+      if (gen !== self.gen) return;
+      // an HTTP error from the tune is almost always a busy tuner or a dead stream
+      if (err && err.status >= 400) err = new Error('Couldn\'t tune ' + (channel.title || 'this channel') + '. The tuner may be busy, or the channel is off air.');
+      self.fail(err);
+      if (self.liveOsd) self.liveOsd.onState();
+    });
   };
 
+  // CH+ / CH−: the banner shows the next channel at once; the tune waits for the presses to stop.
   Player.prototype.changeChannel = function (dir) {
     var list = this.live.channels || [];
     if (!list.length) return;
+    var i = this.channelIndex();
+    var next = list[((i < 0 ? 0 : i + dir) + list.length) % list.length];
+    this.tuneChannel(next, 600);
+  };
+
+  Player.prototype.channelIndex = function () {
+    var list = this.live.channels || [];
+    var id = this.live.channel && this.live.channel.identifier;
+    for (var i = 0; i < list.length; i++) if (list[i].identifier === id) return i;
+    return -1;
+  };
+
+  // Tunes `channel` after `delay` ms (more presses within it move on without tuning each one).
+  Player.prototype.tuneChannel = function (channel, delay) {
     var self = this;
-    this.live.index = ((this.live.index || 0) + dir + list.length) % list.length;
-    this.live.channel = list[this.live.index];
+    if (this.state === 'stopped' || !channel) return;
+    clearTimeout(this.channelTimer);
+    if (!delay) {
+      this.tune(channel);
+      return;
+    }
+    if (this.liveTuned && this.live.channel && this.live.channel.identifier !== channel.identifier && !this.pendingFrom) {
+      this.pendingFrom = this.live.channel;
+    }
+    this.live.channel = channel;
     this.programme = '';
     this.paintText();
     this.showOsd();
-    clearTimeout(this.channelTimer);
-    this.channelTimer = setTimeout(function () { self.tune(self.live.channel); }, 600);
+    if (this.liveOsd) this.liveOsd.onTune(channel);
+    this.channelTimer = setTimeout(function () {
+      // the channel that was playing when the presses began is the "last channel"
+      var from = self.pendingFrom;
+      self.pendingFrom = null;
+      self.live.channel = from || self.live.channel;
+      self.tune(channel);
+    }, delay);
   };
 
   Player.prototype.releaseLiveMeta = function (meta) {
@@ -1812,11 +1877,14 @@
     if (uuid) PL.plex.request('DELETE', '/transcode/sessions/' + uuid).catch(function () {});
   };
 
+  // Ends the tuner session. Resolves when the server has answered (or after 2 s), so a new tune
+  // doesn't race the old one for the tuner.
   Player.prototype.releaseLive = function () {
-    if (this.liveUuid) {
-      PL.plex.request('DELETE', '/transcode/sessions/' + this.liveUuid).catch(function () {});
-      this.liveUuid = null;
-    }
+    if (!this.liveUuid) return Promise.resolve();
+    var uuid = this.liveUuid;
+    this.liveUuid = null;
+    var req = PL.plex.request('DELETE', '/transcode/sessions/' + uuid).catch(function () {});
+    return Promise.race([req, new Promise(function (resolve) { setTimeout(resolve, 2000); })]);
   };
 
 
@@ -2366,7 +2434,7 @@
     clearInterval(this.timelineTimer);
     this.teardownVideo();
     this.stopTranscode();
-    this.setStatus(PL.errorMessage(err) + '  ·  Press Back to return', false);
+    this.setStatus(PL.errorMessage(err) + (this.live ? '  ·  Choose another channel, or press Back' : '  ·  Press Back to return'), false);
     PL.toast(PL.errorMessage(err));
   };
 
@@ -2408,6 +2476,11 @@
     this.teardownVideo();
     this.stopTranscode();
     this.releaseLive();
+    if (this.liveOsd) {
+      this.liveOsd.destroy();
+      // the guide focuses the channel that was on
+      if (PL.liveGuide && this.live.channel) PL.liveGuide.watching = this.live.channel.identifier;
+    }
   };
 
   // Removes this player even if sheets are open above it.
@@ -2467,6 +2540,8 @@
     this.lastKeyAt = Date.now();
     var held = repeat || (real && !!this.held[code]);
     if (real) this.held[code] = true;
+    // a channel: every key goes to the live controls (tuning, failed or playing alike)
+    if (this.liveOsd) return this.liveOsd.key(code, held);
     var back = PL.isBack(code);
     if (back && (this.state === 'error' || this.state === 'loading' || this.state === 'idle')) {
       if (held) return true;

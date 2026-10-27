@@ -194,6 +194,462 @@
     "hero",
     "spring"
    ]
+  },
+  {
+   "title": "Newsroom 24",
+   "short": "NEWS 24",
+   "vcn": 109,
+   "genres": [
+    "News"
+   ],
+   "items": [
+    {
+     "title": "Headlines",
+     "minutes": 15,
+     "genre": "News",
+     "summary": "The main stories of the hour, with reports from around the country."
+    },
+    {
+     "title": "Business Desk",
+     "minutes": 15,
+     "genre": "News",
+     "summary": "Markets, companies and the economy in fifteen minutes."
+    },
+    {
+     "title": "Headlines",
+     "minutes": 15,
+     "genre": "News",
+     "summary": "The main stories of the hour, with reports from around the country."
+    },
+    {
+     "title": "Weather Update",
+     "minutes": 5,
+     "genre": "Weather",
+     "summary": "The forecast for the next few days."
+    },
+    {
+     "title": "Newsroom Live",
+     "minutes": 10,
+     "genre": "News",
+     "summary": "Breaking news and live interviews from the newsroom."
+    }
+   ]
+  },
+  {
+   "title": "World News",
+   "short": "WORLD",
+   "vcn": 110,
+   "genres": [
+    "News"
+   ],
+   "items": [
+    {
+     "title": "World Report",
+     "minutes": 30,
+     "genre": "News",
+     "summary": "International news, with correspondents in every time zone."
+    },
+    {
+     "title": "Headlines",
+     "minutes": 10,
+     "genre": "News",
+     "summary": "A round-up of the stories making the news."
+    },
+    {
+     "title": "Global Business",
+     "minutes": 15,
+     "genre": "News",
+     "summary": "Trade, technology and the world economy."
+    },
+    {
+     "title": "Weather Update",
+     "minutes": 5,
+     "genre": "Weather",
+     "summary": "The world weather forecast."
+    }
+   ]
+  },
+  {
+   "title": "Sports Arena",
+   "short": "ARENA",
+   "vcn": 111,
+   "genres": [
+    "Sports"
+   ],
+   "offsetMin": 30,
+   "items": [
+    {
+     "title": "Match Day Live",
+     "minutes": 150,
+     "genre": "Sports",
+     "summary": "Live coverage of the big match of the day, with build-up and analysis."
+    },
+    {
+     "title": "Sports Desk",
+     "minutes": 30,
+     "genre": "Sports",
+     "summary": "Results, interviews and the latest sports news."
+    },
+    {
+     "title": "Goals of the Week",
+     "minutes": 15,
+     "genre": "Sports",
+     "summary": "Every goal from the week, in one quarter of an hour."
+    },
+    {
+     "title": "Sports Desk",
+     "minutes": 30,
+     "genre": "Sports",
+     "summary": "Results, interviews and the latest sports news."
+    },
+    {
+     "title": "The Tactics Board",
+     "minutes": 60,
+     "genre": "Sports",
+     "summary": "Former players break down the weekend's games."
+    }
+   ]
+  },
+  {
+   "title": "Racing Live",
+   "short": "RACING",
+   "vcn": 112,
+   "genres": [
+    "Sports"
+   ],
+   "tuneFails": true,
+   "items": [
+    {
+     "title": "Race Day",
+     "minutes": 90,
+     "genre": "Sports",
+     "summary": "Live racing from the circuit, from the formation lap to the podium."
+    },
+    {
+     "title": "Pit Lane",
+     "minutes": 30,
+     "genre": "Sports",
+     "summary": "News and interviews from the paddock."
+    },
+    {
+     "title": "Qualifying",
+     "minutes": 60,
+     "genre": "Sports",
+     "summary": "The fight for pole position."
+    }
+   ]
+  },
+  {
+   "title": "Kids Corner",
+   "short": "KIDS",
+   "vcn": 113,
+   "genres": [
+    "Kids"
+   ],
+   "offsetMin": 15,
+   "items": [
+    "caminandes",
+    {
+     "id": "big-buck-bunny",
+     "minutes": 15
+    },
+    {
+     "title": "Story Time",
+     "minutes": 10,
+     "genre": "Kids",
+     "summary": "A picture-book story read aloud."
+    },
+    {
+     "id": "wing-it",
+     "minutes": 5
+    },
+    {
+     "id": "hero",
+     "minutes": 5
+    },
+    {
+     "id": "spring",
+     "minutes": 10
+    }
+   ]
+  },
+  {
+   "title": "Nature Hour",
+   "short": "NATURE",
+   "vcn": 114,
+   "genres": [
+    "Documentary",
+    "Nature"
+   ],
+   "items": [
+    {
+     "id": "nasa-explorers",
+     "minutes": 30
+    },
+    {
+     "title": "Wild Coasts",
+     "minutes": 60,
+     "genre": "Nature",
+     "summary": "A year on a rocky shoreline, from winter storms to summer chicks."
+    },
+    {
+     "id": "spring",
+     "minutes": 30
+    }
+   ]
+  },
+  {
+   "title": "Comedy Club",
+   "short": "COMEDY",
+   "vcn": 115,
+   "genres": [
+    "Comedy"
+   ],
+   "offsetMin": 25,
+   "items": [
+    {
+     "id": "his-girl-friday",
+     "minutes": 120
+    },
+    {
+     "id": "glass-half",
+     "minutes": 5
+    },
+    {
+     "id": "wing-it",
+     "minutes": 5
+    },
+    {
+     "title": "Stand-Up Tonight",
+     "minutes": 30,
+     "genre": "Comedy",
+     "summary": "New comedians try out their best five minutes."
+    },
+    {
+     "id": "big-buck-bunny",
+     "minutes": 15
+    },
+    {
+     "title": "Sketch Show",
+     "minutes": 30,
+     "genre": "Comedy",
+     "summary": "Quick-fire sketches from a cast of five."
+    }
+   ]
+  },
+  {
+   "title": "Music Box",
+   "short": "MUSIC",
+   "vcn": 116,
+   "genres": [
+    "Music"
+   ],
+   "items": [
+    {
+     "title": "Top Tracks",
+     "minutes": 30,
+     "genre": "Music",
+     "summary": "The most played videos of the week."
+    },
+    {
+     "title": "Live Session",
+     "minutes": 60,
+     "genre": "Music",
+     "summary": "A full live set, recorded in the studio."
+    },
+    {
+     "title": "Video Mix",
+     "minutes": 15,
+     "genre": "Music",
+     "summary": "Non-stop music videos."
+    },
+    {
+     "title": "Video Mix",
+     "minutes": 15,
+     "genre": "Music",
+     "summary": "Non-stop music videos."
+    }
+   ]
+  },
+  {
+   "title": "Weather Watch",
+   "short": "WEATHER",
+   "vcn": 117,
+   "genres": [
+    "Weather"
+   ],
+   "items": [
+    {
+     "title": "Weather Update",
+     "minutes": 5,
+     "genre": "Weather",
+     "summary": "The forecast for the next few days."
+    },
+    {
+     "title": "Forecast",
+     "minutes": 10,
+     "genre": "Weather",
+     "summary": "A detailed regional forecast."
+    },
+    {
+     "title": "Weather Update",
+     "minutes": 5,
+     "genre": "Weather",
+     "summary": "The forecast for the next few days."
+    },
+    {
+     "title": "Weather Outlook",
+     "minutes": 15,
+     "genre": "Weather",
+     "summary": "The week ahead, with the long-range outlook."
+    }
+   ]
+  },
+  {
+   "title": "Space Channel",
+   "short": "SPACE",
+   "vcn": 118,
+   "genres": [
+    "Science"
+   ],
+   "offsetMin": 50,
+   "items": [
+    "sciencecasts",
+    {
+     "title": "Launch Coverage",
+     "minutes": 60,
+     "genre": "Science",
+     "summary": "Countdown, lift-off and the climb to orbit, with live commentary."
+    },
+    "nasa-explorers"
+   ]
+  },
+  {
+   "title": "Fright Night",
+   "short": "FRIGHT",
+   "vcn": 119,
+   "genres": [
+    "Horror"
+   ],
+   "offsetMin": 70,
+   "items": [
+    {
+     "id": "sprite-fright",
+     "minutes": 15
+    },
+    {
+     "id": "night-of-the-living-dead",
+     "minutes": 120
+    },
+    {
+     "title": "Midnight Tales",
+     "minutes": 30,
+     "genre": "Horror",
+     "summary": "Short ghost stories, told by candlelight."
+    }
+   ]
+  },
+  {
+   "title": "Short Film Showcase",
+   "short": "SHORTS",
+   "vcn": 120,
+   "offsetMin": 35,
+   "items": [
+    {
+     "id": "coffee-run",
+     "minutes": 5
+    },
+    {
+     "id": "tears-of-steel",
+     "minutes": 15
+    },
+    {
+     "id": "glass-half",
+     "minutes": 5
+    },
+    {
+     "id": "charge",
+     "minutes": 5
+    },
+    {
+     "id": "elephants-dream",
+     "minutes": 15
+    },
+    {
+     "id": "cosmos-laundromat",
+     "minutes": 15
+    }
+   ]
+  },
+  {
+   "title": "Movie Classics Plus",
+   "short": "MOVIES+",
+   "vcn": 121,
+   "genres": [
+    "Movies"
+   ],
+   "offsetMin": 45,
+   "items": [
+    {
+     "id": "charade",
+     "minutes": 180
+    },
+    {
+     "title": "Behind the Classics",
+     "minutes": 30,
+     "genre": "Movies",
+     "summary": "How the great films of the past were made."
+    }
+   ]
+  },
+  {
+   "title": "Shopping Now",
+   "short": "SHOP",
+   "vcn": 122,
+   "genres": [
+    "Shopping"
+   ],
+   "items": []
+  },
+  {
+   "title": "Business Today",
+   "short": "BIZ",
+   "vcn": 130,
+   "genres": [
+    "News"
+   ],
+   "items": [
+    {
+     "title": "Markets Open",
+     "minutes": 60,
+     "genre": "News",
+     "summary": "Live from the trading floor as the markets open."
+    },
+    {
+     "title": "Business Headlines",
+     "minutes": 15,
+     "genre": "News",
+     "summary": "The business stories of the day."
+    },
+    {
+     "title": "Company Results",
+     "minutes": 30,
+     "genre": "News",
+     "summary": "This week's results, explained."
+    },
+    {
+     "title": "Business Headlines",
+     "minutes": 15,
+     "genre": "News",
+     "summary": "The business stories of the day."
+    }
+   ]
+  },
+  {
+   "title": "Local Access",
+   "short": "LOCAL",
+   "vcn": 140,
+   "items": []
   }
  ],
  "shots": {

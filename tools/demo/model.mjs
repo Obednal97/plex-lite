@@ -400,25 +400,64 @@ class Model {
 
   // ---- Live TV -----------------------------------------------------------------------------------
 
-  // A repeating schedule per channel, aligned to local midnight so it is the same on every request.
+  // What a channel airs, in order. Each entry of channel.items is a library title ("sintel"; a show
+  // airs all its episodes), a library title in a fixed slot ({"id": "sintel", "minutes": 30}), or a
+  // generated programme with no library title, such as a news bulletin
+  // ({"title": "Headlines", "minutes": 15, "genre": "News", "summary": "..."}).
+  // Returns [{item, key, minutes}]: key identifies the programme on its channel (repeats share it).
+  programmes(channel) {
+    if (!this._programmes) this._programmes = new Map();
+    if (this._programmes.has(channel)) return this._programmes.get(channel);
+    const out = [];
+    for (const entry of channel.items || []) {
+      const spec = typeof entry === 'string' ? { id: entry } : entry;
+      if (spec.id) {
+        const t = this.findTitle(spec.id);
+        if (!t) continue;
+        for (const it of t.type === 'show' ? this.episodesOf(t) : [t]) out.push({ item: it, key: it.ratingKey, minutes: spec.minutes });
+      } else if (spec.title) {
+        out.push({ item: this.generatedProgramme(spec), key: 'g-' + slug(spec.title + (spec.episode ? ' ' + spec.episode : '')), minutes: spec.minutes || 30 });
+      }
+    }
+    this._programmes.set(channel, out);
+    return out;
+  }
+
+  // A guide-only programme (no video, no library entry), shaped like a library episode.
+  generatedProgramme(spec) {
+    const id = slug(spec.title);
+    if (!this._generated) this._generated = new Map();
+    const k = id + '|' + (spec.episode || '');
+    if (!this._generated.has(k)) {
+      const thumb = this.imagePath(`/livetv/art/${id}/thumb`, `gen:still/${id}`);
+      this._generated.set(k, {
+        type: 'episode', title: spec.episode || spec.title, grandparentTitle: spec.title, summary: spec.summary,
+        duration: (spec.minutes || 30) * 60000, thumb, grandparentThumb: thumb,
+        Genre: spec.genre ? [{ tag: spec.genre }] : [], _generated: true,
+      });
+    }
+    return this._generated.get(k);
+  }
+
+  // A repeating schedule per channel over three days (yesterday, today, tomorrow), aligned to local
+  // midnight so it is the same on every request: [{item, key, beginsAt, endsAt}] in time order.
   schedule(channel) {
     const day = new Date();
     day.setHours(0, 0, 0, 0);
     const start = Math.floor(day.getTime() / 1000) - DAY;
-    const items = channel.items.map((t) => this.findTitle(t)).filter(Boolean)
-      .reduce((a, it) => a.concat(it.type === 'show' ? this.episodesOf(it) : [it]), []);
+    if (!this._schedules || this._schedules.start !== start) this._schedules = { start, map: new Map() };
+    if (this._schedules.map.has(channel)) return this._schedules.map.get(channel);
+    const progs = this.programmes(channel);
     const out = [];
-    if (!items.length) return out;
     let t = start + (channel.offsetMin || 0) * 60;
-    let i = 0;
-    while (t < start + 3 * DAY) {
-      const it = items[i % items.length];
-      // round each slot up to 5 minutes, like a real guide
-      const len = Math.max(5, Math.ceil(it.duration / 60000 / 5) * 5) * 60;
-      out.push({ item: it, beginsAt: t, endsAt: t + len });
+    for (let i = 0; progs.length && t < start + 3 * DAY; i++) {
+      const p = progs[i % progs.length];
+      // a fixed slot, else the running time rounded up to 5 minutes, like a real guide
+      const len = (p.minutes || Math.max(5, Math.ceil(p.item.duration / 60000 / 5) * 5)) * 60;
+      out.push({ item: p.item, key: p.key, beginsAt: t, endsAt: t + len });
       t += len;
-      i++;
     }
+    this._schedules.map.set(channel, out);
     return out;
   }
 

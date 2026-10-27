@@ -275,30 +275,11 @@ body.fast * { transition-duration: 90ms !important; transition-timing-function: 
 .search-status { position: absolute; left: 640px; top: 160px; font-size: 30px; line-height: 40px; color: var(--text-3); width: 1180px; }
 .search-results .shelf-title { left: 640px; }
 
-/* ---- Live TV guide -------------------------------------------------------------------------------- */
 
-.guide { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
-.guide-inner { position: absolute; left: 0; top: 0; width: 1920px; transition: transform var(--t-scroll) var(--ease); }
-.channel {
   position: absolute; left: 96px; width: 1728px; height: 104px; border-radius: 20px;
   background: var(--glass); border: 1px solid transparent;
   transition: transform var(--t-lift) var(--ease), background-color var(--t-state);
 }
-.channel.focused { background: rgba(255, 255, 255, 0.95); color: #000; transform: scale(1.02); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5); }
-.channel-logo { position: absolute; left: 20px; top: 16px; width: 128px; height: 72px; border-radius: 12px; background: rgba(255, 255, 255, 0.9); }
-.channel-logo img { position: absolute; left: 8px; top: 6px; width: 112px; height: 60px; }
-.channel-num { position: absolute; left: 172px; top: 20px; width: 90px; font-size: 24px; font-weight: 700; color: var(--text-2); }
-.channel-name { position: absolute; left: 172px; top: 54px; width: 300px; font-size: 20px; line-height: 28px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.channel-now { position: absolute; left: 500px; top: 18px; width: 820px; font-size: 28px; line-height: 36px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.channel-time { position: absolute; left: 500px; top: 58px; font-size: 20px; line-height: 28px; color: var(--text-2); }
-.channel-bar { position: absolute; left: 700px; top: 70px; width: 420px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.25); overflow: hidden; }
-.channel-bar-fill { width: 420px; height: 6px; background: #fff; transform-origin: 0 0; }
-.channel-next { position: absolute; left: 1180px; top: 20px; width: 560px; font-size: 21px; line-height: 30px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.channel-next b { display: block; color: var(--text-2); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-.channel.focused .channel-num, .channel.focused .channel-time { color: rgba(0, 0, 0, 0.6); }
-.channel.focused .channel-name, .channel.focused .channel-next, .channel.focused .channel-next b { color: rgba(0, 0, 0, 0.5); }
-.channel.focused .channel-bar { background: rgba(0, 0, 0, 0.15); }
-.channel.focused .channel-bar-fill { background: #000; }
 
 /* ---- Panels (settings, messages, sign-in) --------------------------------------------------------- */
 
@@ -370,17 +351,7 @@ body.fast * { transition-duration: 90ms !important; transition-timing-function: 
 .pointer .tab:hover, .pointer .chip:hover, .pointer .btn:hover, .pointer .key:hover,
 .pointer .row:hover, .pointer .sheet-row:hover { background: #fff; color: #000; }
 .pointer .tab:hover, .pointer .chip:hover, .pointer .btn:hover { transform: scale(1.06); }
-.pointer .channel.focused { background: var(--glass); color: var(--text); transform: none; box-shadow: none; }
-.pointer .channel:hover { background: rgba(255, 255, 255, 0.95); color: #000; }
-.pointer .tab, .pointer .chip, .pointer .btn, .pointer .key, .pointer .row, .pointer .sheet-row, .pointer .card, .pointer .channel { cursor: pointer; }
-.pointer .channel:hover .channel-num, .pointer .channel:hover .channel-time { color: rgba(0, 0, 0, 0.6); }
-.pointer .channel:hover .channel-name, .pointer .channel:hover .channel-next, .pointer .channel:hover .channel-next b { color: rgba(0, 0, 0, 0.5); }
-.pointer .channel:hover .channel-bar { background: rgba(0, 0, 0, 0.15); }
-.pointer .channel:hover .channel-bar-fill { background: #000; }
-.pointer .channel.focused .channel-num, .pointer .channel.focused .channel-time { color: var(--text-2); }
-.pointer .channel.focused .channel-name, .pointer .channel.focused .channel-next, .pointer .channel.focused .channel-next b { color: var(--text-2); }
-.pointer .channel.focused .channel-bar { background: rgba(255, 255, 255, 0.25); }
-.pointer .channel.focused .channel-bar-fill { background: #fff; }
+.pointer .tab, .pointer .chip, .pointer .btn, .pointer .key, .pointer .row, .pointer .sheet-row, .pointer .card { cursor: pointer; }
 
 /* ---- Text entry -------------------------------------------------------------------------------- */
 .text-input {

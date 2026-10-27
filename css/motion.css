@@ -17,7 +17,7 @@
 
 /* ---- Scrolling and focus ---------------------------------------------------------------------- */
 
-.shelf-track, .vstack, .grid-inner, .guide-inner, .chip-track { transition: transform var(--t-scroll) var(--spring); }
+.shelf-track, .vstack, .grid-inner, .chip-track, .lg-track, .lg-ruler-track { transition: transform var(--t-scroll) var(--spring); }
 .shelf-track.glide, .vstack.glide, .grid-inner.glide { transition: transform 380ms var(--glide); }
 .card-inner { transition: transform var(--t-pop) var(--spring); }
 .focus-shadow { transition: transform var(--t-scroll) var(--spring), opacity 200ms var(--spring); }
