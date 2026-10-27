@@ -17,12 +17,15 @@
     if (e.mediaType === 'movie') return [e.year, 'Film'].filter(Boolean).join(' · ');
     var eps = O.episodeLabel(e.episodes);
     var n = e.episodes.length;
-    return [eps, n > 1 ? n + ' episodes' : (n === 1 && e.episodes[0].title ? e.episodes[0].title : '')].filter(Boolean).join(' · ') || 'Series';
+    var extra = n === 1 ? e.episodes[0].title : n > 1 && !/episodes$/.test(eps) ? n + ' episodes' : '';
+    return [eps, extra].filter(Boolean).join(' · ') || 'Series';
   }
 
   function sizeLine(e) {
     if (!(e.size > 0)) return '';
-    return O.fmtSize(e.size - e.sizeLeft) + ' of ' + O.fmtSize(e.size);
+    var done = e.size - e.sizeLeft;
+    if (done <= 0 || e.sizeLeft <= 0) return O.fmtSize(e.size);
+    return O.fmtSize(done) + ' of ' + O.fmtSize(e.size);
   }
 
   // ---- The Downloading screen ---------------------------------------------------------------------
@@ -205,10 +208,11 @@
           ratingKey: 'osdl-' + e.id,
           type: 'download',
           title: e.title,
-          year: e.year,
+          // the card caption under focus: what matters here is progress, not the year
+          year: e.state === 'downloading' ? O.progressLine(e) : O.STATE_LABEL[e.state],
           thumb: e.poster,
           art: e.backdrop,
-          summary: (e.mediaType === 'tv' && sub ? sub + ' — ' : '') + O.STATE_LABEL[e.state] + (e.state === 'downloading' ? ', ' + O.progressLine(e) : ''),
+          summary: e.mediaType === 'tv' ? sub : '',
           download: e,
         };
       });
@@ -238,6 +242,8 @@
   };
 
   // ---- Details badge ----------------------------------------------------------------------------------
+
+  function toneOf(state) { return state === 'stalled' || state === 'failed' ? 'warn' : 'accent'; }
 
   function badgeText(e, ep) {
     var st = ep ? ep.state : e.state;
@@ -277,14 +283,14 @@
         if (item.type === 'movie' || item.type === 'show') {
           var text = badgeText(e);
           if (item.type === 'show' && e.episodes.length) text += ' · ' + O.episodeLabel(e.episodes);
-          return [{ label: text, tone: 'accent' }];
+          return [{ label: text, tone: toneOf(e.state) }];
         }
         var eps = e.episodes.filter(function (x) {
           return item.type === 'season' ? x.season === item.index : x.season === item.parentIndex && x.episode === item.index;
         });
         if (!eps.length) return [];
-        if (item.type === 'episode') return [{ label: badgeText(e, eps[0]), tone: 'accent' }];
-        return [{ label: (eps.length === 1 ? badgeText(e, eps[0]) + ' · E' + eps[0].episode : 'Downloading ' + eps.length + ' episodes'), tone: 'accent' }];
+        if (item.type === 'episode') return [{ label: badgeText(e, eps[0]), tone: toneOf(eps[0].state) }];
+        return [{ label: (eps.length === 1 ? badgeText(e, eps[0]) + ' · E' + eps[0].episode : 'Downloading ' + eps.length + ' episodes'), tone: toneOf(e.state) }];
       });
     });
   };

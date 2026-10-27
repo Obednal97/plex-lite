@@ -406,6 +406,8 @@
       list.forEach(function (b) {
         wrap.appendChild(PL.el('span', 'badge plugin-badge' + (b.tone ? ' tone-' + b.tone : ''), b.label));
       });
+      // a badge that wraps the meta line makes the text block taller
+      if (self.stack && self.stack.zones.indexOf(head) !== -1) self.stack.reflow(head);
     }, function () {});
   };
 

@@ -405,6 +405,6 @@
       var t = O.fmtTime(e.timeLeft);
       return O.pct(e.progress) + (t ? ' · ' + t + ' left' : '');
     }
-    return O.STATE_LABEL[e.state] + (e.state === 'stalled' || e.state === 'paused' ? ' · ' + O.pct(e.progress) : '');
+    return O.STATE_LABEL[e.state] + ((e.state === 'stalled' || e.state === 'paused') && e.progress >= 0.01 ? ' · ' + O.pct(e.progress) : '');
   };
 })();
