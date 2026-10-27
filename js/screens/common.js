@@ -103,6 +103,35 @@
     };
   };
 
+  // ---- Text entry (uses the TV's own on-screen keyboard) ---------------------------------------
+
+  // onDone(value) -> true to close, false to keep editing.
+  screens.textEntry = function (title, initial, placeholder, onDone) {
+    var el = PL.el('div', 'text-entry');
+    el.appendChild(PL.el('div', 'page-title', title));
+    var input = PL.el('input', { className: 'text-input', attrs: { type: 'url', spellcheck: 'false', autocomplete: 'off', placeholder: placeholder || '' } });
+    input.value = initial || '';
+    el.appendChild(input);
+    el.appendChild(PL.el('div', 'text-hint', 'Press OK to save · Back to cancel'));
+    var submit = function () {
+      if (onDone(input.value) !== false) {
+        input.blur();
+        PL.app.pop();
+      }
+    };
+    return {
+      el: el,
+      show: function () { PL.app.backdrop.set(null, 'none'); setTimeout(function () { input.focus(); }, 300); },
+      hide: function () { input.blur(); },
+      key: function (code) {
+        if (code === K.ENTER) { submit(); return true; }
+        if (PL.isBack(code)) { input.blur(); PL.app.pop(); return true; }
+        if (code === K.DOWN || code === K.UP) { input.focus(); return true; }
+        return false;
+      },
+    };
+  };
+
   // ---- Glass sheet -----------------------------------------------------------------------------
 
   // sections: [{heading, rows: [{label, sub, checked, action}]}]. Pushed as an overlay screen.

@@ -219,6 +219,7 @@
     }
     var t = e.target;
     var typing = t && t.tagName === 'INPUT';
+    if (typing && code === PL.KEY.BACKSPACE) return; // deletes a character, not "back"
     if (typing && !PL.isBack(code) && code !== PL.KEY.DOWN && code !== PL.KEY.UP && code !== PL.KEY.ENTER) return;
     if (code === PL.KEY.BLUE && !typing) {
       perf.toggle();
@@ -330,6 +331,8 @@
       app.hasLiveTv = res[1];
       app.buildTabs();
       app.selectTab(app.startTab());
+      app.ready = true;
+      launch.run();
       // warm the search index once the first screen has settled
       if (PL.fuzzy) setTimeout(function () { PL.fuzzy.ensure(); }, 8000);
     }).then(null, function (err) {
@@ -360,8 +363,83 @@
     });
     perf.on = !!PL.storage.get('perf', false);
     if (perf.on) perf.apply();
+    pointer.init();
+    launch.init();
     PL.plex.init();
     app.start();
+  };
+
+  // ---- Pointer (Magic Remote, phone-as-remote) ------------------------------------------------
+
+  // In pointer mode hover shows focus (CSS) and clicks act; the keyboard focus ring is hidden so
+  // there is only one highlight. Arrow keys switch back. Wheel steps between rows like Up/Down.
+  var pointer = {
+    on: false,
+    set: function (on) {
+      if (on === pointer.on) return;
+      pointer.on = on;
+      document.body.classList.toggle('pointer', on);
+    },
+    init: function () {
+      // webOS tells us when the cursor appears/disappears; mousemove covers desktops
+      document.addEventListener('cursorStateChange', function (e) {
+        pointer.set(!!(e.detail && e.detail.visibility));
+      });
+      var last = 0;
+      document.addEventListener('mousemove', function () {
+        var now = Date.now();
+        if (now - last < 100) return;
+        last = now;
+        pointer.set(true);
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.keyCode >= 37 && e.keyCode <= 40) pointer.set(false);
+      }, true);
+      var wheelAt = 0;
+      document.addEventListener('wheel', function (e) {
+        e.preventDefault();
+        var now = Date.now();
+        if (now - wheelAt < 180) return;
+        wheelAt = now;
+        var horizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+        var code = horizontal ? (e.deltaX > 0 ? PL.KEY.RIGHT : PL.KEY.LEFT) : (e.deltaY > 0 ? PL.KEY.DOWN : PL.KEY.UP);
+        handleKey({ keyCode: code, target: document.body, preventDefault: function () {} });
+      });
+    },
+  };
+  app.pointer = pointer;
+
+  // ---- Launch parameters ({ratingKey, action: 'details' | 'play'}) ----------------------------
+
+  // Other apps (the Hearth launcher's Continue Watching row) open a title directly. Params arrive at
+  // launch (PalmSystem.launchParams) or later via webOSRelaunch; they wait until the app is ready.
+  var launch = {
+    pending: null,
+    init: function () {
+      launch.take(window.PalmSystem && window.PalmSystem.launchParams);
+      document.addEventListener('webOSRelaunch', function (e) {
+        launch.take(e.detail);
+        launch.run();
+      });
+    },
+    take: function (raw) {
+      var p = raw;
+      if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { p = null; } }
+      if (p && p.ratingKey && /^\d+$/.test(String(p.ratingKey))) launch.pending = p;
+    },
+    run: function () {
+      var p = launch.pending;
+      if (!p || !app.ready) return;
+      launch.pending = null;
+      while (app.stack.length > 1) app.pop();
+      if (p.action === 'play') {
+        PL.plex.metadata(String(p.ratingKey)).then(function (item) {
+          app.push(PL.screens.player(item, { offset: item.viewOffset || 0 }));
+        }, function (err) { PL.toast(PL.errorMessage(err)); });
+      } else {
+        app.push(PL.screens.details({ ratingKey: String(p.ratingKey), type: 'movie' }));
+      }
+    },
   };
 
   document.addEventListener('DOMContentLoaded', app.init);

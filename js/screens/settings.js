@@ -5,15 +5,20 @@
   var screens = PL.screens = PL.screens || {};
   var K = PL.KEY;
 
-  var KIND_LABEL = { 'lan-http': 'Local network', lan: 'Local network (secure)', remote: 'Remote', relay: 'Plex relay' };
+  var KIND_LABEL = {
+    'lan-http': 'Local network', lan: 'Local network (secure)', remote: 'Remote', relay: 'Plex relay',
+    'manual-local': 'Local address', 'manual-remote': 'Remote address',
+  };
 
   screens.settings = function () {
     var el = PL.el('div', 'settings');
     var title = PL.el('div', 'page-title', 'Settings');
     title.style.left = '460px';
     el.appendChild(title);
-    var panel = PL.el('div', 'panel');
-    el.appendChild(panel);
+    var panelBox = PL.el('div', 'panel');
+    var panel = PL.el('div', 'panel-rows');
+    panelBox.appendChild(panel);
+    el.appendChild(panelBox);
     var index = 0;
     var area = 'panel';
     var rows = [];
@@ -30,6 +35,8 @@
       var defs = [
         { label: 'Profile', value: (PL.storage.get('profile', null) || { title: 'Account owner' }).title, action: pickProfile },
         { label: 'Server', value: (s.name || '—') + ' · ' + (KIND_LABEL[s.kind] || 'Unknown'), action: reconnect },
+        addressRow('Local server address', 'local', 'e.g. http://192.168.1.20:32400'),
+        addressRow('Remote server address', 'remote', 'e.g. https://plex.example.com:32400'),
         toggle('Autoplay next episode', 'autoplayNext', true),
         toggle('Skip intros automatically', 'autoSkipIntro', false),
         toggle('Skip credits automatically', 'autoSkipCredits', false),
@@ -49,8 +56,11 @@
       paint();
     }
 
+    // the panel shows ~8 rows; longer lists scroll to keep the focused row in view
     function paint() {
       rows.forEach(function (r, i) { r.node.classList.toggle('focused', area === 'panel' && !PL.app.tabsFocused && i === index); });
+      var shift = Math.max(0, (index + 1) * 88 - 88 * 8);
+      PL.translate(panel, 0, -shift);
     }
 
     function reconnect() {
@@ -59,6 +69,45 @@
         PL.toast('Connected to ' + s.name + ' (' + (KIND_LABEL[s.kind] || s.kind) + ')');
         build();
       }, function (err) { PL.toast(PL.errorMessage(err)); });
+    }
+
+    // Optional fixed addresses, tried before automatic discovery (local first, then remote).
+    function addressRow(label, which, example) {
+      var current = PL.plex.manual()[which];
+      return {
+        label: label, value: current || 'Automatic',
+        action: function () {
+          PL.app.push(screens.sheet([{
+            heading: label,
+            rows: [
+              { label: current ? 'Change address' : 'Set an address', action: function () { editAddress(label, which, example); } },
+              { label: 'Use automatic discovery', checked: !current, action: function () { saveAddress(which, ''); } },
+            ],
+          }]));
+        },
+      };
+    }
+
+    function editAddress(label, which, example) {
+      PL.app.push(screens.textEntry(label, PL.plex.manual()[which], example, function (value) {
+        var uri;
+        try { uri = PL.plex.normalizeUri(value); } catch (e) { PL.toast(e.message); return false; }
+        PL.toast('Checking ' + uri + '…');
+        PL.plex.connectUri(uri, 'manual-' + which).then(function () {
+          saveAddress(which, uri);
+        }, function (err) { PL.toast('No Plex server at that address (' + PL.errorMessage(err) + ')', 5000); });
+        return true;
+      }));
+    }
+
+    function saveAddress(which, uri) {
+      var m = PL.plex.manual();
+      m[which] = uri;
+      PL.storage.set('manualServer', m);
+      PL.plex.ensureServer(true).then(function (s) {
+        PL.toast('Connected to ' + s.name + ' (' + (KIND_LABEL[s.kind] || s.kind) + ')');
+        build();
+      }, function (err) { PL.toast(PL.errorMessage(err)); build(); });
     }
 
     function pickProfile() {

@@ -153,6 +153,48 @@
     });
   };
 
+  // ---- Manual server addresses (Settings) -------------------------------------------------------
+
+  // {local: 'http://192.168.1.20:32400', remote: 'https://plex.example.com'}; either may be empty.
+  plex.manual = function () {
+    return PL.storage.get('manualServer', null) || { local: '', remote: '' };
+  };
+
+  plex.normalizeUri = function (raw) {
+    var s = String(raw || '').trim().replace(/\/+$/, '');
+    if (!s) return '';
+    if (!/^https?:\/\//i.test(s)) s = 'http://' + s;
+    if (!/^https?:\/\/[^\/\s]+$/i.test(s)) throw new Error('That doesn\'t look like a server address');
+    return s;
+  };
+
+  // Connects to a typed-in address: asks the server who it is, then uses that server's access token
+  // from the account (shared servers have their own) or the account token for owned ones.
+  plex.connectUri = function (uri, kind) {
+    return PL.http('GET', uri + '/identity', { timeout: 5000 }).then(function (res) {
+      var id = res && res.MediaContainer && res.MediaContainer.machineIdentifier;
+      if (!id) throw new Error('No Plex server answered at ' + uri);
+      return plex.listServers().then(function (list) {
+        var r = list.filter(function (x) { return x.clientIdentifier === id; })[0];
+        var token = (r && r.accessToken) || plex.token;
+        return probe(uri, token, 5000).then(function () {
+          return { machineId: id, name: (r && r.name) || 'Plex server', uri: uri, token: token, kind: kind };
+        });
+      });
+    });
+  };
+
+  function connectManual(manual) {
+    var tries = [];
+    if (manual.local) tries.push([manual.local, 'manual-local']);
+    if (manual.remote) tries.push([manual.remote, 'manual-remote']);
+    var attempt = function (i) {
+      if (i >= tries.length) return Promise.reject(new Error('Your saved server addresses did not answer'));
+      return plex.connectUri(tries[i][0], tries[i][1]).then(null, function () { return attempt(i + 1); });
+    };
+    return attempt(0);
+  }
+
   plex.useServer = function (server) {
     plex.server = server;
     PL.storage.set('server', server);
@@ -174,6 +216,20 @@
         return server;
       });
     };
+    var manual = plex.manual();
+    if (manual.local || manual.remote) {
+      var viaManual = function () {
+        return connectManual(manual).then(function (server) {
+          plex.useServer(server);
+          return server;
+        }, function (err) {
+          PL.warn('manual addresses failed, using automatic discovery', err && err.message);
+          return rediscover();
+        });
+      };
+      if (!cached || force || String(cached.kind).indexOf('manual') !== 0) return viaManual();
+      return probe(cached.uri, cached.token, 2500).then(function () { return cached; }, viaManual);
+    }
     if (!cached || force) return rediscover();
     return probe(cached.uri, cached.token, 2500).then(function () {
       // stuck on a remote/relay address after a LAN hiccup: look for a LAN route in the background

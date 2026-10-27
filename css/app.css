@@ -385,3 +385,46 @@ body.fast * { transition-duration: 90ms !important; transition-timing-function: 
 }
 .toast.show { opacity: 1; transform: translate3d(-50%, 0, 0); }
 .perf { position: fixed; right: 24px; top: 16px; z-index: 200; padding: 4px 12px; border-radius: 8px; background: rgba(0, 0, 0, 0.7); font: 600 20px/28px monospace; color: #7f7; }
+
+/* ---- Pointer mode (Magic Remote / phone pointer): hover is the focus ------------------------- */
+
+.pointer .focus-shadow { opacity: 0 !important; }
+.pointer .card.focused .card-inner, .pointer .card-wide.focused .card-inner { transform: none; }
+.pointer .card.focused .card-edge { opacity: 0; }
+.pointer .card:hover { z-index: 3; }
+.pointer .card-poster:hover .card-inner, .pointer .card-season:hover .card-inner { transform: scale(1.08); }
+.pointer .card-wide:hover .card-inner { transform: scale(1.06); }
+.pointer .card:hover .card-edge {
+  opacity: 1;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 38%);
+}
+.pointer .card-poster:hover .card-meta, .pointer .card-season:hover .card-meta { opacity: 1; }
+.pointer .tab.focused, .pointer .chip.focused, .pointer .btn.focused, .pointer .key.focused,
+.pointer .row.focused, .pointer .sheet-row.focused { background: var(--glass); color: var(--text); transform: none; }
+.pointer .btn-primary.focused { background: rgba(255, 255, 255, 0.92); color: #000; box-shadow: none; }
+.pointer .tab:hover, .pointer .chip:hover, .pointer .btn:hover, .pointer .key:hover,
+.pointer .row:hover, .pointer .sheet-row:hover { background: #fff; color: #000; }
+.pointer .tab:hover, .pointer .chip:hover, .pointer .btn:hover { transform: scale(1.06); }
+.pointer .channel.focused { background: var(--glass); color: var(--text); transform: none; box-shadow: none; }
+.pointer .channel:hover { background: rgba(255, 255, 255, 0.95); color: #000; }
+.pointer .tab, .pointer .chip, .pointer .btn, .pointer .key, .pointer .row, .pointer .sheet-row, .pointer .card, .pointer .channel { cursor: pointer; }
+.pointer .channel:hover .channel-num, .pointer .channel:hover .channel-time { color: rgba(0, 0, 0, 0.6); }
+.pointer .channel:hover .channel-name, .pointer .channel:hover .channel-next, .pointer .channel:hover .channel-next b { color: rgba(0, 0, 0, 0.5); }
+.pointer .channel:hover .channel-bar { background: rgba(0, 0, 0, 0.15); }
+.pointer .channel:hover .channel-bar-fill { background: #000; }
+.pointer .channel.focused .channel-num, .pointer .channel.focused .channel-time { color: var(--text-2); }
+.pointer .channel.focused .channel-name, .pointer .channel.focused .channel-next, .pointer .channel.focused .channel-next b { color: var(--text-2); }
+.pointer .channel.focused .channel-bar { background: rgba(255, 255, 255, 0.25); }
+.pointer .channel.focused .channel-bar-fill { background: #fff; }
+
+/* ---- Text entry -------------------------------------------------------------------------------- */
+.text-input {
+  position: absolute; left: 96px; top: 240px; width: 1100px; height: 88px; padding: 0 32px; border-radius: 44px;
+  font: 600 34px "LG Display", sans-serif; color: var(--text); outline: none;
+  background: var(--glass); border: 2px solid rgba(255, 255, 255, 0.85);
+}
+.text-input::-webkit-input-placeholder { color: var(--text-3); font-weight: 500; }
+.text-hint { position: absolute; left: 128px; top: 350px; font-size: 22px; color: var(--text-2); }
+.panel { max-height: 736px; overflow: hidden; }
+.panel-rows { transition: transform var(--t-scroll) var(--ease); }

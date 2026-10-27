@@ -8,6 +8,7 @@
 //   node tools/tvdebug.mjs keys <key> [<key> ...]       keys: up down left right enter back play pause, or ms:<n> to wait
 //   node tools/tvdebug.mjs trace <seconds> [--keys "right right down ..."] [--out file.json]
 //   node tools/tvdebug.mjs shot <file.png>
+//   node tools/tvdebug.mjs mouse <x> <y> [click] [wheel:<dy>]
 //   node tools/tvdebug.mjs reload
 
 import { writeFileSync } from 'node:fs';
@@ -181,6 +182,18 @@ async function main() {
       await sleep(Number(rest[0] || 10) * 1000);
     } else if (cmd === 'keys') {
       await pressKeys(c, rest);
+    } else if (cmd === 'mouse') {
+      // mouse <x> <y> [click] [wheel:<dy>]
+      const [x, y] = [Number(rest[0]), Number(rest[1])];
+      await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+      for (const extra of rest.slice(2)) {
+        if (extra === 'click') {
+          await c.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+          await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+        } else if (extra.startsWith('wheel:')) {
+          await c.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY: Number(extra.slice(6)) });
+        }
+      }
     } else if (cmd === 'trace') {
       const events = [];
       let done;
