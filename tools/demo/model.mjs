@@ -210,6 +210,7 @@ class Model {
         if (show.Image) ep.Image = show.Image;
         ep.Media = this.media(erk, durationMs, e.video);
         if (e.markers) ep._markers = e.markers;
+        if (e.cast) ep.Role = e.cast.map((c) => ({ ...this.person(c.name), role: c.role }));
         this.items.set(erk, ep);
         season._episodes.push(ep);
         leaf++;

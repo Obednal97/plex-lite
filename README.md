@@ -66,7 +66,7 @@ about 1 KB) and then only the page of titles around the target, however far down
 
 Nothing is on screen while you watch. Any key brings up the controls: the title, a seek bar split
 into the title's chapters, the elapsed and remaining time, round icons for Subtitles, Audio (with
-more than one track) and Next episode, and tabs for Info, Chapters and Episodes. They hide after 5
+more than one track) and Next episode, and tabs for Info, Cast, Chapters and Episodes. They hide after 5
 seconds while playing and stay up while paused, scrubbing or with a menu or tab open.
 
 | Key | Watching (controls hidden) | Seek bar | Icons, menus, tabs |

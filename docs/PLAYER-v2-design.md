@@ -67,7 +67,8 @@ which swaps the list for Small / Medium / Large (stored like other settings). Au
 "5.1 surround · AC3" style second line. The video keeps playing; the bar and title stay visible behind.
 
 **Tabs (boards 6 and 7):** choosing a tab slides the title, bar and times up (transform) to make room for a
-210–260 px content row; the tab gets the `--fill-hi` pill. Tabs: **Info** (always), **Chapters** (when chapters exist),
+210–260 px content row; the tab gets the `--fill-hi` pill. Tabs: **Info** (always), **Cast** (when there is cast data, added 2026-10-27),
+**Chapters** (when chapters exist),
 **Episodes** (episodes only: the current season as cards, current one marked "Now", like chapters).
 - Chapters: 320×180 cards, gap 32 (five fill the width; the row scrolls beyond that), title + start time under each;
   the current chapter has a mini progress line and is where focus lands; focused card = 3 px white rim, scale 1.08,
@@ -75,6 +76,14 @@ which swaps the list for Small / Medium / Large (stored like other settings). Au
   card with the time large.
 - Info: synopsis (28 px `--reading`, max ~1000 px wide), a "Start from the beginning" button, and a two-column
   facts list: Playing (Direct Play / Converting: reason), Video, Audio, Subtitles.
+- Cast (the achievable cousin of Apple TV's InSight / Prime X-Ray; Plex has no per-scene data): the details
+  page's round people cards at 160 px, 200 px apart (eight in view, made only as they come near it): photo or
+  monogram, name, character, and "Guest star" in `--resume` for guests; focus = lit edge and the people scale.
+  A movie lists its Roles. An episode lists its own Roles first, then the show's cast in billing order (the show's
+  metadata is fetched once per show per session, after playback starts), one entry per person, at most 40. Plex
+  often copies a show's leads onto each episode, so an episode role counts as a guest only when the show's cast is
+  known and the person isn't in its top ten. OK on a person does nothing for now (no leaving mid-playback);
+  Back / Up work as in the other tabs.
 
 **Skip Intro / Skip Credits (board 3):** controls hidden, a soft bottom-right radial scrim, one 80 px white pill
 "⏩ Skip Intro" at right 96 / bottom 96 with a 5 px teal line along its bottom showing how much of the segment is

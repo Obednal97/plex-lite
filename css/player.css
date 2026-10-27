@@ -161,6 +161,17 @@
 .pcard.now .pcard-sub { color: var(--text-2); }
 .pointer .pcard { cursor: pointer; }
 
+/* Cast: the details page's round people cards (details.css, theme.css), 160 px here so a name,
+   a character and "Guest star" fit under them; cards are placed by transform */
+.cast-track { position: absolute; left: 0; top: 12px; height: 250px; transition: transform var(--t-scroll) var(--spring); }
+.cast-track .card { transition: opacity 200ms linear; }
+.cast-track .card.gone { opacity: 0; }
+.cast-track .person-initials { line-height: 158px; font-size: 48px; }
+.cast-track .person-meta { margin-left: -12px; width: 184px; }
+.cast-track .person-meta .card-title, .cast-track .person-meta .card-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cast-track .cast-guest { font-size: 19px; line-height: 26px; font-weight: 600; letter-spacing: 0.5px; color: var(--resume); }
+.pointer .cast-track .card { cursor: default; }
+
 /* Info: synopsis, Start from the beginning, and what is playing */
 .info { position: absolute; left: 0; top: 50px; width: 1728px; height: 210px; }
 .info-main { position: absolute; left: 0; top: 0; width: 922px; }

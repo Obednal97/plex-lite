@@ -184,3 +184,45 @@ test('hold speed grows, row start keeps the focus visible', () => {
   assert.equal(L.rowStart(0, 9, 10, 5), 5);
   assert.equal(L.rowStart(3, 1, 3, 5), 0);
 });
+
+const role = (id, tag, r, thumb) => ({ id, tag, role: r, thumb });
+
+test('cast: a movie lists its roles, one per person, no nameless entries', () => {
+  const movie = { type: 'movie', Role: [role(1, 'Ann Lee', 'Mia', '/p/1'), role(2, 'Bo Dahl', 'Kurt'), role(1, 'Ann Lee', 'Mia (voice)'), role(3, '', 'X')] };
+  assert.deepEqual(plain(L.castList(movie)), [
+    { id: 1, name: 'Ann Lee', role: 'Mia', thumb: '/p/1', guest: false },
+    { id: 2, name: 'Bo Dahl', role: 'Kurt', thumb: null, guest: false },
+  ]);
+  assert.deepEqual(plain(L.castList({ type: 'movie' })), []);
+});
+
+test('cast: episode guests first, then the show cast in billing order, de-duplicated', () => {
+  const show = { Role: [role(1, 'Lead One', 'Ray'), role(2, 'Lead Two', ''), role(3, 'Third', 'Sam')] };
+  const ep = { type: 'episode', Role: [role(9, 'Guest Nine', 'Officer'), role(2, 'Lead Two', 'Dot'), role(8, 'Guest Eight', 'Nurse')] };
+  const list = plain(L.castList(ep, show));
+  assert.deepEqual(list.map((p) => [p.name, p.role, p.guest]), [
+    ['Guest Nine', 'Officer', true], ['Guest Eight', 'Nurse', true],
+    ['Lead One', 'Ray', false], ['Lead Two', 'Dot', false], ['Third', 'Sam', false],
+  ]);
+});
+
+test('cast: leads Plex copies onto the episode are not guests; unknown show cast marks nobody', () => {
+  const show = { Role: [role(1, 'Lead One', 'Ray'), role(2, 'Lead Two', 'Dot')] };
+  const ep = { type: 'episode', Role: [role(1, 'Lead One', 'Ray'), role(2, 'Lead Two', 'Dot')] };
+  assert.deepEqual(plain(L.castList(ep, show)).map((p) => p.guest), [false, false]);
+  const solo = plain(L.castList({ type: 'episode', Role: [role(5, 'Someone', 'Clerk')] }, null));
+  assert.deepEqual(solo.map((p) => [p.name, p.guest]), [['Someone', false]]);
+  // billed far down the show's long cumulative list still counts as a guest here
+  const long = { Role: Array.from({ length: 30 }, (_, i) => role(100 + i, 'P' + i, 'R' + i)) };
+  const guest = plain(L.castList({ type: 'episode', Role: [role(125, 'P25', 'R25')] }, long));
+  assert.equal(guest[0].name, 'P25');
+  assert.equal(guest[0].guest, true);
+  assert.equal(guest.filter((p) => p.name === 'P25').length, 1);
+});
+
+test('cast: people without ids de-duplicate by name, and the list is capped', () => {
+  const ep = { type: 'movie', Role: [{ tag: 'No Id', role: 'A' }, { tag: 'no id ', role: 'B' }] };
+  assert.equal(L.castList(ep).length, 1);
+  const many = { type: 'movie', Role: Array.from({ length: 60 }, (_, i) => role(i, 'N' + i, '')) };
+  assert.equal(L.castList(many).length, 40);
+});

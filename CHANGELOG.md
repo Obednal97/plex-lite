@@ -30,7 +30,8 @@ releases are fixes only.
   picture subtitles are marked as burned in by the server. Subtitle size (Small, Medium, Large) is
   under "Size and style".
 - Down from the bar opens tabs: Info (synopsis, Start from the beginning, what is playing and
-  whether the server converts it), Chapters (cards with thumbnails when Plex has them; OK seeks)
+  whether the server converts it), Cast (the people in it, with guest stars first on an
+  episode, then the show's cast), Chapters (cards with thumbnails when Plex has them; OK seeks)
   and Episodes (the season; OK plays one).
 - Skip Intro / Skip Credits is a large focused button (OK skips) with a line showing the time
   left; it returns, above the icons, whenever the controls are opened during the intro or credits.

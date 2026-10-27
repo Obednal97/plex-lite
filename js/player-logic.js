@@ -162,6 +162,50 @@
     return [r, codec].filter(Boolean).join(' · ');
   };
 
+  // ---- Cast tab ------------------------------------------------------------------------------------
+
+  var MAIN_BILLED = 10; // the show's top-billed roles count as main cast
+  var MAX_CAST = 40;
+
+  function personKey(r) {
+    return r.id != null ? 'id' + r.id : 'name:' + String(r.tag || r.name || '').trim().toLowerCase();
+  }
+
+  // The Cast tab's people, as [{id, name, role, thumb, guest}]. A movie: its Role list. An episode:
+  // its own Roles that aren't among the show's top-billed cast first, marked guest, then the show's
+  // cast in billing order. Plex often gives an episode the show's leads as its Roles, so a role
+  // counts as a guest only when the show's cast is known and the person isn't billed near the top.
+  // One entry per person; at most MAX_CAST.
+  L.castList = function (item, show) {
+    var out = [];
+    var seen = {};
+    var add = function (r, guest) {
+      var name = String(r.tag || r.name || '').trim();
+      var k = personKey(r);
+      if (!name || seen[k]) return;
+      seen[k] = true;
+      out.push({ id: r.id != null ? r.id : null, name: name, role: r.role || '', thumb: r.thumb || null, guest: !!guest });
+    };
+    var own = (item && item.Role) || [];
+    if (item && item.type === 'episode') {
+      var showRoles = (show && show.Role) || [];
+      var main = {};
+      showRoles.slice(0, MAIN_BILLED).forEach(function (r) { main[personKey(r)] = true; });
+      var inShow = {};
+      showRoles.forEach(function (r) { inShow[personKey(r)] = r; });
+      own.forEach(function (r) { if (showRoles.length && !main[personKey(r)]) add(r, true); });
+      // the show's cast, keeping the episode's character name when the show lacks one
+      showRoles.forEach(function (r) {
+        var mine = own.filter(function (o) { return personKey(o) === personKey(r); })[0];
+        add(mine && !r.role ? { id: r.id, tag: r.tag, role: mine.role, thumb: r.thumb || mine.thumb } : r, false);
+      });
+      own.forEach(function (r) { add(r, false); }); // no show cast known
+    } else {
+      own.forEach(function (r) { add(r, false); });
+    }
+    return out.slice(0, MAX_CAST);
+  };
+
   // ---- Remote keys -> actions -------------------------------------------------------------------
 
   // key: 'left' | 'right' | 'up' | 'down' | 'ok' | 'back'. c (the player's state):

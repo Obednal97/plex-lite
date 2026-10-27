@@ -17,6 +17,10 @@
   var TIMELINE_MS = 10000;
   var CARD_STEP = 352;     // 320 px card + 32 px gap
   var ROW_VISIBLE = 5;
+  var CAST_GEO = { w: 160, h: 160 }; // round people cards, as on the details page but smaller
+  var CAST_STEP = 200;
+  var CAST_VISIBLE = 8;
+  var showCasts = {};      // grandparentRatingKey -> Promise<show metadata>, for the session
   var MENU_W = 540;
   var MENU_MAX_LIST = 560; // the subtitle list scrolls beyond this
   var SUB_SIZES = { small: 'Small', medium: 'Medium', large: 'Large' };
@@ -68,6 +72,8 @@
 
   // Hover moves the focus only while the Magic Remote's pointer is showing (rows sliding under a
   // hidden cursor must not steal it).
+  function ui() { return PL.ui; }
+
   function pointing() { return document.body.classList.contains('pointer'); }
 
   // the width of an element's text (not of its box)
@@ -572,7 +578,7 @@
     });
     var tab = this.tabs[this.tabIndex];
     if (tab && tab.cards) {
-      tab.cards.forEach(function (c, i) { c.node.classList.toggle('focused', up && z === 'cards' && i === tab.index); });
+      tab.cards.forEach(function (c, i) { if (c.node) c.node.classList.toggle('focused', up && z === 'cards' && i === tab.index); });
     }
     this.el.classList.toggle('tab-open', up && this.tabOpen());
     this.el.classList.toggle('menu-open', up && !!this.menu);
@@ -1026,6 +1032,7 @@
     var list = [];
     if (!this.live && this.full) {
       list.push({ id: 'info', label: 'Info' });
+      if (this.castFor(this.full).length) list.push({ id: 'cast', label: 'Cast' });
       if (this.chapters.length > 1) list.push({ id: 'chapters', label: 'Chapters' });
       if (this.full.type === 'episode' && this.full.parentRatingKey) list.push({ id: 'episodes', label: 'Episodes' });
     }
@@ -1042,7 +1049,80 @@
       self.panel.appendChild(pane);
       return { id: t.id, label: t.label, node: n, pane: pane, cards: null, index: 0, first: 0, built: false };
     });
-    this.tabIndex = PL.clamp(this.tabIndex, 0, Math.max(0, this.tabs.length - 1));
+    var openId = this.tabOpen() && this.tabsIds ? this.tabsIds[this.tabIndex] : null;
+    this.tabsIds = this.tabs.map(function (t) { return t.id; });
+    var keep = openId ? this.tabsIds.indexOf(openId) : -1;
+    this.tabIndex = PL.clamp(keep >= 0 ? keep : this.tabIndex, 0, Math.max(0, this.tabs.length - 1));
+    if (openId) this.focusTab(this.tabIndex);
+  };
+
+  // ---- The Cast tab: the movie's roles, or an episode's guests then the show's cast -------------
+
+  // The show's metadata (for its cast), fetched once per show per session.
+  function showMeta(grandparentKey) {
+    if (!showCasts[grandparentKey]) {
+      showCasts[grandparentKey] = PL.plex.get('/library/metadata/' + grandparentKey).then(function (mc) {
+        return (mc && mc.Metadata && mc.Metadata[0]) || null;
+      }, function () {
+        delete showCasts[grandparentKey]; // try again next time
+        return null;
+      });
+    }
+    return showCasts[grandparentKey];
+  }
+
+  Player.prototype.castFor = function (full) {
+    if (!full) return [];
+    return L.castList(full, full.type === 'episode' ? this.castShow : null);
+  };
+
+  // After playback has started: one small request for the show's cast (cached), then the tabs
+  // gain Cast if there is anyone to show.
+  Player.prototype.prefetchCast = function (full) {
+    var self = this;
+    this.castShow = null;
+    if (full.type !== 'episode' || !full.grandparentRatingKey) return;
+    showMeta(full.grandparentRatingKey).then(function (show) {
+      if (self.full !== full || !show) return;
+      self.castShow = show;
+      var tab = self.tabs.filter(function (t) { return t.id === 'cast'; })[0];
+      if (tab) {
+        tab.built = false; // the list changed: rebuild on next open
+        if (self.tabOpen() && self.tabs[self.tabIndex] === tab) self.fillTab(tab);
+      }
+      self.buildTabs();
+      self.paintZone();
+    });
+  };
+
+  Player.prototype.fillCast = function (tab) {
+    var self = this;
+    var people = this.castFor(this.full);
+    PL.clear(tab.pane);
+    var track = tab.track = PL.el('div', 'cast-track');
+    tab.step = CAST_STEP;
+    tab.visible = CAST_VISIBLE;
+    tab.index = 0;
+    tab.first = 0;
+    // cards are made when they first come near the view (a show can list dozens of people)
+    tab.cards = people.map(function (p, i) {
+      var c = { node: null, run: function () {} }; // OK does nothing for now: no leaving mid-playback
+      c.build = function () {
+        var n = c.node = ui().makePersonCard({ name: p.name, role: p.role, thumb: p.thumb }, 'person', CAST_GEO);
+        if (p.guest) n.querySelector('.person-meta').appendChild(PL.el('div', 'card-sub cast-guest', 'Guest star'));
+        n.style.transform = 'translate3d(' + (i * CAST_STEP) + 'px,0,0)';
+        n.addEventListener('mouseenter', function () {
+          if (!pointing() || self.osdHidden) return;
+          tab.index = i;
+          self.setZone('cards');
+          self.paintCards(tab);
+        });
+        track.appendChild(n);
+      };
+      return c;
+    });
+    tab.pane.appendChild(track);
+    this.paintCards(tab);
   };
 
   // Focus a tab: its row slides in under it (built the first time).
@@ -1074,6 +1154,7 @@
     }
     tab.built = true;
     if (tab.id === 'chapters') this.fillChapters(tab);
+    else if (tab.id === 'cast') this.fillCast(tab);
     else if (tab.id === 'episodes') this.fillEpisodes(tab);
   };
 
@@ -1165,10 +1246,13 @@
 
   Player.prototype.paintCards = function (tab) {
     if (!tab.cards || !tab.track) return;
-    tab.first = L.rowStart(tab.first, tab.index, tab.cards.length, ROW_VISIBLE);
-    PL.translate(tab.track, -tab.first * CARD_STEP, 0);
-    for (var i = Math.max(0, tab.first - 1); i < Math.min(tab.cards.length, tab.first + ROW_VISIBLE + 2); i++) {
+    var step = tab.step || CARD_STEP;
+    var visible = tab.visible || ROW_VISIBLE;
+    tab.first = L.rowStart(tab.first, tab.index, tab.cards.length, visible);
+    PL.translate(tab.track, -tab.first * step, 0);
+    for (var i = Math.max(0, tab.first - 1); i < Math.min(tab.cards.length, tab.first + visible + 2); i++) {
       var c = tab.cards[i];
+      if (c.build && !c.node) c.build();
       if (c.loaded || !c.img) continue;
       c.loaded = true;
       var img = PL.el('img', 'pcard-img');
@@ -1178,6 +1262,7 @@
     }
     var self = this;
     tab.cards.forEach(function (c, j) {
+      if (!c.node) return;
       c.node.classList.toggle('focused', self.zone === 'cards' && !self.osdHidden && j === tab.index);
       c.node.classList.toggle('gone', j < tab.first);
     });
@@ -1320,6 +1405,7 @@
       else if (full.type === 'episode') self.loadQueue(full);
       // resuming from a saved position: back up 5 s so the scene is recognisable
       self.start(self.startOffset > 0 ? Math.max(0, self.startOffset - 5000) : 0);
+      self.prefetchCast(full);
     }).catch(function (err) { if (gen === self.gen) self.fail(err); });
   };
 
