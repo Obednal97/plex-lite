@@ -106,7 +106,7 @@
   Hero.prototype.apply = function (item) {
     if (!item || (this.isVisible && !this.isVisible())) return;
     var key = item.ratingKey + ':' + (item.viewOffset || 0);
-    PL.app.backdrop.set(PL.plex.image(ui.artPath(item), 1920, 1080, { quality: 72 }), 'hero');
+    PL.app.backdrop.set(PL.plex.image(ui.artPath(item), 1280, 720, { quality: 75 }), 'hero');
     if (key === this.shownKey) return;
     this.shownKey = key;
     var self = this;

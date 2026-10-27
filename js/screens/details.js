@@ -156,7 +156,7 @@
     this.seasonEpisodes = {};
     this.alive = true;
     this.load();
-    this.backdropUrl = PL.plex.image(ui.artPath(item), 1920, 1080, { quality: 70 });
+    this.backdropUrl = PL.plex.image(ui.artPath(item), 1280, 720, { quality: 75 });
     this.refreshOnShow = false;
   }
 
@@ -307,7 +307,7 @@
   DetailsScreen.prototype.build = function () {
     var self = this;
     var f = this.full;
-    this.backdropUrl = PL.plex.image(ui.artPath(f), 1920, 1080, { quality: 70 }) || this.backdropUrl;
+    this.backdropUrl = PL.plex.image(ui.artPath(f), 1280, 720, { quality: 75 }) || this.backdropUrl;
     if (this.visible) PL.app.backdrop.set(this.backdropUrl, 'detail');
     this.head = new HeadZone(f);
     this.buttonRow = new ui.ButtonRow(this.buttons());
