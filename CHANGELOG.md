@@ -9,15 +9,7 @@ releases are fixes only.
 
 ## [Unreleased]
 
-### Added
-
-- Overseerr plugin: a Downloading screen, a Downloading shelf on Recommended and a download badge on
-  title pages; "Report a problem" (details and hold-OK) creates an Overseerr issue under the viewer's
-  own account; one Overseerr session per Plex Home profile.
-- Plugin API: a `badges` hook for title pages; `ctx.profile()`, `ctx.plex`, `ctx.openItem()` and, for
-  bundled plugins, `ctx.push()`/`pop()`/`backdrop()`.
-
-## [0.1.0] - unreleased (first public release)
+## [0.1.0] - 2026-10-27 (first public release)
 
 ### Added
 
@@ -33,7 +25,18 @@ releases are fixes only.
   actions.
 - Design refresh: grey ground, full-bleed art, larger cards, a "lit glass" focus edge and
   spring-fitted motion.
-- Plugin system (Phase 1: bundled, reviewed plugins) and the Overseerr plugin.
+- Surprise Me in Movies and TV Shows (and on collections): a random unwatched pick (a show's next
+  episode), honouring Library filters and the Plex Home profile, revealed full-screen with an 8-second
+  countdown, Spin again and Details; recent picks are remembered across restarts.
+- Plugin system: bundled plugins, plus a plugin catalogue (Settings → Plugins → Browse) with
+  SHA-256-pinned, sandboxed web plugins, per-permission consent (the Plex token is a "Sensitive"
+  permission), up to two plugin tabs, details-page actions and badges, update and remove.
+- Overseerr plugin: requests from search, a Downloading screen, shelf and title-page badge, and
+  "Report a problem" (an Overseerr issue under the viewer's own account); one Overseerr session per
+  Plex Home profile.
+- A sign-in revoked mid-session shows one "signed out" screen (or reconnects when only the server's
+  token changed) instead of failing screen by screen; error messages no longer show request URLs.
+- A demo Plex server (`tools/demo/`) with openly licensed films, used for the README screenshots.
 - Release preparation: MIT licence, third-party notices and trademark disclaimer, an original app
   icon (`assets/icon.svg`), a brand-teal accent and progress colour in place of Plex's amber, build-time app id (`--app-id` / `PLEXLITE_APP_ID`), and dev tools
   configured through `tools/local.env` instead of personal defaults.
