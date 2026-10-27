@@ -59,9 +59,10 @@
     // the panel shows ~8 rows; longer lists scroll to keep the focused row in view
     function paint() {
       rows.forEach(function (r, i) { r.node.classList.toggle('focused', area === 'panel' && !PL.app.tabsFocused && i === index); });
-      var shift = Math.max(0, (index + 1) * 88 - 88 * 8);
+      // ~7.5 rows show (690 px panel), so a half row always peeks under the fade
+      var shift = Math.max(0, (index + 1) * 88 - 88 * 7);
       PL.translate(panel, 0, -shift);
-      panelBox.classList.toggle('more', rows.length * 88 - shift > 88 * 8);
+      panelBox.classList.toggle('more', rows.length * 88 - shift > 658);
     }
 
     function reconnect() {

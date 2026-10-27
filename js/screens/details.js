@@ -174,6 +174,8 @@
       top: 120,
       keep: 2,
       anchor: function (i, top, zone) { return Math.min(top, 1040 - zone.height); },
+      // once the title block has scrolled away, dim the sharp art so the rows below stay legible
+      onFocusZone: function () { self.dimForScroll(); },
     });
     this.seasonEpisodes = {};
     this.alive = true;
@@ -287,29 +289,28 @@
     if (trailer) {
       out.push({ icon: 'trailer', label: 'Trailer', hint: 'Watch trailer', action: function () { self.playExtra(trailer); } });
     }
+    // Watched actions: one direct pill when there is a single sensible choice, otherwise one
+    // "Watched…" pill that opens a sheet (keeps the row short and never shows contradictory pills).
     var watched = ui.isWatched(f);
-    out.push({
-      icon: watched ? 'watched' : 'check',
-      label: (watched ? 'Mark ' + (f.type === 'show' ? 'show ' : '') + 'unwatched' : 'Mark ' + (f.type === 'show' ? 'show ' : '') + 'watched'),
-      hint: watched ? 'Mark as unwatched' : 'Mark as watched',
-      action: function () { self.toggleWatched(); },
-    });
-    // part-way through: offer clearing the progress as well as finishing it
     var partial = !watched && (f.viewOffset > 0 || (f.viewedLeafCount > 0 && f.viewedLeafCount < f.leafCount));
-    if (partial) {
-      out.push({
-        icon: 'watched', label: 'Mark ' + (f.type === 'show' ? 'show ' : '') + 'unwatched',
-        action: function () { self.setWatched(false); },
-      });
-    }
+    var noun = f.type === 'show' ? 'show ' : '';
+    var choices = [];
+    if (!watched) choices.push({ label: 'Mark ' + noun + 'watched', action: function () { self.setWatched(true); } });
+    if (watched || partial) choices.push({ label: 'Mark ' + noun + 'unwatched', action: function () { self.setWatched(false); } });
     var season = f.type === 'show' && this.seasons && this.seasons[this.seasonIndex];
     if (season) {
       var seasonWatched = ui.isWatched(season);
-      out.push({
-        icon: 'season',
+      choices.push({
         label: 'Mark ' + (season.title || 'season') + (seasonWatched ? ' unwatched' : ' watched'),
-        hint: (seasonWatched ? 'Mark ' : 'Mark ') + season.title + (seasonWatched ? ' unwatched' : ' watched'),
         action: function () { self.toggleSeasonWatched(season); },
+      });
+    }
+    if (choices.length === 1) {
+      out.push({ icon: watched ? 'watched' : 'check', label: choices[0].label, action: choices[0].action });
+    } else if (choices.length > 1) {
+      out.push({
+        icon: watched ? 'watched' : 'check', label: 'Watched…',
+        action: function () { PL.app.push(screens.sheet([{ heading: 'Watched status', rows: choices }])); },
       });
     }
     if (f.type === 'movie' || f.type === 'episode') {
@@ -552,9 +553,17 @@
       return;
     }
     if (this.stack.zones.length) this.stack.focus(true);
+    this.dimForScroll();
+  };
+
+  DetailsScreen.prototype.dimForScroll = function () {
+    if (!this.visible) return;
+    var clipped = this.head && this.head.el.classList.contains('zone-clipped');
+    PL.app.backdrop.dim(clipped ? 0.35 : 1);
   };
 
   DetailsScreen.prototype.hide = function () {
+    PL.app.backdrop.dim(1);
     this.visible = false;
     this.stack.focus(false);
     this.shadow.hide();
