@@ -341,12 +341,13 @@
     app.tabs.setTabs(tabs);
   };
 
-  // The tab to open on launch: the last one used, else the first library.
+  // Launch always opens on TV Shows (the most visual first screen), else the first library, else Search.
   app.startTab = function () {
-    var ids = app.tabs.tabs.map(function (t) { return t.id; });
-    var last = ids.indexOf(PL.storage.get('tab', ''));
-    if (last >= 0 && ids[last] !== 'settings') return last;
-    return app.tabs.tabs.length > 1 ? 1 : 0;
+    var tabs = app.tabs.tabs;
+    var shows = app.sections.filter(function (s) { return s.type === 'show'; })[0];
+    var want = shows ? 'section.' + shows.key : (app.sections[0] ? 'section.' + app.sections[0].key : 'search');
+    var i = tabs.map(function (t) { return t.id; }).indexOf(want);
+    return i >= 0 ? i : 0;
   };
 
   app.start = function () {
