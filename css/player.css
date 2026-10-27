@@ -83,7 +83,20 @@
   border: 3px solid var(--focus); background: #1f2129; box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5);
 }
 .bar-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.bar-time { display: inline-block; height: 44px; line-height: 44px; padding: 0 18px; border-radius: 22px; font-size: 30px; font-weight: 700; background: rgba(5, 5, 8, 0.75); color: var(--text); }
+.bar-label { display: inline-block; position: relative; padding: 0 18px; border-radius: 22px; background: rgba(5, 5, 8, 0.75); color: var(--text); white-space: nowrap; }
+.bar-time { height: 44px; line-height: 44px; font-size: 30px; font-weight: 700; }
+.bar-chapter { display: none; }
+/* no thumbnails (the owner's server, and the usual case): a large time with the chapter under it
+   on a dark plate, and a small caret pointing at the head */
+.no-thumb .bar-thumb { display: none; }
+.no-thumb .bar-label { padding: 12px 28px 14px; border-radius: 20px; background: rgba(5, 5, 8, 0.84); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 14px 34px rgba(0, 0, 0, 0.45); }
+.no-thumb .bar-label::after {
+  content: ""; position: absolute; left: 50%; bottom: -10px; margin-left: -10px; width: 0; height: 0;
+  border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 10px solid rgba(5, 5, 8, 0.84);
+}
+.no-thumb .bar-time { height: auto; font-size: 48px; line-height: 56px; letter-spacing: -0.5px; }
+.no-thumb .bar-chapter { display: block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; font-size: 24px; line-height: 30px; font-weight: 600; color: var(--text-2); }
+.no-thumb .bar-chapter:empty { display: none; }
 .bar-hit { position: absolute; left: 0; top: -22px; width: 1728px; height: 56px; }
 .pointer .bar-hit { cursor: pointer; }
 

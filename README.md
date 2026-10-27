@@ -81,9 +81,9 @@ seconds while playing and stay up while paused, scrubbing or with a menu or tab 
 | Stop | Leave the player | | |
 
 Scrubbing pauses the picture and moves a target along the bar; a teal tick marks where you were,
-and OK jumps there (Back returns). When the server makes preview thumbnails (Plex settings,
-Library, "Generate video preview thumbnails"), a frame rides above the target; otherwise its time
-does. The TV can only start playback at keyframes, so a jump can land a few seconds off.
+and OK jumps there (Back returns). A large time with the chapter name rides above the target; when the
+server makes preview thumbnails (Plex settings, Library, "Generate video preview thumbnails"), the
+frame is shown there instead. The TV can only start playback at keyframes, so a jump can land a few seconds off.
 Subtitles and Audio open a small menu above their icon while the video keeps playing; picture
 subtitles (PGS, VobSub) are burned in by the server. Skip Intro and Skip Credits appear from Plex's
 intro and credits markers, which the server creates when intro and credits detection is on (Plex

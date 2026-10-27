@@ -81,8 +81,9 @@ Transform and opacity only.
   bar, the times, and text tabs (Info, Chapters, Episodes). The bar is the main control: one
   segment per chapter with 6 px gaps, 6 px at rest, 10 px with a white head when focused, filled in
   `--resume`; Left/Right jump −10 s / +30 s at once. Paused or scrubbing: a 30% veil, a 12 px bar,
-  a teal tick at the real position, a preview (Plex's index frame with a white rim, when the
-  server makes them) over a dark time pill, "Paused at 9:13 · jumping to Chapter 5" and
+  a teal tick at the real position, a time label riding the target (48 px time and the chapter
+  on a dark plate with a caret; Plex's index frame with a white rim instead, on servers that make
+  preview thumbnails), "Paused at 9:13 · jumping to Chapter 5" and
   `[OK] Jump here` `[Back] Return` hints. Subtitles and Audio open a 540 px lit-glass menu over
   their icon (with a caret) while the video plays; "Size and style" swaps in Small / Medium /
   Large. A tab slides the block up 292 px for a row of 320×180 cards (or the Info synopsis and

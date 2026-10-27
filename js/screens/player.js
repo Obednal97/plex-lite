@@ -10,7 +10,7 @@
   var BAR_W = 1728;
   var BAR_GAP = 6;
   var PREVIEW_W = 464;     // preview thumbnail (with its time pill under it)
-  var PILL_ONLY_W = 200;   // the time pill alone, when the server has no preview thumbnails
+  var TIME_ONLY_W = 400;   // no preview thumbnails (the usual case): a large time and the chapter
   var OSD_HIDE_MS = 5000;
   var JUMP_RESTART_MS = 400; // server streams restart per seek, so taps this close together add up
   var HOLD_GAP_MS = 600;   // key-downs closer than this without a key-up count as a held key
@@ -65,6 +65,10 @@
     if (it.parentIndex == null || it.index == null) return '';
     return it.parentIndex === 0 ? 'Special ' + it.index : 'S' + it.parentIndex + ' E' + it.index;
   }
+
+  // Hover moves the focus only while the Magic Remote's pointer is showing (rows sliding under a
+  // hidden cursor must not steal it).
+  function pointing() { return document.body.classList.contains('pointer'); }
 
   function indexOfKey(list, ratingKey) {
     for (var i = 0; i < (list || []).length; i++) if (list[i].ratingKey === ratingKey) return i;
@@ -280,9 +284,13 @@
     this.thumbBox = PL.el('div', 'bar-thumb');
     this.thumbImg = PL.el('img');
     this.thumbBox.appendChild(this.thumbImg);
+    var label = PL.el('div', 'bar-label');
     this.previewTime = PL.el('div', 'bar-time');
+    this.previewChapter = PL.el('div', 'bar-chapter');
+    label.appendChild(this.previewTime);
+    label.appendChild(this.previewChapter);
     pv.appendChild(this.thumbBox);
-    pv.appendChild(this.previewTime);
+    pv.appendChild(label);
     bar.appendChild(pv);
     var hit = PL.el('div', 'bar-hit');
     bar.appendChild(hit);
@@ -370,7 +378,7 @@
     this.ecWatch.addEventListener('click', function (e) { e.stopPropagation(); self.ecIndex = 0; self.pressCta(); });
     this.ecNext.addEventListener('click', function (e) { e.stopPropagation(); self.ecIndex = 1; self.pressCta(); });
     [this.ecWatch, this.ecNext].forEach(function (n, i) {
-      n.addEventListener('mouseenter', function () { self.ecIndex = i; self.paintCta(); });
+      n.addEventListener('mouseenter', function () { if (pointing()) { self.ecIndex = i; self.paintCta(); } });
     });
 
     this.paintSoon = PL.rafThrottle(function () { self.paintBar(); });
@@ -440,7 +448,7 @@
     };
     hit.addEventListener('mouseenter', function () {
       rect = hit.getBoundingClientRect();
-      if (!self.osdHidden && !self.live && self.zone !== 'menu') self.setZone('bar');
+      if (pointing() && !self.osdHidden && !self.live && self.zone !== 'menu') self.setZone('bar');
     });
     hit.addEventListener('mousemove', function (e) {
       if (self.live || self.osdHidden) return;
@@ -600,7 +608,7 @@
       n.setAttribute('aria-label', b.label);
       n.appendChild(glyph(b.glyph, b.glyph === 'next' ? 28 : 32, 1.8));
       n.addEventListener('mouseenter', function () {
-        if (self.osdHidden || self.menu) return;
+        if (!pointing() || self.osdHidden || self.menu) return;
         self.iconIndex = i;
         self.setZone('icons');
       });
@@ -724,15 +732,22 @@
     this.setPainted('head', this.head, 'transform', 'translate3d(' + Math.round(x) + 'px,0,0)');
     if (sc) this.setPainted('tick', this.tick, 'transform', 'translate3d(' + Math.round(dur ? L.xAt(this.segs, real) : 0) + 'px,0,0)');
 
-    // the preview rides over the scrub target, or over the pointer
+    // over the scrub target (or the pointer): a large time with the chapter under it, or, when the
+    // server makes preview thumbnails, the frame over a time pill
     var at = sc ? target : this.hoverSec;
     if (at != null && dur) {
       var withThumb = this.preview.ok;
-      var w = withThumb ? PREVIEW_W : PILL_ONLY_W;
+      var w = withThumb ? PREVIEW_W : TIME_ONLY_W;
       var px = PL.clamp(L.xAt(this.segs, at) - w / 2, 0, BAR_W - w);
+      if (this.painted.pvmode !== withThumb) {
+        this.painted.pvmode = withThumb;
+        this.previewEl.classList.toggle('no-thumb', !withThumb);
+      }
       this.setPainted('pvw', this.previewEl, 'width', w + 'px');
       this.setPainted('pv', this.previewEl, 'transform', 'translate3d(' + Math.round(px) + 'px,0,0)');
       this.setPainted('pvt', this.previewTime, 'text', PL.fmt.clock(at));
+      var atChapter = this.chapters.length > 1 ? L.chapterAt(this.chapters, at) : -1;
+      this.setPainted('pvc', this.previewChapter, 'text', !withThumb && atChapter >= 0 ? this.chapters[atChapter].title : '');
       this.setPainted('pvthumb', this.thumbBox, 'display', withThumb && this.preview.shown != null ? '' : 'none');
       if (withThumb) this.wantPreview(at);
     }
@@ -902,7 +917,7 @@
       if (r.checked) n.appendChild(glyph('check', 28, 2.4));
       if (r.link) n.appendChild(glyph('chevron', 24, 2));
       var i = m.nodes.length;
-      n.addEventListener('mouseenter', function () { m.index = i; self.paintMenu(); });
+      n.addEventListener('mouseenter', function () { if (pointing()) { m.index = i; self.paintMenu(); } });
       n.addEventListener('click', function (e) { e.stopPropagation(); m.index = i; self.pressMenu(); });
       list.appendChild(n);
       var h = r.sub ? 76 : 64;
@@ -1000,7 +1015,7 @@
     PL.clear(this.panel);
     this.tabs = list.map(function (t, i) {
       var n = PL.el('div', 'ptab', t.label);
-      n.addEventListener('mouseenter', function () { if (!self.osdHidden && !self.menu) self.focusTab(i); });
+      n.addEventListener('mouseenter', function () { if (pointing() && !self.osdHidden && !self.menu) self.focusTab(i); });
       n.addEventListener('click', function (e) { e.stopPropagation(); self.focusTab(i); });
       self.tabRow.appendChild(n);
       var pane = PL.el('div', 'pane');
@@ -1052,7 +1067,7 @@
     var btn = PL.el('div', 'info-btn');
     btn.appendChild(glyph('restart', 24, 2.2));
     btn.appendChild(PL.el('span', '', 'Start from the beginning'));
-    btn.addEventListener('mouseenter', function () { if (!self.osdHidden) { tab.index = 0; self.setZone('cards'); } });
+    btn.addEventListener('mouseenter', function () { if (pointing() && !self.osdHidden) { tab.index = 0; self.setZone('cards'); } });
     btn.addEventListener('click', function (e) { e.stopPropagation(); self.restartFromBeginning(); });
     col.appendChild(btn);
     wrap.appendChild(col);
@@ -1118,7 +1133,7 @@
       n.appendChild(art);
       n.appendChild(PL.el('div', 'pcard-title', it.title));
       n.appendChild(PL.el('div', 'pcard-sub', it.sub || ''));
-      n.addEventListener('mouseenter', function () { if (!self.osdHidden) { tab.index = i; self.paintCards(tab); self.setZone('cards'); } });
+      n.addEventListener('mouseenter', function () { if (pointing() && !self.osdHidden) { tab.index = i; self.paintCards(tab); self.setZone('cards'); } });
       n.addEventListener('click', function (e) { e.stopPropagation(); tab.index = i; it.run(); });
       track.appendChild(n);
       return { node: n, art: art, img: it.img, loaded: false, run: it.run, item: it };
@@ -1310,8 +1325,9 @@
       var items = mc.Metadata || [];
       var idx = mc.playQueueSelectedItemOffset || 0;
       for (var i = 0; i < items.length; i++) if (items[i].ratingKey === full.ratingKey) { idx = i; break; }
+      if (self.full !== full) return; // another episode started meanwhile
       self.queue = { items: items, index: idx };
-      if (self.full === full) self.buildControls();
+      self.buildControls();
     }, function (err) { PL.warn('play queue failed', err && err.message); });
   };
 
@@ -2135,9 +2151,11 @@
     this.mediaIndex = 0;
     this.chapters = [];
     clearInterval(this.subs.timer);
+    this.showSubText(''); // before the reset: it skips text equal to what is shown
     this.subs = { kind: 'none', id: null, cues: [], shown: '', segs: {}, timer: null };
-    this.showSubText('');
     this.everStarted = false;
+    this.mode = null;
+    this.base = 0;
     this.lastOffsetSec = 0;
     var qi = this.queue ? indexOfKey(this.queue.items, next.ratingKey) : -1;
     if (qi >= 0) this.queue.index = qi;
@@ -2270,12 +2288,19 @@
   // (L.keyAction; the table is in docs/PLAYER-v2-design.md, "Remote").
   Player.prototype.key = function (code, e) {
     var repeat = !!(e && e.repeat);
-    // a key-down with no key-up since the last one is the key being held (in case e.repeat isn't set)
-    var held = repeat || !!this.held[code];
-    this.held[code] = true;
+    // a key-down with no key-up since the last one is the key being held (in case e.repeat isn't
+    // set). Only real key-downs count: the Magic Remote's wheel arrives as synthetic keys with no
+    // key-up.
+    var real = !!e && e.type === 'keydown';
+    var held = repeat || (real && !!this.held[code]);
+    if (real) this.held[code] = true;
     var back = PL.isBack(code);
     if (back && (this.state === 'error' || this.state === 'loading' || this.state === 'idle')) {
-      if (!held) this.exit();
+      if (held) return true;
+      // a stream restart (seek, track change) is 'loading' too: close a menu or tab before leaving
+      if (this.menu) this.menuBack();
+      else if (this.tabOpen() && !this.osdHidden) this.closeTab();
+      else this.exit();
       return true;
     }
     if (code === K.STOP) { this.exit(); return true; }

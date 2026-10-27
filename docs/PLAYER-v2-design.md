@@ -47,12 +47,17 @@ Safe margins 96 px left/right. Bottom-up, with controls up and no tab open:
 | Title block | left 96, bottom 214 | eyebrow 26 px `--text-2` (year, or "Show · S1 E2"), title 64 px/700 |
 | Round icons | right 96, bottom 214, gap 20 | 68 px circles, white 14% + 1 px rim; focused = white plate, dark icon, scale 1.08. Order: Subtitles, Audio (only when there is more than one audio track), Next episode (episodes with a next) |
 
-**Paused / scrubbing (board 2):** a 30% ink veil over the picture; the bar grows to 12 px; a 464×261 preview
-thumbnail with a 3 px white rim rides above the target point with its time in a dark pill under it; a 4 px teal tick
-marks the real position; the part between real and target is white 75%. Under the bar: a pause glyph and
+**Paused / scrubbing (board 2):** a 30% ink veil over the picture; the bar grows to 12 px; a 4 px teal tick marks the
+real position; the part between real and target is white 75%. Under the bar: a pause glyph and
 "Paused at 9:13 · jumping to Chapter 5"; right: remaining time at the target. Bottom-right key hints:
-`[OK] Jump here` `[Back] Return to 9:13`. Icons and tabs hide while scrubbing. Without preview thumbnails from the
-server, everything shows except the picture (the time pill alone).
+`[OK] Jump here` `[Back] Return to 9:13`. Icons and tabs hide while scrubbing.
+
+Over the target rides a **time label**: the time at 48 px/700 with the target's chapter name (24 px, `--text-2`)
+under it, on a dark plate (ink 84%, 1 px rim) with a small caret pointing at the head. There is no picture frame:
+the owner's server does not generate video preview thumbnails (decided 2026-10-27, disk space), so this is the
+normal look, not a fallback. Board 2's 464×261 thumbnail only appears on servers that do make them: the player
+asks for Plex's index frame (`/library/parts/<id>/indexes/sd/<ms>`) only when the part advertises an `sd` index,
+and then shows the frame (3 px white rim) over a small time pill instead.
 
 **Subtitles / Audio menu (board 5a):** a lit-glass popover (DESIGN.md "Sheets") 540 px wide, anchored above its
 icon with a small caret pointing at it; header in 22 px caps `--text-3`; rows 64 px (76 with a second line), focused
@@ -66,7 +71,8 @@ which swaps the list for Small / Medium / Large (stored like other settings). Au
 **Episodes** (episodes only: the current season as cards, current one marked "Now", like chapters).
 - Chapters: 320×180 cards, gap 32 (five fill the width; the row scrolls beyond that), title + start time under each;
   the current chapter has a mini progress line and is where focus lands; focused card = 3 px white rim, scale 1.08,
-  the shared shadow. Chapter thumbnails from Plex when present, else a plain card with the time large.
+  the shared shadow. Chapter thumbnails from Plex when present (a separate, optional server setting), else a plain
+  card with the time large.
 - Info: synopsis (28 px `--reading`, max ~1000 px wide), a "Start from the beginning" button, and a two-column
   facts list: Playing (Direct Play / Converting: reason), Video, Audio, Subtitles.
 
@@ -105,6 +111,5 @@ Live TV keeps its current behaviour; it uses the same title block and scrim but 
 
 ## Left to the builder
 
-Component structure, how preview thumbnails are fetched (Plex's BIF index for the part, if the server has preview
-thumbnails), animation timings within DESIGN.md's motion rules, and anything not stated above, keeping to the
+Component structure, animation timings within DESIGN.md's motion rules, and anything not stated above, keeping to the
 anti-goals.

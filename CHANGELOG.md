@@ -23,8 +23,9 @@ releases are fixes only.
   any key brings up the title, a seek bar split into chapters, the times ("−5:35 · Ends at 21:14"),
   round Subtitles / Audio / Next episode icons and Info / Chapters / Episodes tabs. They hide after
   5 seconds and stay while paused. Left/Right jump back 10 s / forward 30 s straight away (taps add
-  up); holding them, or Left/Right while paused, scrubs with a preview (Plex's preview thumbnails
-  when the server makes them, else the time) and OK jumps there, Back returns. OK pauses.
+  up); holding them, or Left/Right while paused, scrubs with a large time and chapter label riding the
+  target (or Plex's preview frame, on servers that make preview thumbnails); OK jumps there, Back
+  returns. OK pauses.
 - Subtitles and audio change from a small menu above their icon while the video keeps playing;
   picture subtitles are marked as burned in by the server. Subtitle size (Small, Medium, Large) is
   under "Size and style".
