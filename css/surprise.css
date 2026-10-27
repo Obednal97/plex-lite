@@ -1,0 +1,74 @@
+/* Surprise Me (js/screens/surprise.js): the sub-nav pill and the full-screen reveal.
+   Same language as the rest (docs/DESIGN.md): one white plate for focus, art-first, transform and
+   opacity only. Loaded after motion.css. */
+
+/* ---- Sub-nav pill: after the mode chips, behind a hairline, filled so it reads as an action ---- */
+
+.surprise-pill {
+  position: relative; display: inline-block; vertical-align: top; margin-left: 40px;
+  height: 52px; line-height: 52px; padding: 0 26px 0 20px; border-radius: 26px;
+  font-size: 26px; font-weight: 600; color: var(--text); background: var(--fill);
+  transition: transform var(--t-pop) var(--spring), background-color 160ms linear, color 160ms linear;
+}
+.surprise-pill::before {
+  content: ""; position: absolute; left: -24px; top: 13px; width: 2px; height: 26px; border-radius: 1px;
+  background: rgba(255, 255, 255, 0.16);
+}
+.surprise-pill .ico { display: inline-block; width: 30px; height: 30px; vertical-align: -7px; margin-right: 10px; }
+.surprise-pill .chip-value { margin-left: 12px; font-weight: 500; color: var(--text-3); }
+.surprise-pill .chip-value:empty { display: none; }
+.surprise-pill.focused { background: var(--focus); color: var(--focus-ink); transform: scale(1.05); }
+.surprise-pill.focused .chip-value { color: rgba(8, 8, 10, 0.55); }
+.pointer .surprise-pill { cursor: pointer; }
+.pointer .surprise-pill.focused { background: var(--fill); color: var(--text); transform: none; }
+.pointer .surprise-pill:hover { background: var(--focus); color: var(--focus-ink); }
+
+/* ---- Reveal ------------------------------------------------------------------------------------ */
+
+.surprise-content { position: absolute; left: 96px; bottom: 110px; width: 900px; }
+.surprise-info { transition: opacity var(--t-in) linear, transform var(--t-in) var(--spring); }
+.surprise .title-art { width: 760px; height: 200px; margin-bottom: 20px; }
+.surprise-title > .hero-title { margin-bottom: 12px; }
+.surprise-eyebrow { margin-bottom: 18px; }
+.surprise-episode {
+  margin-top: 10px; max-width: 860px; font-size: 28px; line-height: 34px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.surprise .surprise-summary { -webkit-line-clamp: 2; max-width: 820px; }
+.surprise .button-row { position: relative; left: 0; margin-top: 44px; height: 96px; }
+
+/* the item swaps out while the dice rolls, then rises back in; Play and Details wait for a pick */
+.surprise .needs-pick { transition: opacity 140ms linear, transform var(--t-pop) var(--spring), background-color 160ms linear, color 160ms linear; }
+.surprise.is-spinning .needs-pick { opacity: 0.45; }
+.surprise.is-spinning .surprise-info {
+  opacity: 0; transform: translate3d(0, 10px, 0);
+  transition: opacity var(--t-out) linear, transform var(--t-out) linear;
+}
+.surprise-in { animation: fadeRise var(--t-scroll) var(--spring) both; }
+
+.surprise-dice {
+  position: absolute; left: 96px; top: 470px; height: 120px; white-space: nowrap;
+  opacity: 0; transition: opacity var(--t-out) linear;
+}
+.surprise.is-spinning .surprise-dice { opacity: 1; transition: opacity var(--t-in) linear 60ms; }
+.surprise-dice-face { display: inline-block; vertical-align: middle; width: 112px; height: 112px; color: var(--text); }
+.surprise-dice-face .ico { display: block; width: 112px; height: 112px; }
+.surprise.is-spinning .surprise-dice-face { animation: diceRoll 720ms var(--spring) infinite; }
+.surprise-dice-label { display: inline-block; vertical-align: middle; margin-left: 28px; font-size: 32px; font-weight: 600; color: var(--text-2); }
+@keyframes diceRoll {
+  0% { transform: rotate(0deg) scale(1); }
+  45% { transform: rotate(150deg) scale(0.88); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+/* Play counts down: the label ticks and a hairline under the pill fills (one linear transform) */
+.surprise .btn-primary { position: relative; min-width: 330px; text-align: center; }
+.surprise-rail {
+  position: absolute; left: 34px; right: 34px; bottom: -18px; height: 4px; border-radius: 2px;
+  background: rgba(255, 255, 255, 0.18); opacity: 0; transition: opacity 200ms linear;
+}
+.surprise-rail.on { opacity: 1; }
+.surprise-rail-fill {
+  position: absolute; left: 0; top: 0; width: 100%; height: 4px; background: var(--text);
+  transform: scaleX(0); transform-origin: 0 50%;
+}

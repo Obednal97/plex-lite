@@ -27,6 +27,27 @@ lets the Plex server resize artwork. It stays smooth on hardware the official ap
 - **Remote**: built for the arrow keys, with pointer (Magic Remote) support. Hold OK for quick
   actions (resume, play from the beginning, mark watched or unwatched).
 - **Plugins**: optional add-ons for rows, actions and settings (see [Plugins](#plugins))
+- **Surprise Me**: for when nobody can decide what to watch (see [Surprise Me](#surprise-me))
+
+## Surprise Me
+
+A **Surprise Me** pill sits after Recommended / Library / Collections in the Movies and TV Shows
+tabs (Up from the rows, then Right). It picks something at random and shows it full screen (art,
+title logo, year, runtime, a two-line summary) with an 8-second countdown, then plays it. Play now,
+Spin again, Details and Cancel are on screen. Moving between them stops the countdown, and Back
+cancels.
+
+- It picks from unwatched titles. If everything has been watched, it picks from all of them and
+  says it's a rewatch. Settings has "Surprise Me: include watched" and "Surprise Me: autoplay
+  countdown".
+- In the Library view it uses the active Genre and Decade filters (the pill shows them), and the
+  Unwatched filter makes "unwatched only" strict.
+- Movies resume where they were left. Shows play their next episode (Plex's On Deck, which is S1 E1
+  for a show that was never started), or the first regular episode for a finished show.
+- Watched state is the current Plex Home profile's. The last 15 picks per library are kept in memory
+  so Spin again doesn't bring them straight back.
+- It costs one request for 12 random titles (`sort=random`), plus one for a show's next episode. The
+  art (1280x720, as in the hero) and logo are preloaded so the reveal draws complete.
 
 ## Screenshots
 

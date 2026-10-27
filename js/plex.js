@@ -336,6 +336,14 @@
     });
   };
 
+  // A show's next episode from includeOnDeck=1. Plex sends OnDeck.Metadata as a single object (not
+  // the usual array); accept both.
+  plex.onDeck = function (show) {
+    var m = show && show.OnDeck && show.OnDeck.Metadata;
+    if (!m) return null;
+    return (m.length != null ? m[0] : m) || null;
+  };
+
   plex.children = function (ratingKey) {
     return plex.get('/library/metadata/' + ratingKey + '/children', { excludeAllLeaves: 1 }).then(function (mc) {
       return mc.Metadata || [];

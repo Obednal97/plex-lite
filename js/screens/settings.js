@@ -40,6 +40,8 @@
         toggle('Autoplay next episode', 'autoplayNext', true),
         toggle('Skip intros automatically', 'autoSkipIntro', false),
         toggle('Skip credits automatically', 'autoSkipCredits', false),
+        toggle('Surprise Me: include watched', 'surprise.includeWatched', false),
+        toggle('Surprise Me: autoplay countdown', 'surprise.autoplay', true),
         { label: 'Frame-rate meter', value: PL.app.perf.on ? 'On' : 'Off', action: function () { PL.app.perf.toggle(); build(); } },
         { label: 'Refresh search index', value: '', action: function () { if (PL.fuzzy && PL.fuzzy.rebuild) { PL.fuzzy.rebuild(); PL.toast('Rebuilding the search index…'); } } },
         { label: 'Sign out', value: '', action: signOut },

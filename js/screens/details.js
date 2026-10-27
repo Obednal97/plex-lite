@@ -172,7 +172,7 @@
         return PL.plex.children(full.ratingKey).then(function (seasons) {
           self.seasons = seasons;
           var want = item.type === 'season' ? item.ratingKey : null;
-          var deck = full.OnDeck && full.OnDeck.Metadata && full.OnDeck.Metadata[0];
+          var deck = PL.plex.onDeck(full);
           self.onDeck = deck || null;
           var idx = 0;
           seasons.forEach(function (s, i) {

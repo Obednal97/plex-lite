@@ -20,6 +20,9 @@ USED = {
     'tracks': ('regular', 'subtitles'),
     'versions': ('regular', 'stack'),
     'show': ('regular', 'television-simple'),
+    'dice': ('regular', 'dice-five'),
+    'info': ('regular', 'info'),
+    'close': ('regular', 'x'),
 }
 
 pkg = Path(sys.argv[1])
