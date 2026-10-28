@@ -1,0 +1,8 @@
+/* Channel logo plates (js/logos.js): the guide's channel column (.lg-logo) and Search's Live TV rows
+   (.stv-logo, .stv-badge). Light plate by default (their own CSS); white logos on a transparent
+   background get a dark plate with a hairline rim; mid-grey when the logo couldn't be looked at.
+   Loaded after livetv.css and search-tv.css. */
+.lg-logo.loaded.logo-dark, .stv-logo.loaded.logo-dark, .stv-badge.loaded.logo-dark {
+  background: #3b3e46; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+.lg-logo.loaded.logo-mid, .stv-logo.loaded.logo-mid, .stv-badge.loaded.logo-mid { background: #8f949d; }

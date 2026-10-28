@@ -474,18 +474,8 @@
     var c = this.list[i];
     var chan = PL.el('div', 'lg-chan');
     var logo = PL.el('div', 'lg-logo');
-    var src = c.thumb ? PL.plex.image(c.thumb, 104, 56, { format: 'png' }) : null;
-    if (src) {
-      var img = PL.el('img');
-      img.width = 104;
-      img.height = 56;
-      img.onload = function () { logo.classList.add('loaded'); };
-      img.onerror = function () { img.style.visibility = 'hidden'; };
-      img.src = src;
-      logo.appendChild(img);
-    } else {
-      logo.appendChild(PL.el('span', 'lg-logo-text', c.name.slice(0, 10)));
-    }
+    // a dark plate for white logos (js/logos.js)
+    PL.logos.fill(logo, c, { w: 104, h: 56, textClass: 'lg-logo-text', label: c.name.slice(0, 10) });
     chan.appendChild(logo);
     var num = PL.el('div', 'lg-num', c.vcn);
     if (G.isFavourite(c.identifier)) num.appendChild(PL.el('span', 'lg-fav', '★'));
