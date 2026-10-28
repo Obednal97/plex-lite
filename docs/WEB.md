@@ -183,8 +183,8 @@ everything that spans the screen that height (backdrops, screens, the player's v
 grid, sheets) and keeps the home hero where it sits on the TV. Limits: below 900 stage px (an
 ultra-wide or very short window) the stage stays 900 tall with bars at the sides; taller than
 1440 (narrower than 4:3) it falls back to the 1920x1080 stage fitted with bars; phones and narrow
-windows get the touch layout instead ([Phones and tablets](#phones-and-tablets)), which also hands
-the player back to this stage. The TV's stage is always 1920x1080.
+windows get the touch layout instead ([Phones and tablets](#phones-and-tablets)).
+The TV's stage is always 1920x1080.
 
 **Mouse and keyboard.** With a mouse (`PL.input.mode()` is `pointer`):
 
