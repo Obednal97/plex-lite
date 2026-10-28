@@ -17,6 +17,9 @@ and on the TV `PL.isWeb` is false, so it behaves exactly as before.
 | --- | --- |
 | `web/env.js` | Marks the platform. |
 | `web/web-input.js` | The input mode: remote, mouse and keyboard, or touch (see [Input modes](#input-modes)). |
+| `web/web-desktop.js` | Laptop and desktop: the Back [Esc] button, tooltips that name their key, the `/` `M` `N` `?` keys and the `?` shortcuts overlay. |
+| `web/web-player.js` | The player with a mouse. |
+| `web/web-cards.js` | Cards and rows with a mouse. |
 | `web/web.js` | Who we are to Plex (browser and OS), the 1920x1080 stage scaled to the window, keyboard and mouse for the remote's buttons, the browser's Back button, Chrome's local-network permission, Settings rows, ending sessions when the page goes away. |
 | `web/web-signin.js` | The sign-in screen (Plex's own sign-in page, or a plex.tv/link code). |
 | `web/web-media.js` | What this browser can decode, the client profile for the Plex transcoder, HLS through hls.js or the browser. |
@@ -171,8 +174,27 @@ PL.input.on(fn)     // fn({mode, nav, prevMode, prevNav}) after every change; PL
 
 ## Keyboard, mouse and window
 
-The app is laid out at 1920x1080 and scaled to fit the window, centred, with black bars where the
-window's shape differs (`transform: scale` on the page, so text is redrawn at the final size).
+**The window.** The app is laid out 1920 px wide and scaled to the window's width
+(`transform: scale` on the page, so text is redrawn at the final size). The stage's height follows the
+window instead of being fixed at the TV's 1080: a 1440x900 window gets a 1920x1200 stage, a
+1920x960 one 1920x960, so there are no bars. `web/web.js` sets it as `--stage-h` on `<html>` and
+`PL.ui.SCREEN_H` (and fires `pl-stageresize` on `document` when it changes); `web/web.css` gives
+everything that spans the screen that height (backdrops, screens, the player's video, the guide's
+grid, sheets) and keeps the home hero where it sits on the TV. Limits: below 900 stage px (an
+ultra-wide or very short window) the stage stays 900 tall with bars at the sides; taller than
+1440 (wider than 4:3, i.e. a phone in portrait) it falls back to the 1920x1080 stage fitted with bars,
+until the touch layout takes over. The TV's stage is always 1920x1080.
+
+**Mouse and keyboard.** With a mouse (`PL.input.mode()` is `pointer`):
+
+- **Back [Esc]** sits at the top left of every screen above the tab bar (details, people, sheets,
+  the player while its controls are up). In remote mode it isn't shown: the remote has Back.
+- **Tooltips name the key** that does the same (`PL.web.tip(node, text, key)`: "Close [Esc]",
+  "Full screen [F]").
+- **Keys added on the web:** `/` goes to Search from anywhere, `?` opens the keyboard shortcuts
+  (also Settings → Keyboard shortcuts; Esc, Enter or `?` close it), `M` mutes and `N` plays the next
+  episode while watching. On Search these letters type. The arrows keep their remote meaning
+  everywhere (they never change the volume).
 
 | Key | Remote button |
 | --- | --- |
@@ -187,6 +209,7 @@ window's shape differs (`transform: scale` on the page, so text is redrawn at th
 | I | Info |
 | F | Full screen (also Settings → Full screen) |
 | 0–9 | Number keys |
+| `/`, `?`, M, N | Search, the shortcuts, mute, next episode (web only) |
 
 On the Search screen letters and Space type instead. The mouse works like the Magic Remote: hover
 focuses, click selects, the wheel moves between rows (a trackpad needs a short swipe per step). The
@@ -195,7 +218,7 @@ the remote's names in remote mode ([Input modes](#input-modes)). The browser's B
 inside the app; at the top level with the tab bar focused, Back leaves the site as usual.
 
 **Phones and tablets.** Not designed for yet. In portrait the whole TV layout shrinks to the
-screen's width, so it is usable (tap is click, a long press is hold OK, pinch to zoom) but small. A
+screen's width (the 1920x1080 stage, fitted), so it is usable (tap is click, a long press is hold OK, pinch to zoom) but small. A
 proper mobile layout would need: a layout that reflows below ~900 px (one-column details page,
 a smaller hero, two or three posters across, a bottom tab bar instead of the top pill), touch scrolling
 of rows and grids instead of focus-driven translation, a touch player (tap to show controls, drag the

@@ -18,6 +18,11 @@ releases are fixes only.
   layout). Settings → Controls pins Automatic / Remote / Mouse & keyboard / Touch per browser. Key
   hints follow the mode (OK or Enter, Back or Esc, none for touch). For the rest of the web layer:
   `PL.input.mode()`, change events and `<html data-input data-nav>`. The TV app is unchanged.
+- **Laptops and desktops** (docs/WEB.md, "Keyboard, mouse and window"): the web build fills the
+  window with no letterbox bars (the stage is 1920 px wide and as tall as the window, 900–1440;
+  the guide shows as many channels as fit). With a mouse, every screen above the tab bar has a
+  Back [Esc] button top left, tooltips name their key, `/` opens Search, `M` mutes, `N` plays the
+  next episode, and `?` (or Settings → Keyboard shortcuts) shows every key in one overlay.
 - **Overseerr on the web** (docs/OVERSEERR.md, "On the web"): in the web build the Overseerr plugin
   calls your Overseerr straight from the browser (`plugins/overseerr/seerr-web.js`, the same methods
   and messages as the TV's service, per-profile sign-in over the browser's one cookie, changes checked
