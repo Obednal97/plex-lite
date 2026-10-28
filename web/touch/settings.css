@@ -1,1 +1,81 @@
-/* Phone and tablet layer: settings (web/touch/screens/settings.js). */
+/* Phone and tablet layer: Settings (web/touch/screens/settings.js), a stack of sheets. Web build only. */
+
+/* the profile at the top of the first sheet */
+.ts-profile { display: flex; align-items: center; gap: 14px; padding: 4px var(--t-gr) 14px var(--t-g); }
+.ts-profile-pic, .ts-row-avatar {
+  position: relative; flex: none; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 50%;
+  font-weight: 700; color: var(--t-text);
+  background: linear-gradient(140deg, #1b7fa8 0%, #3fc0d6 100%); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+.ts-profile-pic { width: 56px; height: 56px; font-size: 22px; }
+.ts-row-avatar { width: 32px; height: 32px; margin-right: 14px; font-size: 14px; }
+.ts-profile-pic .t-img, .ts-row-avatar .t-img { position: absolute; left: 0; top: 0; border-radius: 50%; }
+.ts-profile-text { min-width: 0; }
+.ts-profile-name { font-size: 20px; font-weight: 700; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ts-profile-sub { margin-top: 2px; font-size: 14px; color: var(--t-text-2); }
+
+/* a nested sheet's heading: the Back chevron, then the title */
+.ts-head { display: flex; align-items: center; flex-wrap: wrap; }
+.ts-head > .t-btn-round { margin: -6px 6px -6px -10px; background: transparent; box-shadow: none; }
+.ts-head > .t-sheet-title { flex: 1 1 0; min-width: 0; }
+.ts-head > .t-sheet-sub { flex-basis: 100%; }
+
+.ts-intro { margin: 0; padding: 0 var(--t-gr) 10px var(--t-g); font-size: 14px; line-height: 1.45; color: var(--t-text-2); }
+.ts-note { margin: 0; padding: 8px var(--t-gr) 4px var(--t-g); font-size: 13px; line-height: 1.4; color: var(--t-text-3); }
+.t-sheet-heading.ts-heading-long { text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 600; color: var(--t-text-2); }
+.ts-body > .t-spinner { margin: 28px auto 36px; }
+
+/* rows: information lines, switches, tones */
+.ts-static.t-sheet-row:active { background: none; }
+.ts-static .t-sheet-label { font-weight: 500; }
+.ts-body .t-sheet-rowsub { line-height: 1.35; }
+.ts-body .t-sheet-value { max-width: 55%; }
+.ts-sensitive .t-sheet-rowsub, .ts-warn .t-sheet-rowsub { color: #ffbd66; }
+.ts-locked .t-sheet-label { color: var(--t-text-2); }
+.ts-switch {
+  position: relative; flex: none; width: 50px; height: 30px; margin-left: 12px; border-radius: 15px;
+  background: rgba(255, 255, 255, 0.18); transition: background-color 160ms linear;
+}
+.ts-switch.on { background: var(--t-accent); }
+.ts-knob {
+  position: absolute; left: 2px; top: 2px; width: 26px; height: 26px; border-radius: 50%; background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); transition: transform 180ms var(--t-ease);
+}
+.ts-switch.on .ts-knob { transform: translateX(20px); }
+
+/* buttons at the foot of a sheet */
+.ts-buttons { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px var(--t-gr) 6px var(--t-g); }
+.ts-buttons > .t-btn { flex: 1 1 0; min-width: 120px; }
+.ts-buttons > .t-btn-primary { height: 48px; box-shadow: none; }
+.ts-buttons > .t-btn-glass { height: 48px; border-radius: 24px; }
+
+/* a text field (the system keyboard) */
+.ts-field { padding: 2px var(--t-gr) 0 var(--t-g); }
+.ts-input {
+  display: block; width: 100%; height: 50px; box-sizing: border-box; padding: 0 16px; border: 0; border-radius: 14px;
+  font: inherit; font-size: 16px; /* 16 px: iOS doesn't zoom in */ color: var(--t-text);
+  background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px var(--t-rim); outline: none; -webkit-appearance: none; appearance: none;
+}
+.ts-input::placeholder { color: var(--t-text-3); }
+.ts-input:focus { box-shadow: inset 0 0 0 2px var(--t-accent); }
+.t-root .ts-input:focus-visible { outline: none; }
+.ts-msg { min-height: 18px; padding: 8px 2px 0; font-size: 13px; line-height: 1.4; color: var(--t-text-2); }
+.ts-msg.ts-bad { color: var(--t-danger); }
+.ts-text .ts-buttons { padding-top: 8px; }
+
+/* About */
+.ts-about { display: flex; flex-direction: column; align-items: center; padding: 6px var(--t-gr) 18px var(--t-g); text-align: center; }
+.ts-about-mark { width: 56px; height: 56px; }
+.ts-about-name { margin-top: 10px; font-size: 22px; font-weight: 700; }
+.ts-about-name span { color: var(--t-accent); }
+.ts-about-ver { margin-top: 2px; font-size: 14px; color: var(--t-text-2); }
+
+/* a sheet on top of another: the one under it dims a little more */
+.ts-nested .t-scrim { background: rgba(0, 0, 0, 0.35); }
+/* tablets: a wider card for the settings, nested cards a touch narrower so the one under them frames them */
+.t-tablet .ts-sheet .t-sheet { width: 500px; max-width: calc(100vw - 48px); }
+.t-tablet .ts-sheet.ts-nested .t-sheet { width: 480px; }
+
+
+/* a text sheet lifted above the on-screen keyboard (settings.js keyboardFit) */
+.t-sheet.ts-kb { padding-bottom: 10px; }

@@ -145,7 +145,14 @@
   };
 
   ['setRoot', 'push', 'pop', 'replaceTop'].forEach((name) => {
-    app[name] = function () {
+    app[name] = function (screen) {
+      // a bridge (below): run it instead of putting a screen on the stage. replaceTop's screen it
+      // replaces goes first (the TV's Surprise Me reveal handing over to the player).
+      if (screen && screen.touchBridge && (name === 'push' || name === 'replaceTop')) {
+        if (name === 'replaceTop' && app.stack.length > 1) app.pop();
+        screen.touchBridge();
+        return undefined;
+      }
       const out = real[name].apply(this, arguments);
       if (T.engaged || (app.stack[0] && app.stack[0].touchStandIn)) {
         sync();
@@ -385,9 +392,21 @@
 
   // The TV player on the stage, until web/touch/player.js replaces these two with the touch player
   // (same arguments as PL.screens.player). Closing it comes back here and the page refreshes (onShow).
-  T.play = (item, opts) => app.push(PL.screens.player(item, opts || {}));
+  const stagePlayer = PL.screens.player;
+  T.play = (item, opts) => app.push(stagePlayer(item, opts || {}));
   // live: {label, dvrKey, channel, channels, index} (js/screens/livetv.js playList)
-  T.playLive = (live) => app.push(PL.screens.player(null, { live }));
+  T.playLive = (live) => app.push(stagePlayer(null, { live }));
+
+  // While the layer is in charge, every player goes through PL.touch.play / playLive, wherever it
+  // was asked for: a stage screen (the TV's details, guide or search), a plugin, a deep link. Callers
+  // do app.push(PL.screens.player(...)) (or replaceTop): they get a bridge, which the hooks above run
+  // instead of pushing. Off the layer (laptop, TV) this is the TV player as before.
+  T.bridge = (open) => ({ el: h('div'), touchBridge: open });
+  PL.screens.player = function (item, opts) {
+    if (!T.engaged) return stagePlayer.apply(this, arguments);
+    const o = opts || {};
+    return T.bridge(() => (o.live ? T.playLive(o.live) : T.play(item, o)));
+  };
 
   // ---- The profile (the avatar) -----------------------------------------------------------------------------
 

@@ -307,7 +307,7 @@ player) is open. Sign-in and the first-run screens stay as they are.
 | `web/touch/sheets.js` | Bottom sheets (a centred card on a tablet), a title's quick actions, toasts, confirmations. |
 | `web/touch/player.js`, `player.css` | The touch player (see [The touch player](#the-touch-player)). |
 | `web/touch/player-logic.js` | Its pure gesture decisions, tested in `test/touch-player.test.mjs`. |
-| `web/touch/screens/*.js` | The screens. A screen not built yet opens the TV's version on the stage. |
+| `web/touch/screens/*.js` | The screens (library, browse, details, person, search, live, settings). |
 
 **How it sits on the app.** While the layer is in charge, the stage's root screen is a stand-in
 that passes Back to the layer, `<html>` has the class `pl-touch` (the stage is hidden, the page
@@ -331,6 +331,19 @@ PL.touch.screens.live()     // the Live TV tab's root page
 way, and everything in the layer uses the new one. A page is `{el, onShow({back}), onHide(),
 destroy(), onReselect()}`; `PL.touch.push(page)`, `PL.touch.back()`, `PL.touch.sheet({...})`,
 `PL.touch.menu(item)` and `PL.touch.toast(text)` are the rest of the shell.
+
+**Every player is the touch player.** While the layer is in charge, `PL.screens.player(...)` returns
+a bridge instead of the TV player, and `PL.app.push` / `replaceTop` run it as `PL.touch.play` (or
+`playLive`): so a play started anywhere (a TV screen shown on the stage, a plugin, a deep link)
+opens the touch player. Off the layer it is the TV player as before. Likewise, while the layer shows,
+the TV's pickers, text entry and explanation cards (`PL.screens.sheet`, `textEntry`, `PL.web.info`,
+used by plugins such as Overseerr) open as touch sheets (`web/touch/screens/settings.js`).
+
+**Screens.** Library tabs (Recommended, Library with sort, filters and an A–Z rail, Collections,
+Surprise Me), "See all", collections, title pages (film, show, season, episode), people, Search (with
+channels and programmes), Live TV, Settings and plugins are the layer's own. Still shown from the TV
+on the stage, scaled: the full TV guide ("TV guide" on the Live TV tab and "Show in guide" in
+Search, until the phone guide), and a plugin's own tab (Settings, Browse).
 
 **Long press.** `web/web.js` turns a 550 ms press into a `contextmenu` event (Android sends its own);
 `PL.touch.ui.onHold` opens the title's quick actions from it, and the click at the end of the press
