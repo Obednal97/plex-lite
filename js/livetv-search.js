@@ -19,8 +19,6 @@
   // Channels and On TV go above Movies & Shows when a channel matches at least at a word start (800;
   // see channelsFirst)
   S.TV_FIRST = 800;
-  // guide filler such as "..programmes start at 7.00pm" is not a programme
-  var FILLER = /^\s*(\.\.|…)/;
 
   var QUALITY = /[\s|:-]*[[(]?\b(uhd|fhd|hd|sd|4k|hevc|h265|h264|1080p|1080|720p|720|50fps|60fps|raw|backup)\b[\])]?\s*$/i;
   var WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
@@ -161,7 +159,7 @@
       var seen = {};
       for (var j = 0; j < list.length; j++) {
         var a = list[j];
-        if (a.e <= now || !a.title || a.empty || FILLER.test(a.title)) continue;
+        if (a.e <= now || !a.title || a.empty || PL.liveLogic.isFiller(a.title)) continue;
         var key = '$' + a.title;
         if (seen[key]) continue;
         seen[key] = true;

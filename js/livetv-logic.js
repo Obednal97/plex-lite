@@ -19,6 +19,10 @@
 
   // ---- Labels -------------------------------------------------------------------------------------
 
+  // guide filler such as "..programmes start at 7.00pm" is not a programme
+  var FILLER = /^\s*(\.\.|…)/;
+  L.isFiller = function (title) { return FILLER.test(title || ''); };
+
   // unix seconds -> "21:05" (the TV's local time)
   L.clock = function (t) {
     var d = new Date(t * 1000);

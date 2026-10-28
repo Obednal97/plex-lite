@@ -261,7 +261,8 @@
     var out = [];
     G.channels.forEach(function (c) {
       var a = G.nowNext(c.identifier, t).now;
-      if (a) out.push({ channel: c, airing: a, cat: G.airingCat(a) || null });
+      // a channel showing only guide filler has nothing on to show
+      if (a && !PL.liveLogic.isFiller(a.title)) out.push({ channel: c, airing: a, cat: G.airingCat(a) || null });
     });
     return out;
   };
