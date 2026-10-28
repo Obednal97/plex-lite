@@ -101,6 +101,29 @@ html = html.replace(/(\s*)<script src="js\/app\.js"><\/script>/, (m, ws) => m + 
 html = html.replace('<html lang="en">', `<html lang="en" data-version="${version}">`);
 if (html === before) fail('index.html did not change: has its layout moved?');
 
+// The phone and tablet layer (web/touch/, docs/WEB.md "Phones and tablets"): the whole folder is
+// copied, and the scripts and stylesheets its manifest lists go in after everything else, in order.
+// viewport-fit=cover lets it draw under the notch and home indicator (it pads by the safe areas).
+{
+  const touchDir = join(APP, 'web/touch');
+  const manifest = JSON.parse(readFileSync(join(touchDir, 'manifest.json'), 'utf8'));
+  for (const rel of walk(touchDir)) {
+    if (/\.DS_Store$/.test(rel)) continue;
+    mkdirSync(dirname(join(OUT, 'web/touch', rel)), { recursive: true });
+    cpSync(join(touchDir, rel), join(OUT, 'web/touch', rel));
+    files++;
+  }
+  const at = (list) => list.map((f) => { if (!existsSync(join(touchDir, f))) fail(`web/touch/manifest.json lists ${f}, which is missing`); return `web/touch/${f}`; });
+  const touchHtml = html
+    .replace('content="width=device-width, initial-scale=1"', 'content="width=device-width, initial-scale=1, viewport-fit=cover"')
+    .replace(/(\s*)(<\/head>)/, (m, ws) => at(manifest.styles).map((s) => `\n  <link rel="stylesheet" href="${s}">`).join('') + ws + '</head>')
+    .replace(/(\s*)(<\/body>)/, (m, ws) => at(manifest.scripts).map((s) => `\n  <script src="${s}"></script>`).join('') + ws + '</body>');
+  if (touchHtml.split('web/touch/').length - 1 !== manifest.styles.length + manifest.scripts.length || !/viewport-fit=cover/.test(touchHtml)) {
+    fail('could not add the touch layer to index.html');
+  }
+  html = touchHtml;
+}
+
 // cache-busting: every local script and stylesheet gets ?v=<hash of its content>
 html = html.replace(/(src|href)="((?:js|css|web|plugins|img)\/[^"?]+)"/g, (m, attr, ref) => {
   const file = join(OUT, ref);
