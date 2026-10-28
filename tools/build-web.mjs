@@ -33,7 +33,9 @@ const WEB = {
   'web/web-media.js': 'web/web-media.js', 'web/web.css': 'web/web.css', 'web/plugin-frame.html': 'web/plugin-frame.html',
   'web/vendor/hls.js/hls.light.min.js': 'web/vendor/hls.js/hls.light.min.js', 'web/vendor/hls.js/LICENSE': 'web/vendor/hls.js/LICENSE',
   'web/signed-in.html': 'signed-in.html', 'web/signed-in.js': 'signed-in.js', 'web/signed-in.css': 'signed-in.css',
-  'web/robots.txt': 'robots.txt',
+  'web/robots.txt': 'robots.txt', 'web/firstrun-web.css': 'web/firstrun-web.css',
+  'web/fonts/inter.css': 'web/fonts/inter.css', 'web/fonts/inter-latin.woff2': 'web/fonts/inter-latin.woff2',
+  'web/fonts/inter-latin-ext.woff2': 'web/fonts/inter-latin-ext.woff2', 'web/fonts/OFL.txt': 'web/fonts/OFL.txt',
 };
 // scripts after js/app.js, in order
 const WEB_SCRIPTS = ['web/vendor/hls.js/hls.light.min.js', 'web/web-input.js', 'web/web.js', 'web/web-signin.js', 'web/web-media.js'];
@@ -88,7 +90,15 @@ html = html.replace('<title>Plex Lite</title>', [
   '  <link rel="icon" type="image/png" href="img/largeIcon.png">',
 ].join('\n'));
 html = html.replace(/(\s*)<script src="js\/core\.js"><\/script>/, '$1<script src="web/env.js"></script>$1<script src="js/core.js"></script>');
-html = html.replace(/(\s*)(<\/head>)/, '\n  <link rel="stylesheet" href="web/web.css">$1$2');
+// Inter (web/fonts, the web build's typeface; the TV keeps LG Display), preloaded so the first-run
+// screens draw in it from the start; then the web stylesheets, after the app's own
+html = html.replace(/(\s*)(<\/head>)/, [
+  '',
+  '  <link rel="preload" href="web/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>',
+  '  <link rel="stylesheet" href="web/fonts/inter.css">',
+  '  <link rel="stylesheet" href="web/web.css">',
+  '  <link rel="stylesheet" href="web/firstrun-web.css">$1$2',
+].join('\n'));
 // the Overseerr plugin's browser path (instead of its webOS service), right after its shared core
 html = html.replace(/(\s*)<script src="plugins\/overseerr\/seerr\.js"><\/script>/, (m, ws) => `${m}${ws}<script src="plugins/overseerr/seerr-web.js"></script>`);
 html = html.replace(/(\s*)<script src="js\/app\.js"><\/script>/, (m, ws) => m + WEB_SCRIPTS.map((s) => `${ws}<script src="${s}"></script>`).join(''));
@@ -120,6 +130,8 @@ if (html === before) fail('index.html did not change: has its layout moved?');
 
 // cache-busting: every local script and stylesheet gets ?v=<hash of its content>
 html = html.replace(/(src|href)="((?:js|css|web|plugins|img)\/[^"?]+)"/g, (m, attr, ref) => {
+  // fonts keep their plain URLs: the preload must match the stylesheet's url() exactly
+  if (ref.endsWith('.woff2')) return m;
   const file = join(OUT, ref);
   if (!existsSync(file)) fail(`index.html refers to ${ref}, which isn't in the build`);
   const h = createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 10);
@@ -129,7 +141,7 @@ html = html.replace(/(src|href)="((?:js|css|web|plugins|img)\/[^"?]+)"/g, (m, at
 // the CSP allows no inline script or handler: catch one before Vercel serves a broken page
 if (/<script(?![^>]*\bsrc=)[^>]*>/i.test(html)) fail('index.html has an inline <script>');
 if (/\son[a-z]+\s*=/i.test(html)) fail('index.html has an inline event handler');
-for (const s of ['web/env.js', 'js/core.js', 'web/web-input.js', 'web/web.js', 'web/web-media.js', 'plugins/overseerr/seerr-web.js']) if (!html.includes(`"${s}?v=`)) fail(`index.html lacks ${s}`);
+for (const s of ['web/env.js', 'js/core.js', 'web/web-input.js', 'web/web.js', 'web/web-media.js', 'plugins/overseerr/seerr-web.js', 'web/firstrun-web.css', 'js/screens/firstrun.js']) if (!html.includes(`"${s}?v=`)) fail(`index.html lacks ${s}`);
 if (html.indexOf('web/env.js') > html.indexOf('js/core.js')) fail('web/env.js must load before js/core.js');
 
 writeFileSync(join(OUT, 'index.html'), html);
