@@ -330,7 +330,7 @@
   // is open, like the player) goes through untouched.
   const bridged = [];
   const bridging = () => !!(T.visible && app.stack.length === 1 && app.stack[0] && app.stack[0].touchStandIn);
-  const standIn = (open) => ({ el: h('div'), touchBridge: open });
+  const standIn = (open) => T.bridge(open);
   const track = (s) => {
     bridged.push(s);
     const prev = s.opts.onClose;
@@ -396,12 +396,8 @@
     if (!bridging()) return realText.apply(this, arguments);
     return standIn(() => stageText(title, initial, placeholder, onDone));
   };
-  const realPush = app.push;
+  // (app.push runs a touchBridge itself: web/touch/shell.js)
   const realPop = app.pop;
-  app.push = function (screen) {
-    if (screen && screen.touchBridge) { screen.touchBridge(); return undefined; }
-    return realPush.apply(this, arguments);
-  };
   app.pop = function () {
     if (bridged.length && bridging()) { bridged[bridged.length - 1].close(); return true; }
     return realPop.apply(this, arguments);
@@ -911,7 +907,7 @@
       { label: 'Controls', value: S.controlsValue(PL.input.setting(), PL.input.mode()), sub: 'Remote switches to the TV layout', next: true, action: controlsSheet },
       PL.web ? { label: 'Local network access', value: PL.web.lnaLabel(), next: true, action: () => PL.web.explainLna() } : null,
       fullscreenOk() ? { label: 'Full screen', toggle: isFull(), action: () => { PL.web.toggleFullscreen(); setTimeout(refreshAll, 400); } } : null,
-      PL.input.detected() !== 'touch' && PL.web ? { label: 'Keyboard and mouse', sub: 'Shortcuts', next: true, action: () => PL.web.explainKeys() } : null,
+      PL.input.detected() !== 'touch' && PL.web && PL.web.shortcuts ? { label: 'Keyboard shortcuts', sub: 'Shown over the page; ? opens them too', next: true, action: () => PL.web.shortcuts() } : null,
       PL.fuzzy && PL.fuzzy.rebuild ? { label: 'Refresh search index', sub: 'If Search misses new titles', action: () => { PL.fuzzy.rebuild(); T.toast('Rebuilding the search index…'); } } : null,
     ];
     // bundled plugins' own rows (Overseerr), then Overseerr's web requirements

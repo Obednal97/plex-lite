@@ -17,7 +17,10 @@ and on the TV `PL.isWeb` is false, so it behaves exactly as before.
 | --- | --- |
 | `web/env.js` | Marks the platform. |
 | `web/web-input.js` | The input mode: remote, mouse and keyboard, or touch (see [Input modes](#input-modes)). |
-| `web/web.js` | Who we are to Plex (browser and OS), the 1920x1080 stage scaled to the window, keyboard and mouse for the remote's buttons, the browser's Back button, Chrome's local-network permission, Settings rows, ending sessions when the page goes away. |
+| `web/web-desktop.js` | Laptop and desktop: the Back [Esc] button, tooltips that name their key, the `/` `M` `N` `?` keys and the `?` shortcuts overlay. |
+| `web/web.js` | Who we are to Plex (browser and OS), the stage fitted to the window, keyboard and mouse for the remote's buttons, the browser's Back button, Chrome's local-network permission, Settings rows, ending sessions when the page goes away. |
+| `web/web-player.js` | The player with a mouse: transport row, volume, full screen, tooltips, hiding after 3 s, M and N (see [Player with a mouse](#player-with-a-mouse)). |
+| `web/web-cards.js` | Cards and rows with a mouse: hover cards with ▶ and "…", row arrows, the hero following the mouse (see [Cards and rows with a mouse](#cards-and-rows-with-a-mouse)). |
 | `web/web-signin.js` | Plex's own sign-in page in a popup, for the first-run screens ([docs/FIRSTRUN.md](FIRSTRUN.md)). |
 | `web/firstrun-web.css` | The first-run screens' full-window, responsive layout (phones included). |
 | `web/fonts/` | Inter (OFL), the web build's typeface, self-hosted. |
@@ -179,8 +182,28 @@ PL.input.on(fn)     // fn({mode, nav, prevMode, prevNav}) after every change; PL
 
 ## Keyboard, mouse and window
 
-The app is laid out at 1920x1080 and scaled to fit the window, centred, with black bars where the
-window's shape differs (`transform: scale` on the page, so text is redrawn at the final size).
+**The window.** The app is laid out 1920 px wide and scaled to the window's width
+(`transform: scale` on the page, so text is redrawn at the final size). The stage's height follows the
+window instead of being fixed at the TV's 1080: a 1440x900 window gets a 1920x1200 stage, a
+1920x960 one 1920x960, so there are no bars. `web/web.js` sets it as `--stage-h` on `<html>` and
+`PL.ui.SCREEN_H` (and fires `pl-stageresize` on `document` when it changes); `web/web.css` gives
+everything that spans the screen that height (backdrops, screens, the player's video, the guide's
+grid, sheets) and keeps the home hero where it sits on the TV. Limits: below 900 stage px (an
+ultra-wide or very short window) the stage stays 900 tall with bars at the sides; taller than
+1440 (narrower than 4:3) it falls back to the 1920x1080 stage fitted with bars; phones and narrow
+windows get the touch layout instead ([Phones and tablets](#phones-and-tablets)).
+The TV's stage is always 1920x1080.
+
+**Mouse and keyboard.** With a mouse (`PL.input.mode()` is `pointer`):
+
+- **Back [Esc]** sits at the top left of every screen above the tab bar (details, people, sheets,
+  the player while its controls are up). In remote mode it isn't shown: the remote has Back.
+- **Tooltips name the key** that does the same (`PL.web.tip(node, text, key)`: "Close [Esc]",
+  "Full screen [F]").
+- **Keys added on the web:** `/` goes to Search from anywhere, `?` opens the keyboard shortcuts
+  (also Settings → Keyboard shortcuts; Esc, Enter or `?` close it), `M` mutes and `N` plays the next
+  episode while watching. On Search these letters type. The arrows keep their remote meaning
+  everywhere (they never change the volume).
 
 | Key | Remote button |
 | --- | --- |
@@ -195,12 +218,69 @@ window's shape differs (`transform: scale` on the page, so text is redrawn at th
 | I | Info |
 | F | Full screen (also Settings → Full screen) |
 | 0–9 | Number keys |
+| `/`, `?`, M, N | Search, the shortcuts, mute, next episode (web only) |
 
 On the Search screen letters and Space type instead. The mouse works like the Magic Remote: hover
 focuses, click selects, the wheel moves between rows (a trackpad needs a short swipe per step). The
 key hints on screen use these names (Enter, Esc, Y, right-click) in the mouse and keyboard mode, and
 the remote's names in remote mode ([Input modes](#input-modes)). The browser's Back button goes back
 inside the app; at the top level with the tab bar focused, Back leaves the site as usual.
+
+### Player with a mouse
+
+In the mouse and keyboard mode (`web/web-player.js`, `web/web-player.css`; remote mode and the TV
+are unchanged) the player adds what a laptop or desktop expects:
+
+- **Back [Esc]** at the top left, which leaves the player. Esc leaves too while the mouse is in use
+  (it closes an open menu or tab first); after an arrow key it hides the controls first, as on the TV.
+- **A transport row** under the bar: play/pause, back 10 s, ahead 30 s, and the volume (a mute
+  button and a slider you click or drag; kept per browser). **Full screen** joins the round icons
+  (Subtitles, Audio, Next episode). Every control has a tooltip that names its key: "Pause [Space]",
+  "Back 10 s [←]", "Ahead 30 s [→]", "Mute [M]", "Next episode [N]", "Full screen [F]".
+- **The bar**: hovering shows the time (and chapter) under the pointer with a line where a click
+  would jump; a click jumps there.
+- **The picture**: a click plays or pauses (closing an open menu or tab instead); a double-click
+  goes full screen.
+- **Idle**: while playing, the controls, the Back button and the cursor go after 3 s without a mouse
+  move. They stay while paused, while the mouse is over the controls (or Back), or while a menu is open.
+- **Keys**: M mutes, N plays the next episode; the arrows keep the remote's meaning (they never change
+  the volume), Space and F as above. After an arrow key the player looks as on the TV: the focus marks
+  come back, the transport row steps aside, a row of key hints shows what the keys do where the focus
+  is ("← → Move · ↓ Back to the bar · Space Pause · ? Shortcuts"), and a focused icon shows its
+  tooltip with Enter ("Subtitles [Enter]"). A mouse move brings the transport row back.
+- **The first time** the player opens with a mouse in a browser, a strip at the top shows the main
+  keys ("Esc Back · Space Pause · ← → −10 s / +30 s · ? All shortcuts"); it fades after 6 s or on a
+  click (`pl.tip.firstPlay` in `localStorage`).
+- **Live TV** keeps its own banner and guide; it gets the Back button, the 3 s hiding of the banner and
+  cursor, M to mute and a double-click for full screen.
+
+### Cards and rows with a mouse
+
+In the mouse and keyboard mode (`web/web-cards.js`, `web/web-cards.css`), while the mouse is the last
+input used:
+
+- **A hovered card** lifts (1.07, with one shared shadow element, as the TV's focus shadow) and shows
+  **▶** in the middle and **"…"** in the top-right corner. ▶ plays at once: a movie or episode
+  resumes where it was left (or starts), a show plays what its details page would (the next
+  episode on deck, else the first), a season its first unfinished episode. "…" (tooltip "More
+  options [Right-click]") opens the same quick actions as hold OK or a right-click. Clicking the
+  card itself opens its details, as before. Plex Lite has no watchlist or "add to" action yet, so there
+  is no **+**. Only standard Plex cards get ▶ and "…" (movies, episodes, shows, seasons); channels,
+  extras, people and plugin cards just lift.
+- **Rows** show **›** at the right edge (over a fade) when there is more, and **‹** once scrolled;
+  only while the mouse is over the row. Each click pages by the cards that fit whole (the card cut
+  off at the edge leads the next page). Paging moves the row's own position, so the arrow keys carry
+  on from the page on screen. A row scrolled past (dimmed) comes back up under the mouse.
+- **The Recommended hero follows the card the mouse rests on**, as it follows the focus on the TV:
+  after 350 ms on one card. Sweeping across a row, or leaving it, changes nothing.
+- **The library grid** gets the lift, ▶ and "…", without arrows.
+- **Details buttons** name what they do in a tooltip from their hint ("Shuffle all episodes" under
+  Shuffle, "Play from the beginning" under From start).
+
+Arrow keys, Enter or Tab bring the TV's focus plate back and hide all of this (`data-nav="keys"`);
+the next mouse move brings it back. In remote mode (Settings → Controls, TV browsers) and touch mode
+none of it appears, and the TV app never loads these files. The hooks wrap `PL.ui.Shelf`,
+`PL.ui.Grid` and `PL.ui.ButtonRow` methods from the web layer; no shared file changes.
 
 ## Phones and tablets
 
@@ -225,6 +305,8 @@ player) is open. Sign-in and the first-run screens stay as they are.
 | `web/touch/kit.js` | Building blocks (`PL.touch.ui`): icons, buttons, chips, poster and wide cards, shelves, the endless grid, top bar, Back bar. |
 | `web/touch/shell.js` | Taking over from the stage, the tabs, a stack of pages per tab, Back, the hand-off to the player and other stage screens. |
 | `web/touch/sheets.js` | Bottom sheets (a centred card on a tablet), a title's quick actions, toasts, confirmations. |
+| `web/touch/player.js`, `player.css` | The touch player (see [The touch player](#the-touch-player)). |
+| `web/touch/player-logic.js` | Its pure gesture decisions, tested in `test/touch-player.test.mjs`. |
 | `web/touch/screens/*.js` | The screens. A screen not built yet opens the TV's version on the stage. |
 
 **How it sits on the app.** While the layer is in charge, the stage's root screen is a stand-in
@@ -245,14 +327,65 @@ PL.touch.playLive(live)     // tunes a channel; live as js/screens/livetv.js pla
 PL.touch.screens.live()     // the Live TV tab's root page
 ```
 
-Today `play` and `playLive` push the TV player on the stage. Replace them (and the Live TV tab's
-page) and everything in the layer uses the new ones. A page is `{el, onShow({back}), onHide(),
+`play` and `playLive` open the touch player (below); the Live TV tab's page is replaceable the same
+way, and everything in the layer uses the new one. A page is `{el, onShow({back}), onHide(),
 destroy(), onReselect()}`; `PL.touch.push(page)`, `PL.touch.back()`, `PL.touch.sheet({...})`,
 `PL.touch.menu(item)` and `PL.touch.toast(text)` are the rest of the shell.
 
 **Long press.** `web/web.js` turns a 550 ms press into a `contextmenu` event (Android sends its own);
 `PL.touch.ui.onHold` opens the title's quick actions from it, and the click at the end of the press
 is swallowed. Every title also has a "…" button.
+
+### The touch player
+
+Phones and tablets play in their own player (boards P3, P3b and L1 of the web input mockups), opened
+by `PL.touch.play` and `PL.touch.playLive`. It is the TV player with a phone's controls:
+`web/touch/player.js` extends `PL.Player` (js/screens/player.js), so the stream decisions, timeline
+reports, resume, subtitles and audio, chapters, Skip Intro / Skip Credits, the end card's timing, Live
+TV tuning and the session stop on `pagehide` are the TV player's own code. It replaces only the drawing
+(the TV's controls are removed from its element) and reads fingers. It sits on the stage's stack, so
+Back, `pagehide` and "one player at a time" work as before, but draws over the touch layer: a screen
+marked `touchOverlay` leaves the layer in charge underneath (`html.t-covered`), its pages keep their
+place, and nothing of the stage shows.
+
+| Gesture | Does |
+| --- | --- |
+| Tap | Controls up or down; they hide after 4 s while playing, never while paused, scrubbing, with a sheet or (landscape) a tab open. Tap the centre button to pause. |
+| Double-tap the left / right third | Back 10 s / ahead 30 s (the remote's steps); each extra tap adds the same step, a ripple shows the total. A tap on a side waits 260 ms for a second one; the middle toggles at once. |
+| Drag along the bar | Scrub, with the time (and chapter) riding the finger; no preview frames. A tap on the bar jumps there. |
+| Drag sideways on the picture (controls up) | A finer scrub (a quarter of the bar's rate). |
+| Pull down | Close the player. |
+| Pinch | Fill the screen (cropped) or fit. |
+| Long-press Subtitles | Subtitle size. |
+
+- **Layout.** Portrait: the picture in a 16:9 band, the top bar (close, title, Subtitles, Audio,
+  AirPlay, full screen) and ⟲10 · play · 30⟳ over it, then the bar with one segment per chapter, the
+  times ("−11:19 · Ends 13:23"), and tabs whose rows stay under the picture (Episodes, Chapters, Cast,
+  Info). Landscape: the picture fills the screen, the tabs (Info, Cast, Chapters, Episodes) open over
+  it, and the top bar adds picture in picture and Lock (everything hides until the lock is tapped).
+  Subtitles and Audio are bottom sheets with the TV menu's choices.
+- **Full screen.** Where the element Fullscreen API exists (Android, iPad) the page goes full screen
+  and a phone locks to landscape. An iPhone has only the native player (`webkitEnterFullscreen`):
+  the full screen button hands over to it, without our controls. Its subtitles: the stream's own
+  WebVTT track where Safari has one (embedded subtitles), else a text track filled with the cues the
+  player already draws. Picture in picture and AirPlay show where the browser offers them.
+- **iPhone Safari** plays server streams with its own HLS (not hls.js), with the same transcoder
+  profile (H.264 in MPEG-TS, stereo AAC). Sound needs a tap: the player starts the empty video inside
+  the tap that opened it, which iOS then allows to play once the server has answered.
+- **Wake lock** keeps the screen on while playing (released when paused or closed).
+- **Live TV** uses the same player with the live controls' logic (js/screens/live-osd.js): the
+  programme's bar with the live edge, LIVE or "−4:12" behind live, Go live, ⟲10 / 30⟳ inside the
+  pause buffer, channel up / down with the neighbours' names, a channel list, favourites. Closing it
+  sets `PL.liveGuide.watching` as the TV player does.
+- **Keys** (a tablet's keyboard): Space plays or pauses, ← / → jump −10 / +30 s, Esc closes a sheet,
+  a landscape tab, then the player.
+
+**Safari's own HLS** (also the desktop Safari player): it reports `canplay` before moving to the
+playlist's start point and then starts at the segment boundary before it, so the player decides
+whether the stream counts in the file's time from the first position the video reports
+(`PL.playerLogic.countsFileTime`). It also shows the stream's WebVTT rendition by itself, and polling
+the subtitle segments runs about 4 s ahead of it; in Safari the player draws embedded subtitles from
+that track instead (kept hidden), and keeps every other track it didn't add off.
 
 ## Plugins
 
@@ -322,8 +455,11 @@ is swallowed. Every title also has a "…" button.
 - PIN-protected Plex Home profiles aren't supported (same as the TV).
 - The server's local address needs Chrome's local-network permission; without it streams go through
   Remote Access or the relay.
-- No Chromecast/AirPlay, no picture-in-picture button, no offline downloads.
-- Phones and tablets: the touch player and the phone guide are still the TV's, scaled to the screen (see above).
+- No Chromecast, no offline downloads. AirPlay and picture in picture: in the touch player only, where
+  the browser offers them.
+- Phones and tablets: the phone guide is still the TV's, scaled to the screen (see above).
+- iPhone: full screen is iOS's own player (no Skip Intro, end card or our controls there); the page
+  can't lock the orientation. Text subtitles in it depend on Safari showing script-added tracks.
 
 ## Building and deploying
 

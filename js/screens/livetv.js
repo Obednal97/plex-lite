@@ -20,7 +20,7 @@
   var GRID_W = 1412;            // to 1824 (96 px right margin)
   var PPS = GRID_W / SPAN;      // px per second
   var PITCH = 84;               // row pitch (76 px cells, 8 px apart)
-  var VISIBLE = 6;              // whole rows in view
+  var VISIBLE = 6;              // whole rows in view (the web build's taller or shorter windows: visible())
   var LEAD = 2;                 // the focus rides this many rows down once the grid scrolls
   var KEEP = 3;                 // rows kept beyond the view each way
   var GAP = 6;                  // px between cells
@@ -457,8 +457,15 @@
     delete this.rows[k];
   };
 
+  // Rows that fit under the grid's top (506) on this screen: 6 at 1080 (the TV); the web build's
+  // stage height follows the window.
+  function visible() {
+    return PL.isWeb ? Math.max(3, Math.floor((PL.ui.SCREEN_H - 536) / PITCH)) : VISIBLE;
+  }
+
   LiveTVScreen.prototype.render = function () {
-    var first = L.firstRow(this.row, this.list.length, VISIBLE, LEAD);
+    var inView = visible();
+    var first = L.firstRow(this.row, this.list.length, inView, LEAD);
     var y = -first * PITCH;
     PL.translate(this.chanTrack, 0, y);
     PL.translate(this.progTrack, -(this.start - this.origin) * PPS, y);
@@ -466,7 +473,7 @@
     PL.translate(this.nowTrack, -(this.start - this.origin) * PPS, 0);
     this.dayLabel.textContent = L.day(Math.max(this.start, now()), now());
     var lo = Math.max(0, first - KEEP);
-    var hi = Math.min(this.list.length - 1, first + VISIBLE + KEEP);
+    var hi = Math.min(this.list.length - 1, first + inView + KEEP);
     var self = this;
     Object.keys(this.rows).forEach(function (k) {
       var i = Number(k);
@@ -868,8 +875,8 @@
         else this.moveRow(this.row - 1);
         return true;
       case K.DOWN: this.moveRow(this.row + 1); return true;
-      case K.CH_UP: this.moveRow(this.row - VISIBLE); return true;
-      case K.CH_DOWN: this.moveRow(this.row + VISIBLE); return true;
+      case K.CH_UP: this.moveRow(this.row - visible()); return true;
+      case K.CH_DOWN: this.moveRow(this.row + visible()); return true;
       case K.LEFT: this.moveTime(-1); return true;
       case K.RIGHT: this.moveTime(1); return true;
       case K.ENTER:
@@ -984,6 +991,11 @@
     this.timer = null;
     this.cancelEntry();
     this.paintFocus();
+  };
+
+  // The web build's window changed height (web/web-desktop.js): as many rows as now fit.
+  LiveTVScreen.prototype.onStageResize = function () {
+    if (this.alive && this.list.length) this.render();
   };
 
   LiveTVScreen.prototype.destroy = function () {

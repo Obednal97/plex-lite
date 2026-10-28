@@ -11,6 +11,23 @@ releases are fixes only.
 
 ### Added
 
+- **Touch player on phones and tablets** (docs/WEB.md, "The touch player"): the web build's phone and
+  tablet layer plays in its own player instead of the TV's scaled one. Tap shows or hides the controls,
+  double-tap left / right seeks back 10 s / ahead 30 s (more taps add more, with a ripple), drag the
+  chapter-segmented bar with a time label, pull down to close, pinch to fill. Top bar with Subtitles and
+  Audio sheets, AirPlay, picture in picture, full screen (the Fullscreen API with landscape lock, or
+  iPhone's native player) and Lock; Chapters, Cast, Info and Episodes under the picture in portrait or
+  over it in landscape. Skip Intro / Credits, Up Next and Live TV (Go live, pause buffer, channel up /
+  down, channel list) as on the TV. The screen stays awake while playing. Built on the TV player's
+  code, which is unchanged on the TV.
+- **The player with a mouse on the web** (docs/WEB.md, "Player with a mouse"): Back [Esc] at the
+  top left; play/pause, back 10 s, ahead 30 s and volume (mute, click or drag; kept per browser) under
+  the bar; a full screen button with the round icons; tooltips that name the key ("Pause [Space]");
+  a click on the picture plays or pauses, a double-click goes full screen; the controls, Back and the
+  cursor hide after 3 s while playing (not while paused or hovered); M mutes, N plays the next episode.
+  After an arrow key the TV's focus marks and key hints come back. A one-time strip of the main keys
+  the first time the player opens with a mouse. Live TV gets Back, hiding, M and double-click. Remote
+  mode and the TV app are unchanged.
 - **New first run** (docs/FIRSTRUN.md), on the TV and the web: a poster-wall welcome screen (free-licence
   posters, credited), Plex's sign-in page in a popup with a clear "blocked" path, a plex.tv/link code
   with a QR code that fills the code in, Who's watching? for Plex Home accounts with PIN entry (PIN
@@ -27,6 +44,17 @@ releases are fixes only.
   layout). Settings → Controls pins Automatic / Remote / Mouse & keyboard / Touch per browser. Key
   hints follow the mode (OK or Enter, Back or Esc, none for touch). For the rest of the web layer:
   `PL.input.mode()`, change events and `<html data-input data-nav>`. The TV app is unchanged.
+- **Laptops and desktops** (docs/WEB.md, "Keyboard, mouse and window"): the web build fills the
+  window with no letterbox bars (the stage is 1920 px wide and as tall as the window, 900–1440;
+  the guide shows as many channels as fit). With a mouse, every screen above the tab bar has a
+  Back [Esc] button top left, tooltips name their key, `/` opens Search, `M` mutes, `N` plays the
+  next episode, and `?` (or Settings → Keyboard shortcuts) shows every key in one overlay.
+- **Cards and rows with a mouse on the web** (docs/WEB.md, "Cards and rows with a mouse"): in the
+  mouse and keyboard mode a hovered card lifts and shows ▶ (plays or resumes at once; a show plays
+  its next episode) and "…" (the hold-OK quick actions, like a right-click); rows page with › and ‹
+  at their edges while hovered; the Recommended hero follows the card the mouse rests on (350 ms, not
+  during a sweep); the library grid gets ▶ and "…"; the details page's buttons have tooltips from their
+  hints. Keys bring back the focus plate; remote and touch modes and the TV app are unchanged.
 - **Overseerr on the web** (docs/OVERSEERR.md, "On the web"): in the web build the Overseerr plugin
   calls your Overseerr straight from the browser (`plugins/overseerr/seerr-web.js`, the same methods
   and messages as the TV's service, per-profile sign-in over the browser's one cookie, changes checked
@@ -123,6 +151,10 @@ releases are fixes only.
 
 ### Fixed
 
+- **Web, Safari**: a resumed server stream could keep counting from the resume point twice (Safari
+  starts at the segment before it, after saying `canplay` at 0), which put the reported position,
+  resume point and subtitles off; embedded subtitles were shown twice (Safari's own rendition too) and
+  the drawn ones ran about 4 s early. Safari's own subtitle track is now the source, kept hidden.
 - Changing live channel tells Plex the old channel's session stopped (it was listed as playing for minutes).
 - Focus in the player and the live controls no longer makes labels jump. On the TV's Chrome 53 a
   focused tab, card or button that scaled was drawn one way while it moved and another at rest, so
