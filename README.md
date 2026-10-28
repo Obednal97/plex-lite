@@ -1,6 +1,8 @@
 # Plex Lite
 
-A fast, lightweight Plex client for LG TVs running webOS.
+A fast, lightweight Plex client for LG TVs running webOS, and for the web browser.
+
+**On the web: https://plexlite.vercel.app** (sign in with Plex; see [Web](#web)).
 
 LG's official Plex app is slow on older LG TVs: on a 2019 set it pins one of the TV's 1.1 GHz CPU
 cores, and browsing stutters. Plex Lite is plain JavaScript written for the TV's own browser engine
@@ -171,6 +173,24 @@ To retake them: `node tools/demo/fetch-media.mjs`, then `node tools/demo/shots.m
 [Development](#development)). `tools/shots.mjs` takes review screenshots on a real TV, which show your
 own library: don't publish those.
 
+## Web
+
+The same app runs in a desktop browser at **https://plexlite.vercel.app**. Sign in with your Plex
+account (Plex's own sign-in page opens in a popup, or use a plex.tv/link code) and it finds your
+servers like the TV does. It covers the libraries, title pages, search, Live TV, Surprise Me,
+profiles and settings. Keyboard: arrows, Enter (OK), Esc or Backspace (Back), Space (play/pause),
+R/G/Y/B (colour buttons), F (full screen); right-click or a long press is hold OK. The mouse points
+and clicks, and the wheel moves between rows.
+
+- It uses your server's secure (`*.plex.direct`) addresses: at home Chrome asks once to allow access
+  to your local network (allow it to stream directly), away from home it uses Plex Remote Access.
+- The browser direct plays what it can decode; anything else is converted by your Plex server.
+- The Overseerr plugin works on the TV only for now. Phones work but aren't designed for yet.
+
+How it works, its limits and the security headers: [docs/WEB.md](docs/WEB.md). To build it:
+`node tools/build-web.mjs` (writes `dist/web/`), and `node tools/serve-web.mjs` to try it locally.
+Vercel deploys `main` to production on every push.
+
 ## Requirements
 
 - An LG TV with **webOS 4.5**. That is the version it is developed and tested on (2019 models).
@@ -279,7 +299,9 @@ account belongs in the repo.
 | Tool | What it does |
 | --- | --- |
 | `tools/deploy.sh [--dev] [--no-launch]` | Builds, installs on the TV over SSH (`PLEXLITE_TV_SSH`, root or dev mode) and launches. `--dev` embeds a Plex token from `PLEX_ENV_FILE` so the TV skips sign-in. Dev builds go to `~/.cache/plexlite`, never into the repo. |
-| `node tools/check.mjs` | Checks JS and CSS against Chrome 53 and that the versions match. Run it before every commit. |
+| `node tools/check.mjs` | Checks JS and CSS against Chrome 53 (including the web build's `web/*.js`) and that the versions match. Run it before every commit. |
+| `node tools/build-web.mjs` | Builds the web version into `dist/web/` (see [docs/WEB.md](docs/WEB.md)). |
+| `node tools/serve-web.mjs` | Serves `dist/web/` at http://127.0.0.1:8940 with the production security headers from `vercel.json`. |
 | `node --test test/` | All unit tests (search, A–Z rail offsets, player and Live TV logic, plugins, Overseerr). `node test/fuzzy.test.mjs` alone adds a small search benchmark. |
 | `node tools/devserver.mjs` | Serves the app on the desktop at http://127.0.0.1:8920 with a read-only Plex proxy. The browser never sees your real token. |
 | `node tools/demo/server.mjs` | Runs the app on the desktop at http://127.0.0.1:8930 against a mock Plex server and plex.tv with a demo library of openly licensed films, so no Plex account or server is needed. Run `node tools/demo/fetch-media.mjs` once first for the artwork. See [tools/demo/README.md](tools/demo/README.md). |
