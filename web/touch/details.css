@@ -172,6 +172,3 @@ html.t-tablet .t-person-name { margin-top: 0; font-size: 38px; }
 html.t-short .t-person-head { padding-top: calc(var(--t-safe-t) + 60px); }
 html.t-short .t-person-big { width: 112px; height: 112px; }
 
-/* The app's toast stays in the page at opacity 0 once hidden; above the tab bar it would swallow
-   taps on whatever is under it (an episode row, a shelf). Belongs in touch.css: promote it there. */
-html.pl-touch .toast:not(.show) { pointer-events: none; }
