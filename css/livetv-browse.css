@@ -1,0 +1,94 @@
+/* Live TV Browse (docs/LIVETV-browse-design.md): the Browse rail over the guide or the picture, the
+   chip row's Browse chip, the On now wall and the mini guide's heading. Chrome 53: no grid, flex
+   gap, clamp or backdrop-filter; what moves is a transform or opacity. Loaded last. */
+
+/* ---- The rail: a 560 px panel down the left over a scrim; one white plate travels -------------- */
+
+.lb { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; z-index: 30; }
+.lb.screen-enter { transform: none; }
+.lb.lb-closing { opacity: 0; transition: opacity 140ms linear; }
+.lb-scrim { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: rgba(8, 8, 10, 0.62); }
+.lb-over-player .lb-scrim { background: rgba(5, 5, 8, 0.38); }
+.lb-panel {
+  position: absolute; left: 0; top: 0; width: 560px; height: 1080px; background: #1e1e21;
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.07), 30px 0 70px rgba(0, 0, 0, 0.35);
+  transition: transform var(--t-appear) var(--spring);
+}
+.lb.screen-enter .lb-panel { transform: translate3d(-56px, 0, 0); }
+.lb-title { position: absolute; left: 96px; top: 56px; font-size: 36px; line-height: 46px; font-weight: 700; color: var(--text); white-space: nowrap; }
+.lb-sub { position: absolute; left: 96px; top: 102px; font-size: 26px; line-height: 34px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
+
+.lb-clip { position: absolute; left: 96px; top: 158px; width: 440px; height: 768px; overflow: hidden; }
+.lb-track { position: absolute; left: 0; top: 0; width: 440px; transition: transform var(--t-scroll) var(--spring); }
+.lb-plate {
+  position: absolute; left: 0; top: 2px; width: 440px; height: 60px; border-radius: 14px; background: var(--focus);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.38); transition: transform 240ms var(--spring);
+}
+.lb-plate.instant, .lb-track.instant { transition: none; }
+.lb-row { position: absolute; left: 0; top: 0; width: 440px; height: 64px; font-size: 30px; line-height: 64px; font-weight: 500; color: var(--text-2); transition: color 140ms linear 60ms; }
+.lb-row.selected::before { content: ""; position: absolute; left: 0; top: 2px; width: 440px; height: 60px; border-radius: 14px; background: var(--fill); }
+.lb-row.selected { color: var(--text); font-weight: 600; }
+.lb-row.focused { color: var(--focus-ink); }
+.lb-row.focused::before { opacity: 0; }
+.lb-label { position: absolute; left: 20px; top: 0; width: 330px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-count { position: absolute; right: 20px; top: 0; font-size: 26px; font-weight: 500; color: var(--text-3); transition: color 140ms linear 60ms; }
+.lb-row.focused .lb-count { color: rgba(8, 8, 10, 0.55); }
+.lb-star { color: var(--resume); font-size: 26px; }
+.lb-row.focused .lb-star { color: #137f8a; }
+.lb-subrow .lb-label { left: 60px; width: 290px; }
+.lb-head { font-size: 22px; line-height: 86px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); }
+.lb-head .lb-label { height: 64px; overflow: hidden; }
+.lb-fade { position: absolute; left: 0; width: 440px; height: 56px; opacity: 0; pointer-events: none; transition: opacity 200ms linear; }
+.lb-fade.on { opacity: 1; }
+.lb-fade-top { top: 0; background: linear-gradient(180deg, #1e1e21 0%, rgba(30, 30, 33, 0) 100%); }
+.lb-fade-bottom { bottom: 0; background: linear-gradient(0deg, #1e1e21 0%, rgba(30, 30, 33, 0) 100%); }
+.lb-hints { position: absolute; left: 96px; bottom: 44px; white-space: nowrap; }
+.lb-hint { display: inline-block; margin-right: 30px; font-size: 26px; line-height: 32px; color: var(--text-2); }
+.pointer .lb-row { cursor: pointer; }
+.pointer .lb-head { cursor: default; }
+
+/* ---- Chips: the Browse chip opens the rail; a hairline divides it from its refinements ---------- */
+
+.chip.chip-browse { position: relative; margin-right: 41px; padding-left: 20px; }
+.chip-row.sliding .chip.chip-browse { background: var(--fill-hi); color: var(--text); font-weight: 600; transition: background-color 120ms linear, color 140ms linear 90ms; }
+.chip-row.sliding .chip.chip-browse.focused { background: transparent; color: var(--focus-ink); }
+.chip.chip-browse::after { content: ""; position: absolute; right: -22px; top: 12px; width: 2px; height: 28px; border-radius: 1px; background: rgba(255, 255, 255, 0.18); }
+.chip-browse .glyph { display: inline-block; margin-right: 10px; vertical-align: -5px; }
+
+/* ---- The On now wall: the guide's place below the chips ---------------------------------------- */
+
+.livetv.mode-wall .lg-detail, .livetv.mode-wall .lg-art, .livetv.mode-wall .lg-ruler,
+.livetv.mode-wall .lg-grid, .livetv.mode-wall .lg-status { display: none; }
+.lw { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; display: none; }
+.lw.lw-on { display: block; }
+.lw-clip { position: absolute; left: 0; top: 214px; width: 1920px; height: 866px; overflow: hidden; }
+.lw-empty { position: absolute; left: 0; top: 600px; width: 1920px; text-align: center; font-size: 28px; color: var(--text-2); }
+.lw .shelf-title { font-size: 34px; color: var(--text-2); }
+.lw .shelf-focused .shelf-title { color: var(--text); }
+.lw-count { margin-left: 16px; font-size: 26px; font-weight: 500; color: var(--text-3); }
+.lw .zone-above { opacity: 0; }
+
+.lw-tinted { background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(0, 0, 0, 0.30) 100%); }
+.lw-genre {
+  position: absolute; right: 24px; top: 24px; max-width: 250px; font-size: 24px; line-height: 30px; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase; color: rgba(255, 255, 255, 0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lw-logo { position: absolute; left: 16px; top: 16px; width: 96px; height: 52px; border-radius: 10px; overflow: hidden; z-index: 2; background: rgba(255, 255, 255, 0.16); transition: background-color 200ms ease; }
+.lw-logo.loaded { background: #f4f4f6; }
+.lw-logo img { position: absolute; left: 6px; top: 4px; width: 84px; height: 44px; }
+.lw-logo-text { display: block; padding: 0 6px; font-size: 18px; line-height: 52px; font-weight: 700; text-align: center; color: var(--text); white-space: nowrap; overflow: hidden; }
+.lw-card .card-meta { z-index: 3; }
+.lw-card .card-progress { z-index: 3; }
+.lw-caption {
+  position: absolute; left: 0; top: 258px; width: 440px; opacity: 0; transform: translate3d(0, -6px, 0);
+  transition: opacity 200ms var(--spring), transform var(--t-pop) var(--spring);
+}
+.lw-card.focused .lw-caption { opacity: 1; transform: translate3d(0, 6px, 0); }
+.lw-cap-1 { font-size: 26px; line-height: 34px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lw-cap-2 { font-size: 24px; line-height: 30px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- The mini guide: the filter it follows, its size, and the Blue key -------------------------- */
+
+.live-guide-head .lgh-last { color: var(--text); }
+.live-guide-head .lgh-count { margin-left: 18px; letter-spacing: 0; text-transform: none; font-weight: 500; color: var(--text-3); }
+.keycap.key-blue { color: #5b8cff; }

@@ -30,7 +30,7 @@ More in [Screenshots](#screenshots).</sub>
   menus that keep the video playing, Info / Cast / Chapters / Episodes tabs, Skip Intro and Skip
   Credits, and an end-of-episode card with autoplay (see [Player](#player)).
 - **Search as you type**: typo-tolerant fuzzy search over your libraries, plus episodes and people
-  from the server
+  from the server, and with Live TV your channels (by name or number) and what's on in the guide
 - **Live TV**: a two-hour guide of every channel through Plex Live TV & DVR, favourites, channel
   numbers, a channel banner, a mini guide over the picture, last channel and pause (see
   [Live TV](#live-tv))
@@ -100,7 +100,10 @@ Skip Intro there.
 
 The Live TV tab is a two-hour guide of every channel in your Plex DVR lineup, including channels with
 no guide data, six channels down, with the focused programme's details and artwork above it.
-Filters: All, Favourites, Movies, Sports and News; the guide opens on Favourites once you have some.
+**Browse** (Blue, or Left at the start of the guide) lists Favourites, All channels, On now, categories
+and channel families found in the channel names, with counts; the chips under the tab bar narrow a
+category to a family or a family to a category, and On now is a wall of what's showing, by category.
+The guide opens on Favourites once you have some ([docs/LIVETV-browse-design.md](docs/LIVETV-browse-design.md)).
 Programmes load in three-hour blocks in the background, so moving around never waits on the network.
 
 While watching, a banner shows the channel, the programme, its progress, the time left and what's
@@ -111,6 +114,7 @@ Recording isn't supported. Full details: [docs/LIVETV-v2-design.md](docs/LIVETV-
 
 | Key | Guide | Watching |
 | --- | --- | --- |
+| Blue | Browse: categories, families, On now | Browse over the picture (CH± then surfs the choice) |
 | Up / Down | Channel above / below | The mini guide over the picture |
 | Left / Right | Previous / next programme | Back 10 s / forward 30 s in the pause buffer |
 | OK | Watch the channel | The banner (OK again pauses or plays) |

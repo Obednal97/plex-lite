@@ -16,7 +16,8 @@
 //
 // Settings (environment): PORT (8930), PLEXLITE_DEMO_MEDIA (artwork cache, default
 // ~/.cache/plexlite/demo-media), PLEXLITE_DEMO_LIVETV=0 to hide Live TV, PLEXLITE_DEMO_TUNE_DELAY
-// (ms before a tune answers, 600; 0 for none).
+// (ms before a tune answers, 600; 0 for none), PLEXLITE_DEMO_CHANNELS (pad the lineup to this many
+// IPTV-style channels, e.g. 600).
 // Content and licences: tools/demo/library.json and docs/screenshots/CREDITS.md.
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -26,7 +27,7 @@ import { homedir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as art from './art.mjs';
-import { loadLibrary } from './model.mjs';
+import { loadLibrary, slug } from './model.mjs';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const APP = fileURLToPath(new URL('../..', import.meta.url));
@@ -263,6 +264,90 @@ function playQueue(q, items, selected) {
 // Channels come from library.json "channels" (n = index there, channelID = n + 1, identifier and
 // number = vcn). A channel with no items has no guide data: it is in the lineup but not the grid.
 
+// PLEXLITE_DEMO_CHANNELS=600 makes an IPTV-sized lineup for testing (Search's channel matching, the
+// guide with hundreds of rows): the demo channels get a group prefix ("DM - Open Movie Channel") as
+// IPTV feeds do, and invented channels fill up to the count, two in three with guide data.
+const PAD_TO = Number(process.env.PLEXLITE_DEMO_CHANNELS || 0);
+if (LIVETV && PAD_TO > (lib.channels || []).length) brandChannels(lib);
+if (LIVETV && PAD_TO > (lib.channels || []).length) padChannels(lib, PAD_TO);
+
+// Invented channel brands for the padded lineup, numbered in genre blocks like a satellite
+// lineup, so Browse has families (Orbit › Orbit Sports, Orbit Cinema…), +1 channels and a
+// category for every block. All names are made up.
+function brandChannels(l) {
+  const gen = (genre, shows, minutes = [30, 60]) => shows.map((title, j) => ({ title, episode: `Episode ${j + 2}`, genre,
+    minutes: minutes[j % minutes.length], summary: `${title}: an invented programme on an invented demo channel.` }));
+  const films = (ids) => ids.map((id) => ({ id, minutes: 95 }));
+  const sport = (shows) => gen('Sport', shows, [120, 60, 30]);
+  const add = (vcn, title, short, items, offsetMin = 0) => l.channels.push({ vcn, title, short, items, offsetMin });
+  add(1001, 'Northlight 1', 'NL 1', gen('Entertainment', ['Harbour Lights', 'The Quiz Hour', 'Garden Rescue', 'Evening News']));
+  add(1002, 'Northlight 2', 'NL 2', gen('Comedy', ['Flatmates', 'Sketch Pad', 'The Office Party']), 15);
+  add(1003, 'Northlight 3', 'NL 3', gen('Drama', ['The Inspector', 'Hospital Shift', 'The Crown Court']), 5);
+  add(1004, 'Northlight 4', 'NL 4', gen('Entertainment', ['Bake Off Street', 'Antiques Road Trip', 'Home Swap']), 20);
+  add(1005, 'Northlight 1 +1', 'NL 1+1', gen('Entertainment', ['Harbour Lights', 'The Quiz Hour', 'Garden Rescue', 'Evening News']), 60);
+  add(1010, 'Orbit One', 'ORBIT 1', gen('Drama', ['Copper Creek', 'The Night Desk', 'Glass Houses']), 10);
+  add(1011, 'Orbit Max', 'ORBIT MAX', gen('Action', ['Steel Horizon: The Series', 'Night Pursuit']), 25);
+  add(1012, 'Orbit Comedy', 'ORBIT COM', gen('Comedy', ['Stand-up Shuffle', 'Quiz Night', 'Flatmates']), 0);
+  add(1101, 'Pioneer', 'PIONEER', ['nasa-explorers', 'sciencecasts']);
+  add(1102, 'Pioneer +1', 'PIONEER+1', ['nasa-explorers', 'sciencecasts'], 60);
+  add(1103, 'Pioneer History', 'PIO HIST', gen('Historical', ['Engines of History', 'The Lost Canals', 'Castles of the North']), 10);
+  add(1104, 'Pioneer Science', 'PIO SCI', ['sciencecasts', 'nasa-explorers'], 20);
+  add(1201, 'Orbit Cinema Premiere', 'PREMIERE', films(['sintel', 'tears-of-steel', 'cosmos-laundromat']), 0);
+  add(1202, 'Orbit Cinema Action', 'ACTION', films(['hero', 'charge', 'tears-of-steel']), 35);
+  add(1203, 'Orbit Cinema Comedy', 'COMEDY', films(['his-girl-friday', 'glass-half', 'wing-it']), 20);
+  add(1204, 'Orbit Cinema Greats', 'GREATS', films(['the-general', 'charade']), 50);
+  add(1205, 'Orbit Cinema Family', 'FAMILY', films(['spring', 'big-buck-bunny', 'coffee-run']), 10);
+  add(1206, 'Orbit Cinema Sci-Fi', 'SCI-FI', films(['night-of-the-living-dead', 'elephants-dream']), 40);
+  add(1207, 'Orbit Cinema Drama', 'DRAMA', films(['nosferatu', 'charade']), 65);
+  add(1301, 'Global 24', 'GLOBAL 24', gen('News', ['Headlines', 'World Report', 'Business Desk'], [30, 30, 15]));
+  add(1302, 'Global Business', 'GLOBAL BIZ', gen('Business', ['Market Watch', 'The Close', 'Trade Talk'], [30]), 10);
+  add(1303, 'Global Weather', 'WEATHER', gen('Weather', ['Forecast', 'Storm Watch'], [15]));
+  add(1501, 'Bramble Kids', 'BRAMBLE', gen('Children', ['Robot Rangers', 'Space Pups', 'Dino Detectives']), 5);
+  add(1502, 'Bramble Junior', 'BRAMBLE JR', gen('Children', ['The Puddle Club', 'Busy Bakers', 'Little Owls'], [15, 30]), 0);
+  add(1503, 'Bramble Toons', 'TOONS', ['caminandes'], 10);
+  add(1601, 'Orbit Sports Main Event', 'ORBIT SP', sport(['Live Super Sunday', 'The Football Show', 'Goals Express']), 0);
+  add(1602, 'Orbit Sports Football', 'ORBIT FB', sport(['Live League: Rovers v City', 'Goals Express', 'The Tactics Board']), 15);
+  add(1603, 'Orbit Sports Racing', 'RACING', sport(['Live from the Downs', 'Racing Roundup', 'Parade Ring']), 20);
+  add(1604, 'Orbit Sports Golf', 'ORBIT GOLF', sport(['Live Golf: The Open Links', 'Golf Weekly']), 0);
+  add(1605, 'Orbit Sports News', 'ORBIT SN', gen('Sports', ['Sports News at Eight', 'Sports News at Nine'], [60]), 0);
+  add(1606, 'Orbit Sports Tennis', 'ORBIT TEN', sport(['Live Tennis: Harbour Open', 'Tennis Tonight']), 30);
+  add(1650, 'Vista Sports 1', 'VISTA 1', sport(['Live Rugby: Premiership', 'Rugby Tonight']), 10);
+  add(1651, 'Vista Sports 2', 'VISTA 2', sport(['Live Boxing', 'The Boxing Hour']), 40);
+  add(1652, 'Vista Sports 3', 'VISTA 3', sport(['Live Netball', 'Super League Netball']), 20);
+  add(1653, 'Vista Sports 4', 'VISTA 4', sport(['Live Darts', 'Darts Weekly']), 0);
+  add(1801, 'Shop Direct', 'SHOP', gen('Shopping', ['Kitchen Hour', 'Gadget Show Live', 'Jewellery Box'], [60]));
+  add(1802, 'Shop Direct Style', 'SHOP STYLE', gen('Shopping', ['Style Hour', 'Beauty Live'], [60]), 30);
+  add(1803, 'Shop Direct Home', 'SHOP HOME', gen('Shopping', ['Home Hour', 'Garden Live'], [60]), 15);
+  add(1901, 'Tempo Hits', 'TEMPO', gen('Music', ['Chart Countdown', 'Live Sessions', 'Classic Hits']), 0);
+}
+
+function padChannels(l, count) {
+  const groups = ['DM', 'WX', 'ZY', 'QV'];
+  const names = ['Harbour', 'Granite', 'Velvet', 'Comet', 'Orchard', 'Lantern', 'Meadow', 'Summit', 'Copper', 'Willow',
+    'Juniper', 'Beacon', 'Marble', 'Cascade', 'Ember', 'Falcon', 'Glacier', 'Hazel', 'Indigo', 'Kestrel'];
+  const kinds = [
+    { kind: 'News', genre: 'News', shows: ['Morning Briefing', 'The Daily Desk', 'World Tonight', 'Market Watch', 'Headline Hour'] },
+    { kind: 'Movies', genre: 'Drama', shows: ['The Long Road Home', 'Midnight Express Lane', 'A Quiet Harbour', 'The Glass Orchard', 'Paper Lanterns'] },
+    { kind: 'Sport', genre: 'Sport', shows: ['Matchday Live', 'Racing Roundup', 'Golf Weekly', 'The Boxing Hour', 'Tennis Tonight'] },
+    { kind: 'Kids', genre: 'Children', shows: ['Robot Rangers', 'The Puddle Club', 'Space Pups', 'Dino Detectives', 'Busy Bakers'] },
+    { kind: 'Music', genre: 'Music', shows: ['Chart Countdown', 'Live Sessions', 'Unplugged Nights', 'Classic Hits', 'Dance Floor'] },
+    { kind: 'Drama', genre: 'Drama', shows: ['Harbour Lights', 'The Inspector', 'Hospital Shift', 'Family Ties Street', 'The Crown Court'] },
+    { kind: 'Comedy', genre: 'Comedy', shows: ['Flatmates', 'The Office Party', 'Stand-up Shuffle', 'Quiz Night', 'Sketch Pad'] },
+    { kind: 'Docs', genre: 'Documentary', shows: ['Wild Coastlines', 'Engines of History', 'Deep Ocean', 'Mountain Rescue', 'The Food Trail'] },
+  ];
+  const tags = ['', ' HD', '', ' FHD', '', ' 2', ' One', ''];
+  for (const ch of l.channels) ch.title = `DM - ${ch.title}`;
+  for (let i = 0; l.channels.length < count; i++) {
+    const k = kinds[i % kinds.length];
+    const title = `${groups[i % groups.length]} - ${names[Math.floor(i / kinds.length) % names.length]} ${k.kind}${tags[i % tags.length]}`;
+    const items = i % 3 === 2 ? [] : k.shows.map((show, j) => ({
+      title: show, episode: `Episode ${1 + ((i + j) % 9)}`, minutes: [30, 60, 30, 45, 90][(i + j) % 5], genre: k.genre,
+      summary: `${show}: an invented programme on an invented demo channel.`,
+    }));
+    l.channels.push({ vcn: 201 + i, title, short: title.split(' - ')[1].slice(0, 8).toUpperCase(), items, offsetMin: (i * 7) % 30 });
+  }
+}
+
 const CHANNELS = LIVETV ? lib.channels || [] : [];
 const TUNE_DELAY_MS = Number(process.env.PLEXLITE_DEMO_TUNE_DELAY ?? 600);
 const liveSessions = new Map(); // transcode session uuid -> { uuid, consumer, n, startedAt }
@@ -294,9 +379,24 @@ function programme(n, slots, opts = {}) {
     prog.summary = it.summary || (show && show.summary) || `${prog.grandparentTitle || prog.title} on ${ch.title}.`;
   }
   const genres = (ch.genres || []).concat((it.Genre || (model.items.get(it.grandparentRatingKey) || {}).Genre || []).map((g) => g.tag));
-  prog.Genre = [...new Set(genres)].map((g) => ({ tag: g }));
+  // as on a real Plex DVR: a film's genres are on the airing (XMLTV files tag films "Film"); an
+  // episode's are on its show (grandparentRatingKey), which clients look up separately
+  if (it.type === 'episode') {
+    prog.grandparentRatingKey = liveShowKey(n, it, genres);
+  } else {
+    prog.Genre = [...new Set(['Film', ...genres])].map((g) => ({ tag: g }));
+  }
   prog.Media = slots.map((s) => airing(n, s, t));
   return prog;
+}
+
+// Shows of guide programmes, by key: /{provider}/metadata/<key>[,<key>…] answers with their genres.
+const liveShows = new Map();
+function liveShowKey(n, it, genres) {
+  const key = `show-${n + 1}-${slug(it.grandparentTitle || it.title)}`;
+  if (!liveShows.has(key)) liveShows.set(key, { ratingKey: key, key: `/${PROVIDER}/metadata/${key}`, type: 'show',
+    title: it.grandparentTitle || it.title, Genre: [...new Set(genres)].map((g) => ({ tag: g })) });
+  return key;
 }
 
 const currentSlot = (n, t = Math.floor(Date.now() / 1000)) => model.schedule(CHANNELS[n]).find((s) => s.beginsAt <= t && t < s.endsAt) || null;
@@ -325,6 +425,10 @@ function guide(q) {
 
 // /{provider}/metadata/live-<channelID>-<key>: the programme with its summary and coming airings.
 function liveMetadata(res, ratingKey) {
+  if (/^show-/.test(ratingKey)) {
+    const shows = decodeURIComponent(ratingKey).split(',').map((k) => liveShows.get(k)).filter(Boolean);
+    return send(res, 200, container({ size: shows.length, Metadata: shows }));
+  }
   const m = /^live-(\d+)-(.+)$/.exec(ratingKey);
   const n = m ? Number(m[1]) - 1 : -1;
   const slots = n >= 0 && n < CHANNELS.length ? model.schedule(CHANNELS[n]).filter((s) => s.key === m[2]) : [];

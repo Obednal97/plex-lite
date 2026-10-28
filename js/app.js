@@ -281,12 +281,13 @@
     var typing = t && t.tagName === 'INPUT';
     if (typing && code === PL.KEY.BACKSPACE) return; // deletes a character, not "back"
     if (typing && !PL.isBack(code) && code !== PL.KEY.DOWN && code !== PL.KEY.UP && code !== PL.KEY.ENTER) return;
+    var screen = app.top();
+    // Blue: Live TV's Browse rail where there is one (guide, live player), else the perf overlay
     if (code === PL.KEY.BLUE && !typing) {
-      perf.toggle();
+      if (!(screen && screen.wantsBlue && screen.key && screen.key(code, e))) perf.toggle();
       e.preventDefault();
       return;
     }
-    var screen = app.top();
     var handled = false;
     if (app.tabsFocused) {
       if (PL.isBack(code)) {

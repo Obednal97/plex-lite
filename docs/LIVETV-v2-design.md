@@ -1,6 +1,7 @@
 # Live TV v2: design
 
-Status: built and merged into main (2026-10-27). Replaces the "On now" channel list and the
+Status: built and merged into main (2026-10-27). The filter row (All, Favourites, Movies, Sports,
+News) is replaced by the Browse rail and its chips: [LIVETV-browse-design.md](LIVETV-browse-design.md). Replaces the "On now" channel list and the
 player's old live mode (a title over the VOD block, CH+/CH− only).
 
 ## Why

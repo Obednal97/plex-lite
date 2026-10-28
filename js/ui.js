@@ -615,7 +615,10 @@
     this.index = this.selected;
     var self = this;
     this.nodes = chips.map(function (c, i) {
-      var n = PL.el('div', 'chip', c.label);
+      // optional: c.cls (extra class), c.glyph (an icon before the label), c.count (dimmer, after it)
+      var n = PL.el('div', 'chip' + (c.cls ? ' ' + c.cls : ''), c.label);
+      if (c.glyph) n.insertBefore(c.glyph, n.firstChild);
+      if (c.count != null) n.appendChild(PL.el('span', 'chip-value', String(c.count)));
       n.addEventListener('click', function () { self.index = i; self.choose(); });
       self.track.appendChild(n);
       return n;

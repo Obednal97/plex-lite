@@ -71,6 +71,17 @@ Transform and opacity only.
 - **Details:** full-bleed art; ratings and badges as 1 px keylines; dark capsule actions with Phosphor
   icons; borderless season tabs; episodes with titles on the art.
 - **Search:** the query is the headline (48 px with an underline), not a boxed field; flat keys.
+  With Live TV, two rows follow Movies & Shows (local, so they never move when the server's People
+  and Episodes arrive): **Channels**, 360×202 quiet tiles with the guide's light logo plate, the
+  number top right (teal ★ for favourites), the name and what's on now over a teal progress line;
+  **On TV**, landscape programme cards with the title on the art, a red LIVE pill (or the start
+  time) top left and a small logo plate top right (`css/search-tv.css`). When the query is about
+  channels (a word of a channel's name or a channel number starts with it, and no library title is
+  exactly it), Channels and On TV go above Movies & Shows; On TV stays in view without scrolling.
+- **Channel logo plates** (guide, Search): light by default; a logo that would be lost on it (white,
+  silver or pale on a transparent background, with little that is dark) gets a dark `#3b3e46` plate
+  with a hairline rim. Each logo is sampled once in a 32×16 canvas (Plex sends CORS headers);
+  mid-grey if it can't be read (`js/logos.js`, `css/logos.css`).
 - **Settings:** quiet rows on the ground (hairline separators), white plate on focus.
 - **Live TV** (spec and remote tables in [LIVETV-v2-design.md](LIVETV-v2-design.md)): a two-hour time
   grid on the plain ground, six channels down. The focused programme's details sit above it like a small
@@ -80,13 +91,17 @@ Transform and opacity only.
   as on the player. Number entry is a lit-glass tile over the art. The live player keeps player v2's
   bottom block (scrim, eyebrow, 64 px title, round icons, keycap hints) with a logo plate, a programme
   bar (aired / position / live edge) instead of the seek bar, and "Next …" on the right; the mini guide
-  is a column of rows over a left wedge scrim while the picture keeps playing.
+  is a column of rows over a left wedge scrim while the picture keeps playing. **Browse**
+  ([LIVETV-browse-design.md](LIVETV-browse-design.md)): a 560 px panel down the left over a scrim, rows
+  64 apart with counts in `--text-3`, one travelling white plate; the chip row leads with the choice on
+  a `--fill-hi` pill and a hairline; On now is shelves of 420×236 landscape cards with a logo plate,
+  the title on the art and a teal progress line, the caption under the focused card only.
 - **Sheets, toasts, Up Next:** lit glass (gradient fill + rim + soft shadow), opaque enough that
   no live blur is needed.
 - **Player** (Apple TV app first, Netflix second; spec and remote table in
   [PLAYER-v2-design.md](PLAYER-v2-design.md)): nothing on screen while watching. Any key raises one
   bottom block over a 520 px ink scrim: eyebrow (year, or "Show · S1 E2") and a 64 px title, round
-  68 px icons on the right (Subtitles, Audio when there is more than one track, Next episode), the
+  68 px icons on the right (Subtitles, Audio when there is more than one track, Next episode; the focus is one white disc that travels between them), the
   bar, the times, and text tabs (Info, Cast, Chapters, Episodes). The bar is the main control: one
   segment per chapter with 6 px gaps, 6 px at rest, 10 px with a white head when focused, filled in
   `--resume`; Left/Right jump −10 s / +30 s at once. Paused or scrubbing: a 30% veil, a 12 px bar,

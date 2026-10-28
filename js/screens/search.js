@@ -1,5 +1,7 @@
 // Search tab: on-screen keyboard on the left, results on the right. Titles come from the local
-// fuzzy index on every keystroke; episodes and people come from the server, debounced.
+// fuzzy index on every keystroke; episodes and people come from the server, debounced. With Live
+// TV, channels and the guide's programmes (PL.liveGuide, already in memory) are matched locally on
+// every keystroke too (js/livetv-search.js); the guide loads in the background when Search opens.
 'use strict';
 
 (function () {
@@ -26,6 +28,18 @@
   var CLIP_LEFT = 600;
 
   var lastQuery = '';
+  var LS = PL.liveSearch;
+  var LL = PL.liveLogic;
+  var GUIDE_AHEAD = 6 * 3600;     // Search keeps this much of the guide loaded (two or three blocks)
+  var GUIDE_DELAY_MS = 800;       // after Search opens, so the first frames and keys come first
+  // TV rows follow the typing by this much: matching and two more shelves cost ~35 ms a keystroke on
+  // a 2019 TV, so the key's own frame (field, titles) comes first and a fast typist pays once
+  var TV_DEBOUNCE_MS = 150;
+  // Channels row: a quiet tile with the logo plate, number, name and what's on (DESIGN.md)
+  var CHANNEL_GEO = { w: 360, h: 202, pitch: 388, scale: 1.09 };
+
+  function now() { return Math.floor(Date.now() / 1000); }
+  function liveTv() { return !!(PL.app && PL.app.hasLiveTv && PL.liveGuide && LS); }
 
   function charFor(code, e) {
     if (e && (e.ctrlKey || e.metaKey || e.altKey)) return null;
@@ -89,6 +103,27 @@
     }, 400);
     this.offIndex = PL.fuzzy.onChange(function () { if (self.alive) self.update(true); });
     this.indexError = null;
+    // Live TV: channel and guide indexes, rebuilt when the guide changes (not per keystroke)
+    this.tv = { channels: [], shows: [] };
+    this.tvFirst = false;       // the TV rows go above Movies & Shows (LS.channelsFirst)
+    this.tvFirstFor = null;     // the query that decided it
+    this.tvIndex = null;        // {channels, guide, gen, at}
+    this.tvGen = 0;
+    this.tvCache = {};
+    this.timing = null;         // {local, render} ms for the last keystroke; tvTiming {tv, render} for the TV rows
+    if (liveTv()) {
+      // the guide changed: rebuild the index while idle (not on the next keystroke), then the rows
+      this.offGuide = PL.liveGuide.listen(function () {
+        self.tvGen++;
+        if (self.alive && self.visible) self.tvSoon();
+      });
+      this.tvSoon = PL.debounce(function () {
+        if (!self.alive || !self.visible || !PL.liveGuide.channels.length) return;
+        self.tvIndexNow();
+        if (self.query.trim()) self.updateTv();
+      }, 250);
+      this.runTv = PL.debounce(function () { if (self.alive && self.visible) self.updateTv(); }, TV_DEBOUNCE_MS);
+    }
     this.renderField();
   }
 
@@ -221,13 +256,21 @@
       this.pluginSeq++;
       this.pluginRows = [];
       this.local = [];
+      this.tv = { channels: [], shows: [] };
+      this.tvFirst = false;
+      this.tvFirstFor = null;
       this.server = { titles: [], people: [], episodes: [] };
       this.serverDone = false;
       this.render();
       return;
     }
+    var t0 = Date.now();
     this.local = PL.fuzzy.ready ? PL.fuzzy.query(q, 40) : [];
+    var t1 = Date.now();
     this.render();
+    this.timing = { local: t1 - t0, render: Date.now() - t1 };
+    // (until then the rows of the query a moment ago stay, like the server's rows do)
+    if (this.runTv) this.runTv();
     if (!indexChanged) {
       this.serverDone = false;
       if (this.visible) this.runServer(q);
@@ -237,6 +280,130 @@
         if (this.visible) this.runPlugins(q);
       }
     }
+  };
+
+  // ---- Live TV -----------------------------------------------------------------------------------
+
+  // Loads the channels and the next few hours of the guide (shared with the Live TV tab, so usually
+  // already there). Failures stay quiet: channel names still match whatever the lineup gave.
+  SearchScreen.prototype.loadGuide = function () {
+    if (!liveTv() || this.guideAsked) return;
+    this.guideAsked = true;
+    var G = PL.liveGuide;
+    var self = this;
+    var quiet = function (what) {
+      return function (err) {
+        self.guideAsked = false; // try again next time Search opens
+        PL.log('search: no live TV ' + what, err && (err.status || err.message));
+      };
+    };
+    // the lineup first (small), so channel names match even if the guide then fails
+    G.loadChannels().then(function () {
+      if (!self.alive) return null;
+      return G.load().then(function () {
+        var t = now();
+        return self.alive ? G.ensure(t, t + GUIDE_AHEAD) : null;
+      }).then(null, quiet('guide'));
+    }, quiet('lineup'));
+  };
+
+  // Rebuilt when the guide changed or a minute has passed (programmes end; what's on now moves on).
+  SearchScreen.prototype.tvIndexNow = function () {
+    var G = PL.liveGuide;
+    var t = now();
+    var have = this.tvIndex;
+    if (have && have.gen === this.tvGen && t - have.at < LS.REBUILD_MS / 1000) return have;
+    var started = Date.now();
+    this.tvCache = LS.trimCache(this.tvCache);
+    var chans = have && have.list === G.channels ? have.channels : LS.indexChannels(G.channels);
+    this.tvIndex = {
+      list: G.channels,
+      channels: chans,
+      guide: LS.indexGuide(G.channels, G.list, t, this.tvCache),
+      gen: this.tvGen,
+      at: t,
+      ms: Date.now() - started,
+    };
+    return this.tvIndex;
+  };
+
+  SearchScreen.prototype.updateTv = function () {
+    var q = this.query.trim();
+    if (!q) return;
+    var t0 = Date.now();
+    this.tv = this.tvSearch(q);
+    // Order: decided here, with the TV rows, from local results only. It never changes under a
+    // focus that is in the results for the same query (a late index or guide update can't move it).
+    var first = this.tv.first;
+    if (this.area === 'results' && this.tvFirstFor === q) first = this.tvFirst;
+    this.tvFirst = first;
+    this.tvFirstFor = q;
+    var t1 = Date.now();
+    this.render();
+    this.tvTiming = { tv: t1 - t0, render: Date.now() - t1 };
+  };
+
+  SearchScreen.prototype.tvSearch = function (text) {
+    if (!liveTv() || !PL.liveGuide.channels.length) return { channels: [], shows: [] };
+    var G = PL.liveGuide;
+    var q = LS.query(text);
+    if (!q) return { channels: [], shows: [] };
+    var idx = this.tvIndexNow();
+    var t = now();
+    var matched = LS.matchChannels(idx.channels, q, { limit: 30, isFavourite: G.isFavourite });
+    var first = LS.channelsFirst(q, matched.best, LS.titleScore(this.local[0], q));
+    var channels = matched.map(function (c) {
+      var nn = G.nowNext(c.identifier, t);
+      return { ratingKey: 'live-ch-' + c.identifier, liveChannel: c, airing: nn.now, next: nn.next };
+    });
+    var shows = LS.matchProgrammes(idx.guide, q, t, 30).map(function (h) {
+      return { ratingKey: 'live-air-' + h.c.identifier + '-' + h.a.b, liveChannel: h.c, airing: h.a, onNow: h.onNow, art: h.a.art };
+    });
+    return { channels: channels, shows: shows, first: first };
+  };
+
+  // OK on a channel, or on a programme that is on now: watch it from live, with CH+/CH- along
+  // every channel (as from the guide's All filter).
+  SearchScreen.prototype.watch = function (c) {
+    var G = PL.liveGuide;
+    if (!G.src) return;
+    var list = G.channels;
+    var index = 0;
+    for (var i = 0; i < list.length; i++) if (list[i].identifier === c.identifier) { index = i; break; }
+    var shape = function (x) { return { identifier: x.identifier, id: x.id, vcn: x.vcn, title: x.name, thumb: x.thumb }; };
+    PL.app.push(screens.player(null, {
+      live: { label: 'All channels', dvrKey: G.src.dvrKey, channel: shape(list[index] || c), channels: list.map(shape), index: index },
+    }));
+  };
+
+  // OK on a later programme (or "Show in guide"): the Live TV tab, on that channel and time.
+  SearchScreen.prototype.showInGuide = function (c, t) {
+    var ids = PL.app.tabs.tabs.map(function (x) { return x.id; });
+    var i = ids.indexOf('livetv');
+    if (i < 0) return;
+    PL.liveGuide.openAt = { identifier: c.identifier, t: t || now() };
+    PL.app.selectTab(i);
+  };
+
+  SearchScreen.prototype.liveMenu = function (item) {
+    var G = PL.liveGuide;
+    var c = item.liveChannel;
+    var a = item.ratingKey.indexOf('live-air-') === 0 ? item.airing : null;
+    var later = a && a.b > now();
+    var self = this;
+    var fav = G.isFavourite(c.identifier);
+    var rows = [];
+    if (!later) rows.push({ label: 'Watch ' + c.name, action: function () { self.watch(c); } });
+    rows.push({ label: 'Show in guide', action: function () { self.showInGuide(c, a ? a.b : now()); } });
+    rows.push({
+      label: fav ? 'Remove from Favourites' : 'Add to Favourites',
+      action: function () {
+        var on = G.toggleFavourite(c.identifier);
+        PL.toast(on ? 'Added ' + c.name + ' to Favourites' : 'Removed ' + c.name + ' from Favourites');
+      },
+    });
+    PL.app.push(screens.sheet([{ heading: c.vcn + '  ' + c.name + (a ? '  ·  ' + a.title : ''), rows: rows }], { focus: 0 }));
+    return true;
   };
 
   // Stale answers (the query moved on, or the screen went away) are dropped.
@@ -339,7 +506,16 @@
     var sections = [];
     if (q) {
       var titles = this.titles();
-      if (titles.length) sections.push({ id: 'titles', title: 'Movies & Shows', kind: 'poster', items: titles });
+      var titleRow = titles.length ? { id: 'titles', title: 'Movies & Shows', kind: 'poster', items: titles } : null;
+      // local like the titles, so they sit above the server's rows and don't move when those arrive;
+      // above the titles when the query is about channels (this.tvFirst)
+      if (titleRow && !this.tvFirst) sections.push(titleRow);
+      var live = this.liveMenu.bind(this);
+      if (this.tv.channels.length) {
+        sections.push({ id: 'channels', title: 'Channels', kind: 'wide', geometry: CHANNEL_GEO, makeCard: makeChannelCard, onLongPress: live, items: this.tv.channels });
+      }
+      if (this.tv.shows.length) sections.push({ id: 'ontv', title: 'On TV', kind: 'wide', makeCard: makeAiringCard, onLongPress: live, items: this.tv.shows });
+      if (titleRow && this.tvFirst) sections.push(titleRow);
       if (this.server.people.length) {
         sections.push({ id: 'people', title: 'People', kind: 'poster', geometry: ui.PERSON_GEO, makeCard: ui.makePersonCard, items: this.server.people });
       }
@@ -352,7 +528,10 @@
 
   SearchScreen.prototype.renderStatus = function (q, count) {
     var text = '';
-    if (!q) text = this.indexError ? 'Search is limited: ' + PL.errorMessage(this.indexError) : 'Search movies, shows, episodes and people';
+    if (!q) {
+      var what = liveTv() ? 'Search movies, shows, episodes, people and live TV' : 'Search movies, shows, episodes and people';
+      text = this.indexError ? 'Search is limited: ' + PL.errorMessage(this.indexError) : what;
+    }
     else if (!count && !PL.fuzzy.ready && PL.fuzzy.isBuilding()) text = 'Indexing your library…';
     else if (!count && this.serverDone) text = 'No results for “' + q + '”';
     else if (!count) text = 'Searching…';
@@ -374,7 +553,11 @@
     var focusedId = current ? current.sectionId : null;
     var zones = sections.map(function (s) {
       var shelf = old[s.id];
+      // the same items as last time (the TV rows until their debounce, the server's rows until they
+      // answer): the cards stay as they are
+      if (shelf && shelf.srcItems === s.items) return shelf;
       if (shelf) {
+        shelf.srcItems = s.items;
         if (!sameQuery) shelf.index = 0;
         shelf.replaceItems(s.items, s.items.length);
         if (!sameQuery && shelf.index !== 0) {
@@ -391,10 +574,12 @@
         shadow: self.shadow,
         makeCard: s.makeCard,
         geometry: s.geometry,
+        onLongPress: s.onLongPress,
         onFocusItem: function (item) { self.focusedItem(item); },
         onSelect: function (item) { self.open(item); },
       });
       shelf.sectionId = s.id;
+      shelf.srcItems = s.items;
       return shelf;
     });
     var key = ids.join(',');
@@ -406,7 +591,9 @@
     this.stack.focus(false);
     this.shadow.hide();
     this.zoneIds = key;
-    var keep = sameQuery && focusedId ? ids.indexOf(focusedId) : -1;
+    // the focused row stays put only while the focus is in the results; from the keyboard, Right
+    // always lands on the top row (which may have changed: the TV rows can go first)
+    var keep = sameQuery && focusedId && wasResults ? ids.indexOf(focusedId) : -1;
     this.stack.setZones(zones, keep >= 0 ? keep : 0);
     if (wasResults) {
       if (zones.length) this.stack.focus(true);
@@ -419,6 +606,12 @@
   };
 
   SearchScreen.prototype.open = function (item) {
+    if (item.liveChannel) {
+      var a = item.ratingKey.indexOf('live-air-') === 0 ? item.airing : null;
+      if (a && a.b > now()) this.showInGuide(item.liveChannel, a.b);
+      else this.watch(item.liveChannel);
+      return;
+    }
     if (item.plugin) {
       PL.plugins.select(item);
       return;
@@ -485,6 +678,10 @@
       if (this.area === 'results' && this.stack.zones.length) this.stack.focus(true);
       else this.focusKeys();
     }
+    if (liveTv()) {
+      clearTimeout(this.guideTimer);
+      this.guideTimer = setTimeout(function () { if (self.alive && self.visible) self.loadGuide(); }, GUIDE_DELAY_MS);
+    }
     PL.fuzzy.ensure().then(function () {
       self.indexError = null;
     }, function (err) {
@@ -504,6 +701,9 @@
 
   SearchScreen.prototype.hide = function () {
     this.visible = false;
+    clearTimeout(this.guideTimer);
+    if (this.tvSoon) this.tvSoon.cancel();
+    if (this.runTv) this.runTv.cancel();
     this.ambient.cancel();
     if (this.query.trim() && !this.serverDone) this.serverStale = true;
     this.runServer.cancel();
@@ -527,12 +727,94 @@
   SearchScreen.prototype.destroy = function () {
     this.alive = false;
     this.offIndex();
+    if (this.offGuide) this.offGuide();
+    if (this.tvSoon) this.tvSoon.cancel();
+    if (this.runTv) this.runTv.cancel();
+    clearTimeout(this.guideTimer);
     this.runServer.cancel();
     this.runPlugins.cancel();
     this.pluginSeq++;
     this.ambient.cancel();
     this.abortServer();
   };
+
+  // ---- Live TV cards ------------------------------------------------------------------------------
+
+  function logoPlate(c, cls) {
+    var plate = PL.el('div', cls);
+    PL.logos.fill(plate, c, { w: 128, h: 68, textClass: 'stv-logo-text' });
+    return plate;
+  }
+
+  function progressLine(a, t) {
+    var bar = PL.el('div', 'stv-progress');
+    var fill = PL.el('div', 'stv-progress-fill');
+    fill.style.transform = 'scaleX(' + LL.progress(a, t).toFixed(3) + ')';
+    bar.appendChild(fill);
+    return bar;
+  }
+
+  // A channel: logo plate and number at the top, the name and what's on now below, a teal line for
+  // how far through it is.
+  function makeChannelCard(item, kind, geo) {
+    var c = item.liveChannel;
+    var a = item.airing;
+    var t = now();
+    var card = PL.el('div', 'card card-wide card-stv-chan');
+    var inner = PL.el('div', 'card-inner');
+    inner.style.width = geo.w + 'px';
+    inner.style.height = geo.h + 'px';
+    inner.appendChild(logoPlate(c, 'stv-logo'));
+    var num = PL.el('div', 'stv-num', c.vcn);
+    if (PL.liveGuide.isFavourite(c.identifier)) num.appendChild(PL.el('span', 'stv-fav', '★'));
+    inner.appendChild(num);
+    inner.appendChild(PL.el('div', 'stv-name', c.name));
+    var on = PL.el('div', 'stv-on' + (a ? '' : ' stv-none'));
+    if (a) {
+      on.textContent = a.title + '  ·  ' + LL.status(a, t);
+    } else {
+      on.textContent = item.next ? 'Next ' + LL.clock(item.next.b) + '  ' + item.next.title : 'No guide information';
+    }
+    inner.appendChild(on);
+    if (a) inner.appendChild(progressLine(a, t));
+    inner.appendChild(PL.el('div', 'card-edge'));
+    card.appendChild(inner);
+    return card;
+  }
+
+  // A programme: its art with the title on it, LIVE or the start time in the corner, the channel
+  // and the time left (or when it starts) under the title, a progress line while it is on.
+  function makeAiringCard(item, kind, geo) {
+    var c = item.liveChannel;
+    var a = item.airing;
+    var t = now();
+    var card = PL.el('div', 'card card-wide card-stv-air');
+    var inner = PL.el('div', 'card-inner');
+    inner.style.width = geo.w + 'px';
+    inner.style.height = geo.h + 'px';
+    var src = a.art ? PL.plex.image(a.art, geo.w, geo.h) : null;
+    if (src) {
+      var img = PL.el('img', 'card-img');
+      img.width = geo.w;
+      img.height = geo.h;
+      img.onerror = function () { img.style.visibility = 'hidden'; };
+      ui.fadeInImage(img, src);
+      inner.appendChild(img);
+    }
+    inner.appendChild(logoPlate(c, 'stv-badge'));
+    inner.appendChild(item.onNow ? PL.el('div', 'stv-pill stv-live', 'LIVE') : PL.el('div', 'stv-pill', LL.day(a.b, t) === 'Today' ? LL.clock(a.b) : LL.day(a.b, t).slice(0, 3) + ' ' + LL.clock(a.b)));
+    if (item.onNow) inner.appendChild(progressLine(a, t));
+    inner.appendChild(PL.el('div', 'card-edge'));
+    card.appendChild(inner);
+    var meta = PL.el('div', 'card-meta');
+    meta.style.width = geo.w + 'px';
+    meta.appendChild(PL.el('div', 'card-title', a.title));
+    // the corner pill has the start time; under the title: time left, "Starts in 10 min", or how long
+    var when = item.onNow || a.b - t <= 3600 ? LL.status(a, t) : LL.span(a.e - a.b);
+    meta.appendChild(PL.el('div', 'card-sub', c.vcn + ' ' + c.name + '  ·  ' + when));
+    card.appendChild(meta);
+    return card;
+  }
 
   screens.search = function () { return new SearchScreen(); };
 })();
