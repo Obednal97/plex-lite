@@ -19,11 +19,13 @@
     if (cls.length) n.className = cls.join(' ');
     if (props) {
       for (const [k, v] of Object.entries(props)) {
-        if (v == null || v === false) continue;
+        if (v == null) continue;
         if (k === 'on') for (const [ev, fn] of Object.entries(v)) n.addEventListener(ev, fn);
         else if (k === 'text') n.textContent = v;
-        else if (k in n && k !== 'role' && !k.startsWith('aria-') && !k.startsWith('data-')) n[k] = v;
-        else n.setAttribute(k, v === true ? '' : v);
+        // a property of the same type (type, src, hidden: false, spellcheck: false...); otherwise an
+        // attribute (aria-*, role, autocorrect="off" where the property is a boolean...)
+        else if (k in n && k !== 'role' && !k.startsWith('aria-') && !k.startsWith('data-') && typeof n[k] === typeof v) n[k] = v;
+        else if (v !== false) n.setAttribute(k, v === true ? '' : String(v));
       }
     }
     if (kids != null) {
