@@ -21,3 +21,8 @@ html, body { overscroll-behavior: none; }
 /* Inter (web/fonts) everywhere in the web build: the TV's LG Display doesn't exist in browsers, and
    the first-run screens are set in Inter too. */
 html body, html body input { font-family: "Inter", "Helvetica Neue", Arial, sans-serif; }
+
+/* Input modes (web/web-input.js): with touch, key hints are left out (touch has no keys). The text
+   entry's hint stays: it is the only Save / Cancel there is until the touch layout adds buttons. */
+html[data-nav="touch"]:not([data-input="remote"]) .osd-hints,
+html[data-nav="touch"]:not([data-input="remote"]) .lb-hints { display: none; }
