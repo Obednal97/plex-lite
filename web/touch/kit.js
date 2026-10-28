@@ -277,11 +277,12 @@
     wrap.appendChild(foot);
     const size = opts.page || 60;
     let gen = 0;
+    let dead = false;
     let loaded = 0;
     let total = Infinity;
     let busy = false;
     const more = () => {
-      if (busy || loaded >= total) return;
+      if (dead || busy || loaded >= total) return;
       busy = true;
       const g = gen;
       foot.replaceChildren(ui.spinner());
@@ -312,7 +313,7 @@
     wrap.reset = () => { gen++; loaded = 0; total = Infinity; busy = false; grid.replaceChildren(); more(); };
     wrap.grid = grid;
     wrap.loaded = () => loaded;
-    wrap.destroy = () => io.disconnect();
+    wrap.destroy = () => { dead = true; gen++; io.disconnect(); };
     more();
     return wrap;
   };
@@ -330,7 +331,12 @@
   // The profile picture (or initial) that opens Settings.
   ui.avatar = () => {
     const n = h('button.t-avatar', { type: 'button', 'aria-label': 'Profile and settings', on: { click: () => T.openSettings() } });
+    let seen = false;
+    let off = null;
     const fill = () => {
+      // the page holding it has gone: stop listening
+      if (n.isConnected) seen = true;
+      else if (seen) { if (off) off(); return; }
       const p = T.profile || {};
       n.replaceChildren();
       if (p.thumb) {
@@ -341,7 +347,7 @@
       }
     };
     fill();
-    T.onProfile(fill);
+    off = T.onProfile(fill);
     return n;
   };
 

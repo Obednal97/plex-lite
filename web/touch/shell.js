@@ -50,6 +50,10 @@
   rootEl.appendChild(tabbarEl);
   // the stage's mouse wheel turns wheel steps into arrow keys and cancels scrolling: not here
   rootEl.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
+  // Back at the top of the start tab leaves the stage's tab bar "focused" (js/app.js focusTabs),
+  // which web/web.js reads as "the next Back leaves the site". Any touch here means the person is
+  // still using the page: clear it, so a later Back closes a sheet or a page instead.
+  rootEl.addEventListener('pointerdown', () => { if (app.tabsFocused) app.blurTabs(true); }, true);
   T.root = rootEl;
   T.layer = h('div.t-layer'); // sheets, menus: above the pages and the tab bar
   rootEl.appendChild(T.layer);
@@ -292,8 +296,15 @@
   // Swaps the top page (a reveal handing over to what it revealed).
   T.replace = (page) => {
     if (!T.tab) return;
-    if (T.tab.stack.length > 1) destroyPage(T.tab.stack.pop());
-    else if (topPage()) hidePage(topPage());
+    if (T.tab.stack.length > 1) {
+      destroyPage(T.tab.stack.pop());
+      // the page underneath keeps the scroll it had (T.push would save the current one)
+      const under = topPage();
+      const y = under.scrollY;
+      T.push(page);
+      under.scrollY = y;
+      return;
+    }
     T.push(page);
   };
 
@@ -358,10 +369,17 @@
   // ---- The profile (the avatar) -----------------------------------------------------------------------------
 
   const profileListeners = [];
-  T.onProfile = (fn) => profileListeners.push(fn);
+  // -> a function that removes it
+  T.onProfile = (fn) => {
+    profileListeners.push(fn);
+    return () => {
+      const i = profileListeners.indexOf(fn);
+      if (i >= 0) profileListeners.splice(i, 1);
+    };
+  };
   function setProfile(p) {
     T.profile = p;
-    profileListeners.forEach((fn) => { try { fn(p); } catch (e) { PL.warn('touch profile listener', e && e.message); } });
+    profileListeners.slice().forEach((fn) => { try { fn(p); } catch (e) { PL.warn('touch profile listener', e && e.message); } });
   }
   function loadProfile() {
     const saved = PL.storage.get('profile', null);

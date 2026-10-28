@@ -59,6 +59,8 @@
     }
 
     const openedAt = Date.now();
+    // a sheet is open: Back closes it (not "leave the site", see shell.js)
+    if (PL.app.tabsFocused) PL.app.blurTabs(true);
     const entry = { host, card, opts, closing: false };
     open.push(entry);
     T.layer.appendChild(host);
