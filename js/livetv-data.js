@@ -380,10 +380,13 @@
     return genreJob;
   };
 
+  // Every block rebuilds the channel list, but the names rarely change: families are worked out
+  // again only when they do.
   function families() {
-    if (!G.famCache || G.famCache.channels !== G.channels) {
-      G.famCache = { channels: G.channels, families: B.families(G.channels) };
-    }
+    if (G.famCache && G.famCache.channels === G.channels) return G.famCache.families;
+    var sig = G.channels.map(function (c) { return c.identifier + '=' + c.title; }).join('|');
+    if (!G.famCache || G.famCache.sig !== sig) G.famCache = { sig: sig, families: B.families(G.channels) };
+    G.famCache.channels = G.channels;
     return G.famCache.families;
   }
 
@@ -393,13 +396,19 @@
     var live = {};
     Object.keys(G.airings).forEach(function (id) {
       var t = null;
+      var known = 0;
+      var waiting = 0;
       G.airings[id].forEach(function (a) {
         var k = G.airingCat(a);
+        if (k === undefined) waiting += a.e - a.b;
         if (!k) return;
+        known += a.e - a.b;
         t = t || {};
         t[k] = (t[k] || 0) + (a.e - a.b);
       });
-      if (t) live[id] = t;
+      // most of the channel's shows are still being looked up: what is known (often just the
+      // teleshopping, whose genres are on the airing) would mislead, so wait for the rest
+      if (t && waiting <= known) live[id] = t;
     });
     var cat = {};
     G.channels.forEach(function (c) {

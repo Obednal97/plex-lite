@@ -474,9 +474,9 @@
     return out;
   };
 
-  // The "no refinement" chip: "All channels" / "All favourites" / "All sport" / "All Sky".
+  // The "no refinement" chip: "All" (next to "All channels") / "All favourites" / "All sport" / "All Sky".
   B.allLabel = function (base, ctx) {
-    if (!base || base === 'all') return 'All channels';
+    if (!base || base === 'all') return 'All';
     if (base === 'fav') return 'All favourites';
     if (base.indexOf('c:') === 0) return 'All ' + B.label(base, ctx).toLowerCase();
     return 'All ' + B.label(base, ctx);

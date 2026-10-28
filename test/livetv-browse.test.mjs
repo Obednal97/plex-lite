@@ -154,6 +154,7 @@ test('labels, validity and stored filters', () => {
   assert.equal(B.label('f:ORBIT SPORT', c), 'Orbit Sports');
   assert.equal(B.selLabel({ base: 'c:movies', refine: 'f:ORBIT CINEMA' }, c), 'Movies › Orbit Cinema');
   assert.equal(B.selLabel({ base: 'all' }, c), 'All channels');
+  assert.equal(B.allLabel('all', c), 'All');
   assert.equal(B.allLabel('c:sport', c), 'All sport');
   assert.equal(B.allLabel('f:ORBIT', c), 'All Orbit');
   assert.equal(B.valid('f:GONE', c), false);
