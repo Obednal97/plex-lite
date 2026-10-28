@@ -276,11 +276,6 @@ body.fast * { transition-duration: 90ms !important; transition-timing-function: 
 .search-results .shelf-title { left: 640px; }
 
 
-  position: absolute; left: 96px; width: 1728px; height: 104px; border-radius: 20px;
-  background: var(--glass); border: 1px solid transparent;
-  transition: transform var(--t-lift) var(--ease), background-color var(--t-state);
-}
-
 /* ---- Panels (settings, messages, sign-in) --------------------------------------------------------- */
 
 .page-title { position: absolute; left: 96px; top: 150px; font-size: 48px; line-height: 56px; font-weight: 700; }
