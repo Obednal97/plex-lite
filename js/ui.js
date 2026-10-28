@@ -431,8 +431,11 @@
 
   // One selection plate and one focus capsule per bar, each a single element that travels between
   // the measured pills (PlxNative's TabStrip: "OK moves the plate", the capsule follows focus).
-  function Glider(container) {
+  // opts.twoD: the pills may sit on different lines (a column of buttons on a phone, a row that
+  // wraps): the marks then travel in x and y and take each pill's height too.
+  function Glider(container, opts) {
     this.container = container;
+    this.twoD = !!(opts && opts.twoD);
     this.plateEl = PL.el('div', 'glide-plate');
     this.capEl = PL.el('div', 'glide-cap');
     container.insertBefore(this.capEl, container.firstChild);
@@ -442,7 +445,10 @@
 
   Glider.prototype.measure = function (nodes) {
     if (this.rects && this.rects.length === nodes.length && this.rects.w) return this.rects;
-    var rects = nodes.map(function (n) { return { x: n.offsetLeft, w: n.offsetWidth }; });
+    var twoD = this.twoD;
+    var rects = nodes.map(function (n) {
+      return twoD ? { x: n.offsetLeft, y: n.offsetTop, w: n.offsetWidth, h: n.offsetHeight } : { x: n.offsetLeft, w: n.offsetWidth };
+    });
     var total = rects.reduce(function (a, r) { return a + r.w; }, 0);
     if (!total) return null; // not laid out yet (screen still parked)
     rects.w = total;
@@ -460,7 +466,8 @@
     var first = !el.style.width || land;
     if (first) el.classList.add('instant');
     el.style.width = r.w + 'px';
-    el.style.transform = 'translate3d(' + r.x + 'px,0,0)';
+    if (r.h) el.style.height = r.h + 'px';
+    el.style.transform = 'translate3d(' + r.x + 'px,' + (r.y || 0) + 'px,0)';
     if (on) el.classList.add('on');
     if (first) {
       el.offsetWidth; // the first placement lands; later ones travel

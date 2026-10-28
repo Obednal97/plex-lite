@@ -3,9 +3,8 @@
 html { width: 100%; height: 100%; background: #000; }
 body { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 
-/* Sign-in (web/web-signin.js) */
+/* Buttons under the explanation cards (web/web.js) */
 .web-signin-buttons { margin: 8px 0 28px; }
-.web-signin .signin-url { margin-bottom: 4px; }
 
 /* Explanation cards (web/web.js: Local network access, Keyboard and mouse, TV-only plugins) */
 .web-info { left: 330px; top: 120px; width: 1148px; min-height: 0; padding: 48px 56px 40px; text-align: left; }
@@ -18,6 +17,10 @@ body { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 
 /* the page never scrolls or bounces: the stage is the whole page */
 html, body { overscroll-behavior: none; }
+
+/* Inter (web/fonts) everywhere in the web build: the TV's LG Display doesn't exist in browsers, and
+   the first-run screens are set in Inter too. */
+html body, html body input { font-family: "Inter", "Helvetica Neue", Arial, sans-serif; }
 
 /* Input modes (web/web-input.js): with touch, key hints are left out (touch has no keys). The text
    entry's hint stays: it is the only Save / Cancel there is until the touch layout adds buttons. */
