@@ -29,14 +29,14 @@ const SKIP = (rel) => /(^|\/)dev-config[^/]*\.js$/.test(rel) || /^plugins\/[^/]+
 // web/ files and where they're served (signed-in.* sit at the root: Plex's sign-in page sends the
 // popup there)
 const WEB = {
-  'web/env.js': 'web/env.js', 'web/web.js': 'web/web.js', 'web/web-signin.js': 'web/web-signin.js',
+  'web/env.js': 'web/env.js', 'web/web-input.js': 'web/web-input.js', 'web/web.js': 'web/web.js', 'web/web-signin.js': 'web/web-signin.js',
   'web/web-media.js': 'web/web-media.js', 'web/web.css': 'web/web.css', 'web/plugin-frame.html': 'web/plugin-frame.html',
   'web/vendor/hls.js/hls.light.min.js': 'web/vendor/hls.js/hls.light.min.js', 'web/vendor/hls.js/LICENSE': 'web/vendor/hls.js/LICENSE',
   'web/signed-in.html': 'signed-in.html', 'web/signed-in.js': 'signed-in.js', 'web/signed-in.css': 'signed-in.css',
   'web/robots.txt': 'robots.txt',
 };
 // scripts after js/app.js, in order
-const WEB_SCRIPTS = ['web/vendor/hls.js/hls.light.min.js', 'web/web.js', 'web/web-signin.js', 'web/web-media.js'];
+const WEB_SCRIPTS = ['web/vendor/hls.js/hls.light.min.js', 'web/web-input.js', 'web/web.js', 'web/web-signin.js', 'web/web-media.js'];
 
 const fail = (msg) => { console.error(`build-web: ${msg}`); process.exit(1); };
 
@@ -106,7 +106,7 @@ html = html.replace(/(src|href)="((?:js|css|web|plugins|img)\/[^"?]+)"/g, (m, at
 // the CSP allows no inline script or handler: catch one before Vercel serves a broken page
 if (/<script(?![^>]*\bsrc=)[^>]*>/i.test(html)) fail('index.html has an inline <script>');
 if (/\son[a-z]+\s*=/i.test(html)) fail('index.html has an inline event handler');
-for (const s of ['web/env.js', 'js/core.js', 'web/web.js', 'web/web-media.js', 'plugins/overseerr/seerr-web.js']) if (!html.includes(`"${s}?v=`)) fail(`index.html lacks ${s}`);
+for (const s of ['web/env.js', 'js/core.js', 'web/web-input.js', 'web/web.js', 'web/web-media.js', 'plugins/overseerr/seerr-web.js']) if (!html.includes(`"${s}?v=`)) fail(`index.html lacks ${s}`);
 if (html.indexOf('web/env.js') > html.indexOf('js/core.js')) fail('web/env.js must load before js/core.js');
 
 writeFileSync(join(OUT, 'index.html'), html);

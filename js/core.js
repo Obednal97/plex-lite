@@ -28,10 +28,31 @@ PL.isBack = function (code) {
 };
 
 // The name of a remote button in on-screen hints ('OK', 'Back', 'Yellow', 'Hold OK'...). The web
-// build swaps in keyboard names (PL.keyLabels, web/web.js).
+// build swaps in keyboard or touch names as the input mode changes (PL.keyLabels, web/web-input.js).
 PL.keyLabels = null;
 PL.keyLabel = function (name) {
   return (PL.keyLabels && PL.keyLabels[name]) || name;
+};
+
+// A key hint's keycap. It keeps the button's name (data-key) so the web build can relabel it when
+// the input mode changes (web/web-input.js); on the TV it simply shows the remote's name.
+PL.keycap = function (name, cls) {
+  var n = document.createElement('span');
+  n.className = 'keycap' + (cls ? ' ' + cls : '');
+  n.textContent = PL.keyLabel(name);
+  n.setAttribute('data-key', name);
+  return n;
+};
+
+// The input mode (docs/WEB.md, "Input modes"). The TV is always driven by its remote; the web build
+// replaces this with web/web-input.js, which follows the mouse, touch and keyboard.
+PL.input = {
+  mode: function () { return 'remote'; },
+  nav: function () { return document.body && document.body.classList.contains('pointer') ? 'pointer' : 'keys'; },
+  hints: function () { return 'remote'; },
+  setting: function () { return 'remote'; },
+  on: function () {},
+  off: function () {},
 };
 
 // Recent log lines are also kept in memory (PL.logs) so they can be read over DevTools, which

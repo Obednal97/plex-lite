@@ -16,6 +16,7 @@ and on the TV `PL.isWeb` is false, so it behaves exactly as before.
 | File | What it does |
 | --- | --- |
 | `web/env.js` | Marks the platform. |
+| `web/web-input.js` | The input mode: remote, mouse and keyboard, or touch (see [Input modes](#input-modes)). |
 | `web/web.js` | Who we are to Plex (browser and OS), the 1920x1080 stage scaled to the window, keyboard and mouse for the remote's buttons, the browser's Back button, Chrome's local-network permission, Settings rows, ending sessions when the page goes away. |
 | `web/web-signin.js` | The sign-in screen (Plex's own sign-in page, or a plex.tv/link code). |
 | `web/web-media.js` | What this browser can decode, the client profile for the Plex transcoder, HLS through hls.js or the browser. |
@@ -112,6 +113,58 @@ Plex universal transcoder as HLS. `web/web-media.js` asks the browser (`canPlayT
   released. A background tab keeps playing (the TV ends playback when the app is hidden; a browser
   doesn't). Seeking restarts the stream, as on the TV, and the old session is reported stopped.
 
+## Input modes
+
+The web build works out how it is being driven and shows the controls and hints for that
+(`web/web-input.js`). There are three modes:
+
+| Mode | When | What it shows |
+| --- | --- | --- |
+| `remote` | TV and console browsers, and whenever the browser doesn't say | The white focus plate, D-pad moves, hints with the remote's names (OK, Back), as on the TV. |
+| `pointer` | A mouse or trackpad (`(hover: hover) and (pointer: fine)`) | Hover instead of the focus plate; hints as keyboard keys (Enter, Esc). |
+| `touch` | A touch screen (`(hover: none) and (pointer: coarse)`) | No focus plate and no key hints. |
+
+**Starting mode.** A TV or console user agent (webOS, Tizen, HbbTV, Fire TV, PlayStation...) is
+`remote`. Otherwise the media queries above pick `touch` or `pointer`, and anything else is `remote`:
+when unsure, remote, because the focus plate always works, and the first touch or mouse move
+switches over anyway. The TV app never loads this file: it is always `remote` and sets nothing on
+`<html>`.
+
+**Switching by the last input used.** A touch switches to `touch`. A real mouse move switches to
+`pointer`: the mouse has to travel 8 px, and mouse events within a second of a touch are ignored
+(browsers send them after a tap). A click or the wheel counts at once. Arrow keys, Enter, Tab and Page
+Up/Down bring up the focus plate and keyboard hints but **never change the layout**: a laptop
+stays in the mouse layout, a tablet with a keyboard stays in the touch layout until the next touch.
+Other keys (Space, letters) and keys typed into a field change nothing.
+
+**Settings → Controls** pins the mode: Automatic (the default), Remote, Mouse & keyboard or Touch,
+kept in this browser's `localStorage` (`pl.input`). Pinned, the layout no longer switches; the last
+input still decides whether the focus plate shows.
+
+### The contract (for the rest of the web layer)
+
+```js
+PL.input.mode()     // 'remote' | 'pointer' | 'touch': the layout and controls to show
+PL.input.nav()      // 'keys' | 'pointer' | 'touch': the last kind of input used
+PL.input.hints()    // 'remote' | 'keys' | 'none': how key hints are written
+PL.input.setting()  // 'auto' | 'remote' | 'pointer' | 'touch' (Settings -> Controls)
+PL.input.set(value) // save the setting and apply it
+PL.input.on(fn)     // fn({mode, nav, prevMode, prevNav}) after every change; PL.input.off(fn)
+```
+
+- `<html data-input="remote|pointer|touch" data-nav="keys|pointer|touch">` carries the same two
+  values for CSS, and `document` gets a `pl-inputchange` event (`e.detail` as above) after each change.
+- `body.pointer` (the Magic Remote's class in `js/app.js`: hover shows focus, the focus plate is
+  hidden) is on whenever `nav` isn't `keys`.
+- `hints()` is `remote` in remote mode, `none` when the last input was a touch (outside remote mode),
+  else `keys`. With `none`, CSS hides the hint rows (`.osd-hints`, `.lb-hints`, `.text-hint`).
+- **Key hints relabel themselves.** Build a keycap with `PL.keycap(name)` (`'OK'`, `'Back'`,
+  `'CH ±'`...): it keeps the button's name in `data-key` and its text is rewritten when the mode
+  changes: OK, Enter or Tap; Back or Esc; Hold OK, Shift+Enter, Right-click or Long-press.
+  `PL.keyLabel(name)` gives the current name for text built on the spot.
+- Shared code may call `PL.input.mode()` anywhere: on the TV `js/core.js` provides a stub that
+  always answers `remote` (and `nav()` from `body.pointer`).
+
 ## Keyboard, mouse and window
 
 The app is laid out at 1920x1080 and scaled to fit the window, centred, with black bars where the
@@ -133,7 +186,8 @@ window's shape differs (`transform: scale` on the page, so text is redrawn at th
 
 On the Search screen letters and Space type instead. The mouse works like the Magic Remote: hover
 focuses, click selects, the wheel moves between rows (a trackpad needs a short swipe per step). The
-key hints on screen use these names (Enter, Esc, Y, right-click). The browser's Back button goes back
+key hints on screen use these names (Enter, Esc, Y, right-click) in the mouse and keyboard mode, and
+the remote's names in remote mode ([Input modes](#input-modes)). The browser's Back button goes back
 inside the app; at the top level with the tab bar focused, Back leaves the site as usual.
 
 **Phones and tablets.** Not designed for yet. In portrait the whole TV layout shrinks to the

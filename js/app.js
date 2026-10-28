@@ -540,16 +540,19 @@
       document.addEventListener('cursorStateChange', function (e) {
         pointer.set(!!(e.detail && e.detail.visibility));
       });
-      var last = 0;
-      document.addEventListener('mousemove', function () {
-        var now = Date.now();
-        if (now - last < 100) return;
-        last = now;
-        pointer.set(true);
-      });
-      document.addEventListener('keydown', function (e) {
-        if (e.keyCode >= 37 && e.keyCode <= 40) pointer.set(false);
-      }, true);
+      // the web build: web/web-input.js decides (a touch's emulated mouse events must not count)
+      if (!PL.isWeb) {
+        var last = 0;
+        document.addEventListener('mousemove', function () {
+          var now = Date.now();
+          if (now - last < 100) return;
+          last = now;
+          pointer.set(true);
+        });
+        document.addEventListener('keydown', function (e) {
+          if (e.keyCode >= 37 && e.keyCode <= 40) pointer.set(false);
+        }, true);
+      }
       var wheelAt = 0;
       // trackpads send a stream of small deltas: in the browser a step needs ~40 px of travel
       var need = PL.isWeb ? 40 : 0;

@@ -11,6 +11,13 @@ releases are fixes only.
 
 ### Added
 
+- **Input modes on the web** (docs/WEB.md, "Input modes"): the web build tells remote, mouse and
+  keyboard, and touch apart. It starts from the browser's pointer media queries (TV browsers and
+  anything unclear start as remote), then follows the last input used: a touch, a real mouse move,
+  or arrow keys and Enter (which bring up the focus plate and keyboard hints without changing the
+  layout). Settings → Controls pins Automatic / Remote / Mouse & keyboard / Touch per browser. Key
+  hints follow the mode (OK or Enter, Back or Esc, none for touch). For the rest of the web layer:
+  `PL.input.mode()`, change events and `<html data-input data-nav>`. The TV app is unchanged.
 - **Overseerr on the web** (docs/OVERSEERR.md, "On the web"): in the web build the Overseerr plugin
   calls your Overseerr straight from the browser (`plugins/overseerr/seerr-web.js`, the same methods
   and messages as the TV's service, per-profile sign-in over the browser's one cookie, changes checked
