@@ -35,12 +35,21 @@
 .t-hero-progress { position: relative; height: 3px; margin-top: 12px; width: min(100%, 260px); }
 .t-hero-progress .t-progress { left: 0; right: 0; bottom: 0; }
 .t-hero + .t-shelves .t-shelf:first-child, .t-hero-host:not(:empty) + .t-rec-status + .t-shelves .t-shelf:first-child { margin-top: 18px; }
-.t-short .t-hero { height: 330px; }
-.t-short .t-titlelogo { max-height: 64px; }
 .t-tablet .t-hero { height: clamp(460px, 58vh, 640px); }
 .t-tablet .t-hero-body { right: auto; width: min(560px, 64vw); bottom: 18px; }
 .t-tablet .t-titletext { font-size: 44px; }
 .t-tablet .t-titlelogo { max-height: 120px; }
+/* a phone on its side: the hero fits above the tab bar, its text in a left column */
+html.t-short .t-hero { height: max(300px, calc(100vh - var(--t-bottom) - 24px)); height: max(300px, calc(100svh - var(--t-bottom) - 24px)); }
+html.t-short .t-hero-body { width: min(440px, 56vw); bottom: 4px; }
+html.t-short .t-eyebrow { margin-bottom: 6px; }
+html.t-short .t-titletext { font-size: 30px; }
+html.t-short .t-titlelogo { max-height: 60px; }
+html.t-short .t-hero-meta { margin-top: 8px; }
+html.t-short .t-hero-actions { margin-top: 12px; }
+html.t-short .t-hero-actions .t-btn-primary { height: 44px; }
+html.t-short .t-hero-shade { background: linear-gradient(90deg, rgba(12, 12, 15, 0.7) 0%, rgba(12, 12, 15, 0.2) 55%, rgba(12, 12, 15, 0) 75%),
+  linear-gradient(180deg, rgba(12, 12, 15, 0.7) 0%, rgba(43, 43, 46, 0) 30%, rgba(43, 43, 46, 0) 55%, var(--t-ground) 100%); }
 
 /* ---- Live TV (for now): what's on, a tap to watch ------------------------------------------------- */
 
