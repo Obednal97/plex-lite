@@ -404,24 +404,51 @@
     return i >= 0 ? i : 0;
   };
 
+  // Signs in (the first-run screens, js/screens/firstrun.js) and connects to the server, then loads
+  // the app. Problems connecting or loading (no server, unreachable, no libraries) show there too.
   app.start = function () {
     app.ready = false;
-    if (!PL.plex.token) {
-      app.setRoot(PL.screens.signin(function () { app.start(); }));
-      return;
-    }
-    app.setRoot(PL.screens.loading('Connecting to your Plex server…'));
-    PL.plex.ensureServer().then(function () {
-      var dvrs = PL.plex.get('/livetv/dvrs', null, { timeout: 6000 }).then(function (mc) {
-        return !!(mc && mc.Dvr && mc.Dvr.length);
-      }, function () { return false; });
-      // installed plugins are loaded before the tab bar is built (they may add tabs); capped wait
-      var plugins = PL.pluginHost && PL.pluginHost.autoStart ? Promise.race([
-        PL.pluginHost.autoStart(),
-        new Promise(function (r) { setTimeout(r, 3000); }),
-      ]) : null;
-      return Promise.all([PL.plex.sections(), dvrs, plugins]);
-    }).then(function (res) {
+    app.blurTabs(true);
+    PL.firstrun.run(load);
+  };
+
+  // The server answers: the libraries, Live TV, plugins, then the first tab.
+  function load(server) {
+    var dvrs = PL.plex.get('/livetv/dvrs', null, { timeout: 6000 }).then(function (mc) {
+      return !!(mc && mc.Dvr && mc.Dvr.length);
+    }, function () { return false; });
+    // installed plugins are loaded before the tab bar is built (they may add tabs); capped wait
+    var plugins = PL.pluginHost && PL.pluginHost.autoStart ? Promise.race([
+      PL.pluginHost.autoStart(),
+      new Promise(function (r) { setTimeout(r, 3000); }),
+    ]) : null;
+    var sections = PL.plex.sections().then(function (list) {
+      if (!list.length) {
+        var none = new Error('No film or TV libraries on ' + server.name);
+        none.code = 'NO_LIBRARIES';
+        none.server = server.name;
+        throw none;
+      }
+      return list;
+    }, function (err) {
+      if (!err || (err.status !== 401 && err.status !== 403)) throw err;
+      // turned away: plex.tv decides whether the sign-in itself is gone (sign in again) or only this
+      // profile has no access to the server
+      return PL.plex.user().then(function () {
+        err.code = 'NO_ACCESS';
+        err.server = server.name;
+        throw err;
+      }, function (e) {
+        if (e && e.status === 401) {
+          e.plexTv = true;
+          throw e;
+        }
+        err.code = 'NO_ACCESS';
+        err.server = server.name;
+        throw err;
+      });
+    });
+    return Promise.all([sections, dvrs, plugins]).then(function (res) {
       app.sections = res[0];
       app.hasLiveTv = res[1];
       app.buildTabs();
@@ -450,19 +477,8 @@
       }
       // load the search index as soon as the first screen has drawn (cached copies load in slices)
       if (PL.fuzzy) setTimeout(function () { PL.fuzzy.ensure(); }, 1500);
-    }).then(null, function (err) {
-      PL.warn('start failed', err && err.message);
-      if (err && err.status === 401) {
-        PL.plex.signOut();
-        app.start();
-        return;
-      }
-      app.setRoot(app.message('Can\'t reach Plex', PL.errorMessage(err), [
-        { label: 'Try again', kind: 'primary', action: app.start },
-        { label: 'Sign out', action: function () { PL.plex.signOut(); app.start(); } },
-      ]));
     });
-  };
+  }
 
   // ---- Sign-in lost mid-session (401) ---------------------------------------------------------
 

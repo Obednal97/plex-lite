@@ -296,15 +296,6 @@ body.fast * { transition-duration: 90ms !important; transition-timing-function: 
 .center-card h1 { margin: 0 0 16px; font-size: 44px; line-height: 52px; font-weight: 700; }
 .center-card p { margin: 0 auto 32px; font-size: 26px; line-height: 36px; color: var(--text-2); max-width: 700px; }
 .center-card .button-row { position: relative; left: 0; display: inline-block; }
-.code-tiles { margin: 28px 0 32px; white-space: nowrap; }
-.code-tile {
-  display: inline-block; width: 120px; height: 150px; line-height: 150px; margin: 0 14px; border-radius: 20px;
-  font-size: 96px; font-weight: 700; color: var(--accent);
-  background: var(--glass); border: 1px solid var(--glass-edge); border-top-color: var(--glass-edge-top);
-}
-.signin-url { font-size: 44px; line-height: 52px; font-weight: 700; }
-.signin-wait { font-size: 24px; color: var(--text-2); }
-.signin-wait .spinner { display: inline-block; width: 28px; height: 28px; vertical-align: -6px; margin-right: 12px; border-width: 3px; }
 
 .spinner {
   width: 48px; height: 48px; border-radius: 50%;
