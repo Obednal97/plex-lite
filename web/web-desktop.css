@@ -1,0 +1,75 @@
+/* Laptop and desktop (web/web-desktop.js, docs/WEB.md "Mouse and keyboard"): the Back [Esc]
+   button, tooltips and the "?" shortcuts overlay. Web build only; sizes are stage px (the window
+   shows them at window width / 1920). */
+
+/* ---- Keycaps in web chrome (lighter than the player's outlined ones) ---------------------------- */
+
+.web-back .keycap, .web-tip .keycap, .web-keycap {
+  display: inline-block; height: 30px; min-width: 30px; line-height: 28px; padding: 0 9px; margin: 0; border-radius: 8px;
+  box-sizing: border-box; border: 0; background: rgba(255, 255, 255, 0.14); text-align: center;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28), inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+  font-size: 17px; font-weight: 600; color: var(--text); white-space: nowrap; vertical-align: middle;
+}
+
+/* ---- Back [Esc] ----------------------------------------------------------------------------------- */
+
+.web-back {
+  position: absolute; left: 54px; top: 36px; z-index: 60; height: 60px; padding: 0 14px 0 20px; border-radius: 30px;
+  display: none; align-items: center; white-space: nowrap; cursor: pointer; color: var(--text);
+  background: rgba(24, 24, 28, 0.62); box-shadow: inset 0 0 0 1px var(--rim), 0 10px 30px rgba(0, 0, 0, 0.25);
+  transition: opacity 200ms var(--ease), background-color 120ms linear;
+}
+.web-back.on { display: flex; }
+.web-back:hover { background: rgba(255, 255, 255, 0.16); }
+.web-back .glyph { margin-right: 12px; }
+.web-back-label { font-size: 24px; line-height: 30px; font-weight: 600; margin-right: 14px; }
+/* a screen that hides its controls (the player) hides Back with them */
+.web-back.away { opacity: 0; pointer-events: none; }
+
+/* ---- Tooltips ------------------------------------------------------------------------------------- */
+
+.web-tip {
+  position: absolute; left: 0; top: 0; z-index: 70; height: 46px; padding: 0 16px; border-radius: 12px;
+  display: flex; align-items: center; white-space: nowrap; pointer-events: none;
+  background: rgba(18, 18, 22, 0.94); box-shadow: inset 0 0 0 1px var(--rim), 0 12px 30px rgba(0, 0, 0, 0.45);
+  opacity: 0; visibility: hidden; transition: opacity 120ms linear, visibility 0s linear 120ms;
+}
+.web-tip.on { opacity: 1; visibility: visible; transition: opacity 120ms linear; }
+.web-tip-text { font-size: 21px; line-height: 28px; font-weight: 600; color: var(--text); }
+.web-tip .web-tip-key { margin-left: 12px; height: 26px; line-height: 24px; font-size: 15px; }
+
+/* ---- The "?" shortcuts overlay (D4) ------------------------------------------------------------------ */
+
+.web-keys-screen { position: absolute; left: 0; top: 0; width: 1920px; height: var(--stage-h); z-index: 50; }
+.web-keys-scrim { position: absolute; left: 0; top: 0; width: 1920px; height: var(--stage-h); background: rgba(5, 5, 8, 0.62); }
+.web-keys {
+  position: absolute; left: 262px; top: calc(var(--stage-h) / 2 - 426px); width: 1396px; height: 852px; box-sizing: border-box;
+  padding: 58px 58px 0; border-radius: 40px; color: var(--text);
+  background: linear-gradient(180deg, rgba(58, 58, 64, 0.97), rgba(36, 36, 40, 0.98));
+  box-shadow: inset 0 0 0 1px var(--rim), inset 0 1px 0 var(--rim-light), 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+.web-keys-close {
+  position: absolute; right: 58px; top: 54px; width: 58px; height: 58px; border-radius: 29px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px var(--rim);
+}
+.web-keys-close:hover { background: var(--focus); color: var(--focus-ink); }
+.web-keys-title { font-size: 44px; line-height: 52px; font-weight: 700; letter-spacing: -0.5px; }
+.web-keys-sub { margin-top: 6px; font-size: 21px; line-height: 28px; color: var(--text-2); }
+.web-keys-cols { display: flex; margin-top: 44px; }
+.web-keys-col { width: 386px; margin-right: 40px; }
+.web-keys-col:last-child { margin-right: 0; }
+.web-keys-head { display: block; font-size: 17px; line-height: 24px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--resume); padding-bottom: 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.web-keys-row { display: flex; align-items: center; justify-content: space-between; height: 55px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.web-keys-label { font-size: 21px; line-height: 28px; font-weight: 500; color: var(--text); white-space: nowrap; }
+.web-keys-new { display: inline-block; width: 8px; height: 8px; border-radius: 4px; margin-left: 10px; vertical-align: 3px; background: var(--resume); }
+.web-keys-caps { display: flex; align-items: center; white-space: nowrap; }
+.web-keys-caps .web-keycap { margin-left: 8px; }
+.web-keys-or { margin-left: 8px; font-size: 18px; color: var(--text-3); }
+.web-keys-mouse { display: flex; align-items: center; margin-top: 42px; padding-top: 30px; border-top: 1px solid rgba(255, 255, 255, 0.08); white-space: nowrap; font-size: 21px; line-height: 28px; color: var(--text-2); }
+.web-keys-mouse .web-keys-head { border: 0; padding: 0; margin-right: 30px; }
+.web-keys-mouse b { font-weight: 600; color: var(--text); }
+.web-keys-dot { margin: 0 18px; color: var(--text-3); }
+.web-keys-foot { position: absolute; left: 58px; right: 58px; bottom: 44px; display: flex; justify-content: space-between; font-size: 19px; line-height: 26px; color: var(--text-3); }
+.web-keys-foot .web-keys-new { margin: 0 12px 0 0; vertical-align: 2px; }
+.web-keys-foot b { font-weight: 600; color: var(--text-2); }

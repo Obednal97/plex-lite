@@ -1,0 +1,91 @@
+/* Cards and rows with a mouse (web/web-cards.js, docs/WEB.md "Cards and rows with a mouse"). Web
+   build only. Everything here shows only in the mouse layout while the mouse is in use
+   (html[data-input="pointer"][data-nav="pointer"]); keys bring back the TV's focus plate. Sizes are
+   stage px (the D1 mock-up's px x 1.333). Motion is transform and opacity only. */
+
+/* ---- The hovered card's shadow: one element, re-parented into the hovered card's track ---------- */
+
+.web-hover-shadow {
+  position: absolute; left: 0; top: 0; z-index: 2; border-radius: 14px; opacity: 0; pointer-events: none;
+  box-shadow: 0 34px 66px rgba(0, 0, 0, 0.5);
+  transition: opacity var(--t-lift) var(--ease);
+}
+.web-hover-shadow.instant { transition: none; }
+html[data-input="pointer"][data-nav="pointer"] .web-hover-shadow.on { opacity: 1; }
+
+/* ---- The hovered card: the D1 mock-up's lift (1.07, the TV's focus is 1.09) and rim ------------ */
+
+html[data-input="pointer"][data-nav="pointer"] .card-poster:hover .card-inner,
+html[data-input="pointer"][data-nav="pointer"] .card-season:hover .card-inner,
+html[data-input="pointer"][data-nav="pointer"] .card-wide:hover .card-inner,
+html[data-input="pointer"][data-nav="pointer"] .card-wide:hover .card-meta { transform: scale(1.07); }
+html[data-input="pointer"][data-nav="pointer"] .card:hover .card-edge {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55), inset 0 3px 0 rgba(255, 255, 255, 0.65);
+}
+
+/* ---- ▶ and "…" -------------------------------------------------------------------------------------- */
+
+.web-acts {
+  position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 4; border-radius: 14px; pointer-events: none;
+  opacity: 0; transition: opacity 160ms var(--ease);
+}
+.web-card-play, .web-card-more { position: absolute; display: flex; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer; }
+.web-card-play {
+  left: 50%; top: 50%; width: 70px; height: 70px; margin: -35px 0 0 -35px;
+  background: var(--focus); color: var(--focus-ink); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  transition: transform 160ms var(--ease);
+}
+.web-card-play .glyph { margin-left: 3px; }
+/* landscape cards carry their title on the art: ▶ sits above it */
+.card-wide .web-card-play { margin-top: -54px; }
+.web-card-more {
+  right: 13px; top: 13px; width: 48px; height: 48px;
+  background: rgba(16, 16, 18, 0.7); box-shadow: inset 0 0 0 1px var(--rim); color: var(--text);
+  transition: background-color 120ms linear;
+}
+.web-card-play:hover { transform: scale(1.08); }
+.web-card-more:hover { background: rgba(60, 60, 66, 0.92); }
+
+html[data-input="pointer"][data-nav="pointer"] .web-card:hover .web-acts { opacity: 1; }
+html[data-input="pointer"][data-nav="pointer"] .web-card:hover .web-card-play,
+html[data-input="pointer"][data-nav="pointer"] .web-card:hover .web-card-more { pointer-events: auto; }
+/* "…" takes the watched tick's corner while the card is hovered */
+html[data-input="pointer"][data-nav="pointer"] .web-card:hover .card-check { opacity: 0; }
+.card-check { transition: opacity 160ms var(--ease); }
+
+/* ---- ‹ › at a row's edges ------------------------------------------------------------------------- */
+
+/* the row's band, so the mouse between two cards is still over the row: from 24 px above the cards
+   (.shelf-track is at 60 px, css/theme.css) to 24 px below them (height set by web-cards.js) */
+.web-row-hit { position: absolute; left: 0; top: 36px; width: 1920px; }
+
+.web-row-fade {
+  position: absolute; left: 1760px; z-index: 4; width: 160px; pointer-events: none;
+  background: linear-gradient(90deg, rgba(var(--ground-rgb), 0), rgba(var(--ground-rgb), 0.9));
+  opacity: 0; transition: opacity 160ms var(--ease);
+}
+.web-row-fade-prev { left: 0; background: linear-gradient(270deg, rgba(var(--ground-rgb), 0), rgba(var(--ground-rgb), 0.9)); }
+.web-row-arrow {
+  position: absolute; left: 1824px; z-index: 5; width: 64px; height: 64px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text);
+  background: rgba(40, 40, 44, 0.92); box-shadow: inset 0 0 0 1px var(--rim), 0 10px 24px rgba(0, 0, 0, 0.3);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 160ms var(--ease), visibility 0s linear 160ms, transform 160ms var(--ease), background-color 120ms linear;
+}
+.web-row-arrow:hover { background: rgba(70, 70, 76, 0.96); transform: scale(1.08); }
+.web-row-arrow-next .glyph { margin-left: 2px; }
+.web-row-arrow-prev .glyph { margin-left: -2px; }
+
+html[data-input="pointer"][data-nav="pointer"] .web-hot .web-row-fade.on { opacity: 1; }
+html[data-input="pointer"][data-nav="pointer"] .web-hot .web-row-arrow.on {
+  opacity: 1; visibility: visible; pointer-events: auto;
+  transition: opacity 160ms var(--ease), transform 160ms var(--ease), background-color 120ms linear;
+}
+
+/* The keyboard focus stays where it was while the mouse is in use, unseen; its poster caption would
+   float under a card the mouse isn't on. */
+html[data-input="pointer"][data-nav="pointer"] .shelf .card-poster.focused:not(:hover) .card-meta,
+html[data-input="pointer"][data-nav="pointer"] .shelf .card-season.focused:not(:hover) .card-meta { opacity: 0; }
+
+/* A row scrolled past is dimmed (.zone-above); the one under the mouse comes back up. */
+html[data-input="pointer"][data-nav="pointer"] .shelf.zone-above.web-hot { opacity: 1; }
