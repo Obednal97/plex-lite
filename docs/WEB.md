@@ -193,7 +193,8 @@ HLS only, no Media Source) and Android Chrome.
   'self'` with no inline script, not `connect-src`. If you deploy your own copy for one household you
   can tighten it in `vercel.json` to your addresses, for example `connect-src 'self' https://plex.tv
   https://*.plex.tv https://*.plex.direct https://overseerr.example.com
-  https://raw.githubusercontent.com` (the last one is the plugin catalogue).
+  https://raw.githubusercontent.com` (the last one is the plugin catalogue). That breaks a server
+  address typed in under Settings and plugins with network permission unless you add their hosts.
 - Also: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`
   (Plex URLs carry the token, so no page address leaks either), HSTS,
   `Cross-Origin-Opener-Policy: same-origin-allow-popups` (keeps the sign-in popup working),

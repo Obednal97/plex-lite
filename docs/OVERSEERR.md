@@ -162,7 +162,7 @@ location /api/ {
     add_header Access-Control-Allow-Credentials true always;
     add_header Vary Origin always;
 
-    proxy_pass http://overseerr:5055;   # your Overseerr, as in the location / block
+    proxy_pass http://overseerr:5055;   # as in your location / block (NPM: $forward_scheme://$server:$port)
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
@@ -170,7 +170,10 @@ location /api/ {
 ```
 
 An empty `$cors` leaves the header out, so other origins get no CORS (as before). A preflight from
-another origin gets a 204 without CORS headers, which the browser treats as refused.
+another origin gets a 204 without CORS headers, which the browser treats as refused. Keep `always`:
+without it Nginx adds the headers to successful answers only, and the browser then can't read
+Overseerr's errors. Any `add_header` in this `location` stops `add_header` lines from the `server`
+block (HSTS, for example) applying to `/api/`; repeat them here if you have some.
 
 ### Cloudflare Worker
 
@@ -213,9 +216,10 @@ export default {
   token". Reading lists still works, but signing in, requesting and reporting don't. Plex Lite says
   so instead of "this account can't sign in".
 - **Cookies.** With CSRF protection off the session cookie is `connect.sid`, `HttpOnly`,
-  `SameSite=Lax`, 30 days, `Secure` when Overseerr sees https (it trusts the proxy's
-  `X-Forwarded-Proto`). The proxy must pass `Set-Cookie` on unchanged: no `Domain` rewriting is needed
-  (the cookie stays on Overseerr's host; same-site is what counts).
+  `SameSite=Lax`, 30 days, and `Secure` when Overseerr sees https (behind a proxy only with
+  "Enable Proxy Support" on, so that it trusts `X-Forwarded-Proto`; without it the cookie lacks
+  `Secure`, which still works). The proxy must pass `Set-Cookie` on unchanged: no `Domain` rewriting
+  is needed (the cookie stays on Overseerr's host; same-site is what counts).
 - "Enable Plex Sign-In" (or new Plex users being allowed) works as on the TV: a profile Overseerr
   doesn't know becomes a new Overseerr user on its first, explicit sign-in.
 
@@ -229,6 +233,7 @@ call works), with a link to this section:
 |---|---|---|
 | No CORS for this site | the request fails, a `no-cors` request reaches the server | "Overseerr doesn't allow this site" |
 | CORS without credentials (or `*`) | works without credentials, fails with them | "Overseerr needs one more setting" (Allow-Credentials) |
+| CORS on successful answers only | `/status` works, an error answer (`/auth/me` without the cookie) can't be read | "Overseerr needs one more setting" (`always`) |
 | No preflight answer | a simple GET works, the preflighted POST fails | "Overseerr needs one more setting" (OPTIONS) |
 | Not the same site | sign-in works but `/auth/me` is refused | "This browser didn't keep the sign-in", naming both sites |
 | CSRF protection on | 403 "invalid csrf token" | "Overseerr's CSRF protection is on" |
@@ -236,11 +241,16 @@ call works), with a link to this section:
 
 ### Sessions in a browser
 
-A browser holds one Overseerr cookie per Overseerr address, not one per Plex Home profile. Plex Lite
-remembers which profile it belongs to; switching profile signs the new profile in again (only one
-that has signed in on this browser before, as on the TV), which replaces the cookie. Before every
-change (a request, a report) Plex Lite checks with `/api/v1/auth/me` that the cookie still belongs to
-the profile's Overseerr user, because another tab or Overseerr's own pages in the same browser use
-the same cookie: if they don't match it signs in again first. Signing in to Overseerr's own web UI in
-that browser therefore also changes who Plex Lite's next request would be made as, until it checks.
-Plex Lite's Sign out (Settings) signs the browser out of Overseerr too.
+A browser holds one Overseerr cookie per Overseerr address, not one per Plex Home profile, and
+Overseerr keeps one session per cookie, so whoever signed in last in that browser is who every call
+is made as: Plex Lite in any tab, and Overseerr's own pages too. Plex Lite remembers which profile
+the session belongs to; switching profile signs the new profile in again (only one that has signed
+in on this browser before, as on the TV). Before every change (a request, a report) Plex Lite waits
+until no sign-in is under way in any of its tabs and checks with `/api/v1/auth/me`, just before
+sending, that the session is still the profile's Overseerr user; if not, it signs in again first. A
+session ended elsewhere (signed out in Overseerr's pages) is noticed the same way and signed in again.
+
+It works both ways: switching profile in Plex Lite also changes who an Overseerr tab open in the same
+browser is signed in as (for example from the owner's account to a child's), and signing in to
+Overseerr's own pages changes who Plex Lite is until its next check. On a shared computer, sign out
+in both. Plex Lite's Sign out (Settings) signs the browser out of Overseerr too.

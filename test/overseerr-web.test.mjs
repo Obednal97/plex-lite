@@ -19,8 +19,12 @@ const SEERR = 'https://overseerr.example.com';
 
 // ---- A fake Overseerr: (request) -> {status, data, setCookie} -------------------------------------
 
+// Overseerr's isAuthenticated() answer, both when signed out and when a permission is missing
+const DENIED = { status: 403, error: 'You do not have permission to access this endpoint' };
+
 function fakeSeerr(opts = {}) {
   const seen = [];
+  const dead = new Set(); // sessions ended on the server (signed out in Overseerr's own pages)
   const handler = ({ method, path: url, cookie, body }) => {
     seen.push({ method, url, cookie: cookie || null, body: body || null });
     const send = (status, data, setCookie) => ({ status, data, setCookie });
@@ -34,9 +38,10 @@ function fakeSeerr(opts = {}) {
         'connect.sid=s%3Asess' + id + '; Path=/; HttpOnly; SameSite=Lax');
     }
     const sess = /connect\.sid=s%3Asess(\d)/.exec(cookie || '');
-    if (!sess) return send(403, { message: 'You do not have permission to access this endpoint. auth' });
+    if (!sess || dead.has(Number(sess[1]))) return send(403, DENIED);
     const uid = Number(sess[1]);
     if (url === '/api/v1/auth/logout') return send(200, { status: 'ok' }, 'connect.sid=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
+    if (url === '/api/v1/issue' && method === 'POST' && opts.noIssues) return send(403, DENIED);
     if (url === '/api/v1/auth/me') return send(200, { id: uid, displayName: 'User' + uid, permissions: uid === 1 ? 2 : 32 | 4194304 });
     if (url.indexOf('/api/v1/media?filter=') === 0) {
       const f = /filter=(\w+)/.exec(url)[1];
@@ -51,7 +56,10 @@ function fakeSeerr(opts = {}) {
     if (url === '/api/v1/issue' && method === 'POST') return send(201, { id: 88, createdBy: { id: uid } });
     return send(404, { message: 'nope' });
   };
-  return { handler, seen };
+  // a sign-in revives a session id (the fake reuses one id per user)
+  const plain = handler;
+  const wrapped = (req) => { if (req.path === '/api/v1/auth/plex') dead.clear(); return plain(req); };
+  return { handler: wrapped, seen, kill: (uid) => dead.add(uid) };
 }
 
 // ---- A browser in front of it: CORS, preflight, cookie jar ----------------------------------------
@@ -59,7 +67,7 @@ function fakeSeerr(opts = {}) {
 // page and Overseerr are the same site (the browser stores and sends the Lax cookie only then).
 
 function browser(handler, opts = {}) {
-  const o = Object.assign({ allowOrigin: ORIGIN, credentials: true, preflight: true, sameSite: true, reachable: true }, opts);
+  const o = Object.assign({ allowOrigin: ORIGIN, credentials: true, preflight: true, sameSite: true, reachable: true, errorsToo: true }, opts);
   const jar = { cookie: null };
   const log = [];
   const fetch = async (url, init = {}) => {
@@ -75,7 +83,7 @@ function browser(handler, opts = {}) {
     const corsOk = (withCreds) => !!o.allowOrigin && (o.allowOrigin === '*' ? !withCreds : o.allowOrigin === ORIGIN && (!withCreds || o.credentials));
     if (!simple && (!o.preflight || !corsOk(creds))) { log[log.length - 1].preflightFailed = true; throw new TypeError('Failed to fetch'); }
     const res = handler({ method, path: u.pathname + u.search, cookie: creds && o.sameSite ? jar.cookie : null, body: init.body || null });
-    if (!corsOk(creds)) throw new TypeError('Failed to fetch');
+    if (!corsOk(creds) || (res.status >= 400 && !o.errorsToo)) throw new TypeError('Failed to fetch');
     if (creds && o.sameSite && res.setCookie) {
       const m = /^([^=]+=[^;]*)/.exec(res.setCookie);
       jar.cookie = /Expires=Thu, 01 Jan 1970/.test(res.setCookie) ? null : m[1];
@@ -136,6 +144,7 @@ function webPlugin(b) {
 }
 
 const kid = { uuid: 'kid1', title: 'Kid' };
+const tick = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---- Sign-in and the happy path -------------------------------------------------------------------
 
@@ -273,7 +282,58 @@ test('sign out: the cookie\'s profile signs out of Overseerr, others just forget
   const out = b.log.filter((r) => r.path === '/api/v1/auth/logout');
   assert.equal(out.length, 2);
   assert.equal(out[1].keepalive, true, 'sent with keepalive (the page reloads)');
+  assert.ok(!b.log.some((r) => r.path === '/api/v1/auth/logout' && r.preflightFailed), 'no preflight needed');
   assert.equal(ctx.storage.get('web.owner', null), null);
+});
+
+test('a session ended on the server (Overseerr\'s real 403) signs in again instead of failing', async () => {
+  const s = fakeSeerr();
+  const b = browser(s.handler);
+  const { O, ctx } = webPlugin(b);
+  await O.signIn(ctx, SEERR);
+  s.kill(1); // signed out in Overseerr's own pages: the browser still has the cookie
+  const r = await O.api(ctx, 'GET', '/movie/100');
+  assert.equal(r.title, 'Film', 'answered after signing in again');
+  s.kill(1);
+  const list = await O.downloads(ctx, 0);
+  assert.equal(list.list.length, 2);
+  s.kill(1);
+  const made = await O.api(ctx, 'POST', '/request', { mediaType: 'movie', mediaId: 1 });
+  assert.equal(made.id, 77);
+  assert.equal(s.seen.filter((x) => x.url === '/api/v1/auth/plex').length, 4);
+});
+
+test('a missing permission stays a 403 for the caller (not "signed out")', async () => {
+  const s = fakeSeerr({ noIssues: true });
+  const { O, ctx } = webPlugin(browser(s.handler));
+  await O.signIn(ctx, SEERR);
+  const err = await O.api(ctx, 'POST', '/issue', { issueType: 1, message: 'x', mediaId: 10 }).catch((e) => e);
+  assert.equal(err.status, 403);
+  assert.equal(s.seen.filter((x) => x.url === '/api/v1/auth/plex').length, 1, 'no sign-in loop');
+});
+
+test('a change waits while another tab is signing in, then checks who the cookie is', async () => {
+  const s = fakeSeerr();
+  const b = browser(s.handler);
+  const { O, ctx } = webPlugin(b);
+  await O.signIn(ctx, SEERR);
+  ctx.storage.set('web.signingIn', Date.now()); // another tab started a sign-in
+  let done = false;
+  const p = O.api(ctx, 'POST', '/request', { mediaType: 'movie', mediaId: 1 }).then((r) => { done = true; return r; });
+  await tick(400);
+  assert.equal(done, false, 'held back');
+  assert.ok(!s.seen.some((x) => x.url === '/api/v1/request'));
+  b.jar.cookie = 'connect.sid=s%3Asess2'; // that tab signed in as the kid
+  ctx.storage.del('web.signingIn');
+  const r = await p;
+  assert.equal(r.requestedBy.id, 1, 'made as the owner after signing in again');
+});
+
+test('paths: no encoded dot-segments', async () => {
+  const s = fakeSeerr();
+  const { O, ctx } = webPlugin(browser(s.handler));
+  await O.signIn(ctx, SEERR);
+  await assert.rejects(O.api(ctx, 'GET', '/%2e%2e/%2E%2E/x'), (e) => e.code === 'bad_request');
 });
 
 // ---- Detect and explain -----------------------------------------------------------------------------
@@ -308,6 +368,13 @@ test('CORS without credentials, or with *: says what is missing', async () => {
   assert.ok(r.err.explain.rows.some((x) => /Allow-Credentials/.test(x.sub)));
   r = await signInFails({ allowOrigin: '*' });
   assert.match(r.err.message, /not signed in/);
+});
+
+test('CORS only on successful answers: says to add it to errors too', async () => {
+  const { err } = await signInFails({ errorsToo: false }, { csrf: true });
+  assert.equal(err.code, 'cors');
+  assert.match(err.message, /only on some answers/);
+  assert.ok(err.explain.rows.some((x) => /always/.test(x.sub)));
 });
 
 test('CORS on responses but no preflight answer', async () => {

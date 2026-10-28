@@ -12,9 +12,11 @@
 // Sessions: a browser holds one Overseerr cookie, not one per Plex Home profile. The profile it
 // belongs to is remembered (`web.owner`); a call for another profile answers `unauthenticated`, and
 // seerr.js then signs that profile in again (only if it has signed in here before), as it does when
-// the TV's service lost a session. Changes (POST/PUT/DELETE) first check with /auth/me that the
-// cookie still belongs to the expected Overseerr user, so a request or report is never made under
-// someone else's account (another tab, or Overseerr's own pages, can replace the cookie).
+// the TV's service lost a session. Overseerr keeps one server-side session per cookie, so a sign-in
+// anywhere in this browser (another tab, Overseerr's own pages) changes who every later call is made
+// as. Changes (POST/PUT/DELETE) therefore wait until no sign-in is under way (in any tab) and check
+// with /auth/me, just before they go out, that the cookie still belongs to the profile's Overseerr
+// user; if it doesn't, the profile signs in again first.
 'use strict';
 
 (function () {
@@ -24,6 +26,8 @@
 
   W.DOCS_URL = 'https://github.com/Obednal97/plex-lite/blob/main/docs/OVERSEERR.md#on-the-web';
   var TIMEOUT_MS = 20000;
+  var PROBE_MS = 5000;
+  var LOGIN_WINDOW_MS = 25000; // a sign-in mark older than this is from a tab that went away
   var MAX_TITLES = 300;
   var KEY_RE = /^[A-Za-z0-9:_.-]{1,80}$/;
   var PATH_RE = /^\/[A-Za-z0-9_\-\/?=&%.,:+]*$/;
@@ -37,7 +41,8 @@
   // {key, base, userId} (localStorage, so other tabs see a change at once)
   function owner(ctx) { return ctx.storage.get('web.owner', null); }
 
-  var generation = 0; // bumped by every sign-in and sign-out
+  var generation = 0; // bumped by every sign-in and sign-out in this tab
+  var reached = 0; // answers received from Overseerr (W.call clears W.problem only after one)
   function setOwner(ctx, value) {
     generation += 1;
     if (value) ctx.storage.set('web.owner', value);
@@ -97,8 +102,18 @@
       return error('cors', 'Overseerr\'s proxy doesn\'t answer the browser\'s preflight (see Settings → Overseerr)', {
         title: 'Overseerr needs one more setting',
         rows: [
-          { label: 'The browser checks first with an OPTIONS request', sub: 'Overseerr answers it with an error (405), so its reverse proxy must answer it instead' },
+          { label: 'The browser checks first with an OPTIONS request', sub: 'It wasn\'t allowed. Overseerr itself answers it with an error (405), so its reverse proxy must answer it' },
           { label: 'Answer OPTIONS for /api/ with 204', sub: 'With Allow-Origin ' + here + ', Allow-Credentials, the methods (GET, POST, PUT, DELETE) and the requested headers' },
+          guideRow(),
+        ],
+      });
+    }
+    if (kind === 'errors') {
+      return error('cors', 'Overseerr\'s proxy allows this site only on some answers (see Settings → Overseerr)', {
+        title: 'Overseerr needs one more setting',
+        rows: [
+          { label: 'Its proxy adds CORS to successful answers only', sub: 'So the browser can\'t read Overseerr\'s errors (403, 404 …) and the call fails' },
+          { label: 'Add the headers to every answer', sub: 'Nginx: add_header … always. Allow-Origin ' + here + ' and Allow-Credentials' },
           guideRow(),
         ],
       });
@@ -142,17 +157,23 @@
   }
 
   // fetch rejected (TypeError: offline, DNS, TLS, or CORS; the browser doesn't say which). A few
-  // cheap probes of Overseerr's public /api/v1/status tell them apart.
+  // cheap probes of Overseerr's public /api/v1/status (200) and /api/v1/auth/me without the cookie
+  // (always an error answer) tell them apart.
   function diagnose(base, preflighted) {
-    var url = base + '/api/v1/status';
-    var probe = function (init) {
-      return within(W.fetch(url, init), 8000).then(function () { return true; }, function () { return false; });
+    var probe = function (path, init) {
+      return within(W.fetch(base + path, init), PROBE_MS).then(function () { return true; }, function () { return false; });
     };
-    return probe({ credentials: 'include', cache: 'no-store' }).then(function (ok) {
-      if (ok) return preflighted ? setupError('preflight', base) : error('network', 'Could not reach Overseerr (the connection dropped)');
-      return probe({ credentials: 'omit', cache: 'no-store' }).then(function (anon) {
+    var url = '/api/v1/status';
+    return probe(url, { credentials: 'include', cache: 'no-store' }).then(function (ok) {
+      if (ok) {
+        return probe('/api/v1/auth/me', { credentials: 'omit', cache: 'no-store' }).then(function (errorsToo) {
+          if (!errorsToo) return setupError('errors', base);
+          return preflighted ? setupError('preflight', base) : error('network', 'Could not reach Overseerr (the connection dropped)');
+        });
+      }
+      return probe(url, { credentials: 'omit', cache: 'no-store' }).then(function (anon) {
         if (anon) return setupError('credentials', base);
-        return probe({ mode: 'no-cors', credentials: 'omit', cache: 'no-store' }).then(function (reachable) {
+        return probe(url, { mode: 'no-cors', credentials: 'omit', cache: 'no-store' }).then(function (reachable) {
           if (reachable) return setupError('cors', base);
           return error('network', 'Could not reach Overseerr at ' + hostOf(base) + ' (offline, or the address is wrong)');
         });
@@ -179,6 +200,7 @@
     var started;
     try { started = W.fetch(base + path, init); } catch (e) { started = Promise.reject(e); }
     return within(started, TIMEOUT_MS).then(function (res) {
+      reached += 1;
       return res.text().then(function (text) {
         var data = null;
         try { data = text ? JSON.parse(text) : null; } catch (e) { data = { message: text.slice(0, 200) }; }
@@ -186,7 +208,7 @@
       });
     }, function (err) {
       if (err && err.message === 'timed out') throw error('network', 'Could not reach Overseerr (timed out)');
-      return diagnose(base, method !== 'GET' || body != null).then(function (e) { throw e; });
+      return diagnose(base, body != null || method === 'PUT' || method === 'DELETE').then(function (e) { throw e; });
     });
   }
 
@@ -214,17 +236,47 @@
 
   function unauthenticated(text) { return error('unauthenticated', text || 'Not signed in to Overseerr'); }
 
+  // Overseerr answers 403 {error: 'You do not have permission to access this endpoint'} both to a
+  // cookie whose session has gone (signed out in Overseerr's own pages, pruned) and to a user who
+  // lacks a permission. /auth/me only needs a session, so it tells them apart.
+  function signedOut(base, apiPath, res) {
+    if (isAuthFailure(res)) return Promise.resolve(true);
+    if (res.status !== 403 || isCsrf(res)) return Promise.resolve(false);
+    if (apiPath === '/auth/me') return Promise.resolve(true);
+    return call('GET', base, '/api/v1/auth/me').then(function (me) { return me.status === 401 || me.status === 403; }, function () { return false; });
+  }
+
   // GET as the profile `key`; resolves with the data (HTTP 200) like the service's apiGet
   function apiGet(ctx, key, path) {
     var s = session(ctx, key);
     if (!s) return Promise.reject(unauthenticated());
     return call('GET', s.base, '/api/v1' + path).then(function (res) {
-      if (isAuthFailure(res)) {
-        dropOwner(ctx, key);
-        throw unauthenticated('Overseerr session ended');
-      }
-      if (res.status !== 200) throw error('network', 'Could not reach Overseerr (' + ((res.data && res.data.message) || ('HTTP ' + res.status)) + ')');
-      return res.data;
+      return signedOut(s.base, path, res).then(function (out) {
+        if (out) {
+          dropOwner(ctx, key);
+          throw unauthenticated('Overseerr session ended');
+        }
+        if (res.status !== 200) throw error('network', 'Could not reach Overseerr (' + ((res.data && (res.data.message || res.data.error)) || ('HTTP ' + res.status)) + ')');
+        return res.data;
+      });
+    });
+  }
+
+  // A sign-in in this tab or another (marked in storage) may be about to change who the cookie is.
+  function signingIn(ctx) {
+    var mark = ctx.storage.get('web.signingIn', 0);
+    return !!pendingLogin || !!(mark && Date.now() - mark < LOGIN_WINDOW_MS);
+  }
+
+  function untilSignedIn(ctx) {
+    return new Promise(function (resolve) {
+      var waited = 0;
+      var tick = function () {
+        if (!signingIn(ctx) || waited >= LOGIN_WINDOW_MS) { resolve(); return; }
+        waited += 250;
+        setTimeout(tick, 250);
+      };
+      tick();
     });
   }
 
@@ -250,6 +302,7 @@
     var id = key + ' ' + base;
     if (pendingLogin && pendingLogin.id === id) return pendingLogin.promise;
     generation += 1;
+    ctx.storage.set('web.signingIn', Date.now());
     var promise = call('POST', base, '/api/v1/auth/plex', { authToken: p.plexToken }).then(function (res) {
       if (isCsrf(res)) throw csrfError();
       if (res.status === 403) throw error('forbidden', 'Overseerr doesn\'t let this Plex account sign in');
@@ -257,9 +310,9 @@
       var signedIn = publicUser(res.data);
       // the sign-in counts only if the browser kept Overseerr's cookie and sends it back
       return call('GET', base, '/api/v1/auth/me').then(function (me) {
-        if (me.status === 401 || me.status === 403 || (me.status === 200 && me.data && signedIn && me.data.id !== signedIn.id)) {
-          throw cookieError(base);
-        }
+        if (me.status === 401 || me.status === 403) throw cookieError(base);
+        // Overseerr has one session per cookie: another sign-in in this browser overtook this one
+        if (me.status === 200 && me.data && signedIn && me.data.id !== signedIn.id) throw unauthenticated('Overseerr is signing in again');
         if (me.status !== 200) throw error('auth', (me.data && me.data.message) || ('Overseerr error (HTTP ' + me.status + ')'));
         var user = publicUser(me.data);
         setOwner(ctx, { key: key, base: base, userId: user.id });
@@ -268,7 +321,10 @@
     });
     var mine = { id: id, promise: promise };
     pendingLogin = mine;
-    var done = function () { if (pendingLogin === mine) pendingLogin = null; };
+    var done = function () {
+      if (pendingLogin === mine) pendingLogin = null;
+      ctx.storage.del('web.signingIn');
+    };
     promise.then(done, done);
     return promise;
   };
@@ -276,6 +332,7 @@
   // Refreshes the user; never signs in by itself.
   M.status = function (ctx, p) {
     var key = p.key || 'default';
+    if (!KEY_RE.test(key)) return Promise.reject(error('bad_request', 'Bad profile key'));
     var s = session(ctx, key);
     var cfg = O.config(ctx);
     var url = (s && s.base) || (cfg && cfg.url) || null;
@@ -300,29 +357,36 @@
     var path = String(p.path || '');
     if (!KEY_RE.test(key)) return Promise.reject(error('bad_request', 'Bad profile key'));
     if (['GET', 'POST', 'PUT', 'DELETE'].indexOf(method) === -1) return Promise.reject(error('bad_request', 'Bad method'));
-    if (!PATH_RE.test(path) || path.indexOf('..') !== -1) return Promise.reject(error('bad_request', 'Bad path'));
+    // (the browser would resolve an encoded ../ too)
+    if (!PATH_RE.test(path) || path.indexOf('..') !== -1 || /%2e/i.test(path)) return Promise.reject(error('bad_request', 'Bad path'));
     var s = session(ctx, key);
     if (!s) return Promise.reject(unauthenticated());
-    var gen = generation;
-    // a change goes out only as the Overseerr user this profile signed in as
-    var check = method === 'GET' ? Promise.resolve() : apiGet(ctx, key, '/auth/me').then(function (me) {
-      var now = session(ctx, key);
-      if (!me || me.id !== s.userId || !now || now.base !== s.base) {
-        dropOwner(ctx, key);
-        throw unauthenticated('Overseerr is signed in as someone else in this browser');
-      }
-      // a sign-in started meanwhile may replace the cookie before this goes out
-      if (generation !== gen) throw unauthenticated('Overseerr is signing in again');
+    // a change goes out only as the Overseerr user this profile signed in as, checked just before
+    var check = method === 'GET' ? Promise.resolve(s) : untilSignedIn(ctx).then(function () {
+      var gen = generation;
+      var mine = session(ctx, key);
+      if (!mine) throw unauthenticated();
+      return apiGet(ctx, key, '/auth/me').then(function (me) {
+        var now = session(ctx, key);
+        if (!me || me.id !== mine.userId || !now || now.base !== mine.base) {
+          dropOwner(ctx, key);
+          throw unauthenticated('Overseerr is signed in as someone else in this browser');
+        }
+        if (generation !== gen || signingIn(ctx)) throw unauthenticated('Overseerr is signing in again');
+        return mine;
+      });
     });
-    return check.then(function () {
-      return call(method, s.base, '/api/v1' + path, p.body == null ? null : p.body);
-    }).then(function (res) {
-      if (isCsrf(res)) throw csrfError();
-      if (isAuthFailure(res)) {
-        dropOwner(ctx, key);
-        throw unauthenticated('Overseerr session ended');
-      }
-      return { returnValue: true, status: res.status, data: res.data };
+    return check.then(function (sess) {
+      return call(method, sess.base, '/api/v1' + path, p.body == null ? null : p.body).then(function (res) {
+        if (isCsrf(res)) throw csrfError();
+        return signedOut(sess.base, path, res).then(function (out) {
+          if (out) {
+            dropOwner(ctx, key);
+            throw unauthenticated('Overseerr session ended');
+          }
+          return { returnValue: true, status: res.status, data: res.data };
+        });
+      });
     });
   };
 
@@ -332,7 +396,8 @@
     var o = owner(ctx);
     if (!o || !(p.all || o.key === (p.key || 'default'))) return Promise.resolve({ returnValue: true });
     setOwner(ctx, null);
-    return call('POST', o.base, '/api/v1/auth/logout', {}).then(null, function () {}).then(function () {
+    // no body, so no preflight
+    return call('POST', o.base, '/api/v1/auth/logout', null).then(null, function () {}).then(function () {
       return { returnValue: true };
     });
   };
@@ -423,6 +488,7 @@
 
   M.downloads = function (ctx, p) {
     var key = p.key || 'default';
+    if (!KEY_RE.test(key)) return Promise.reject(error('bad_request', 'Bad profile key'));
     var cached = downloadsCache[key];
     if (cached && Date.now() - cached.at < 5000) return Promise.resolve({ returnValue: true, items: cached.items, at: cached.at });
     if (downloadsPending[key]) return downloadsPending[key];
@@ -507,9 +573,11 @@
     var fn = M[method];
     if (!fn) return Promise.reject(error('bad_request', 'Unknown method ' + method));
     var p;
+    var before = reached;
     try { p = fn(ctx, params || {}); } catch (e) { p = Promise.reject(e); }
     return p.then(function (r) {
-      W.problem = null;
+      // only once Overseerr has actually answered this page
+      if (reached !== before) W.problem = null;
       return r;
     }, function (err) {
       if (err && err.setup) W.problem = err;
@@ -536,15 +604,15 @@
   };
 
   // Plex Lite's Sign out (web): end the browser's Overseerr session too. Sent with keepalive
-  // because the page reloads right after.
+  // because the page reloads right after, and without a body so it needs no preflight.
+  var OWNER_KEY = 'plugin.overseerr.web.owner'; // ctx.storage's 'web.owner' (plugins.js prefixes plugin.<id>.)
   W.signOut = function () {
-    var o = PL.storage.get('plugin.overseerr.web.owner', null);
+    var o = PL.storage.get(OWNER_KEY, null);
     if (!o || !o.base) return;
-    PL.storage.del('plugin.overseerr.web.owner');
+    PL.storage.del(OWNER_KEY);
     try {
       W.fetch(o.base + '/api/v1/auth/logout', {
-        method: 'POST', credentials: 'include', keepalive: true,
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: '{}',
+        method: 'POST', credentials: 'include', keepalive: true, headers: { Accept: 'application/json' },
       }).then(null, function () {});
     } catch (e) { /* ignore */ }
   };
