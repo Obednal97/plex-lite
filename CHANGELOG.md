@@ -11,6 +11,14 @@ releases are fixes only.
 
 ### Added
 
+- **Live TV on phones and tablets** (docs/WEB.md, "Live TV on phones and tablets"): the Live TV tab
+  of the phone and tablet layer is a touch guide instead of a channel list. A time grid that scrolls
+  both ways with a sticky time ruler, channel column (logo plates) and now line; chips for Favourites,
+  All, On now and the categories, and the TV's Browse rail as a filter sheet with channel families;
+  Last watched; tap a programme on now to watch it, a later one for its details, press and hold to
+  watch, favourite or see details. On now is a feed of shelves by category; Go to channel is a number
+  pad; Live TV search from the guide's header. Opens on Favourites when there are some, like the TV.
+  Rows are virtualised (smooth with hundreds of channels); tablets get a roomier grid.
 - **Touch player on phones and tablets** (docs/WEB.md, "The touch player"): the web build's phone and
   tablet layer plays in its own player instead of the TV's scaled one. Tap shows or hides the controls,
   double-tap left / right seeks back 10 s / ahead 30 s (more taps add more, with a ripple), drag the
