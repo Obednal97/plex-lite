@@ -17,7 +17,8 @@ const ROOT = resolve(process.argv[2] || join(APP, 'dist/web'));
 const PORT = Number(process.env.PORT || 8940);
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8',
+  '.woff2': 'font/woff2',
 };
 const rules = JSON.parse(readFileSync(join(APP, 'vercel.json'), 'utf8')).headers
   .map((r) => ({ re: new RegExp(`^${r.source}$`), headers: r.headers }));

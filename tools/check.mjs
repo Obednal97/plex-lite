@@ -87,7 +87,11 @@ for (const file of [...files(join(APP, 'js'), '.js'), ...files(join(APP, 'plugin
   if (!/^\s*(\/\/.*\n)*\s*'use strict';/m.test(src)) report(file, 1, "missing 'use strict'");
 }
 
+// web-only stylesheets the TV never loads: the first-run screens' full-window layout (modern CSS
+// on purpose, docs/FIRSTRUN.md) and the font faces
+const WEB_ONLY_CSS = new Set([join('web', 'firstrun-web.css'), join('web', 'fonts', 'inter.css')]);
 for (const file of [...files(join(APP, 'css'), '.css'), ...files(join(APP, 'plugins'), '.css'), ...files(join(APP, 'web'), '.css')]) {
+  if (WEB_ONLY_CSS.has(relative(APP, file))) continue;
   // blank out comments but keep line numbers
   const text = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '));
   text.split('\n').forEach((code, i) => {

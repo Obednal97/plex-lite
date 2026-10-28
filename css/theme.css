@@ -201,7 +201,6 @@ html, body { background: var(--ground); color: var(--text); }
   background: linear-gradient(180deg, rgba(58, 58, 64, 0.6), rgba(40, 40, 46, 0.6));
   border: 1px solid var(--rim); border-top-color: var(--rim-light);
 }
-.code-tile { background: rgba(255, 255, 255, 0.08); border: 1px solid var(--rim); color: var(--resume); }
 .text-input { background: var(--fill); border: 2px solid var(--focus); }
 .grid-empty { color: var(--text-3); }
 
