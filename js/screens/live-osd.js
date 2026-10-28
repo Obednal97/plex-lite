@@ -520,7 +520,7 @@
       overPlayer: true,
       onApply: function (key) { self.applyBrowse(key); },
       onCancel: function () { self.showBanner(); },
-      onForward: function (code) { self.key(code, false); },
+      onForward: function (code, e) { self.key(code, !!(e && e.repeat)); },
     }));
   };
 

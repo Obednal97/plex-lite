@@ -32,7 +32,7 @@
   }
 
   // ---- The rail ------------------------------------------------------------------------------------
-  // opts: {current: key, overPlayer: bool, onPreview(key), onApply(key), onCancel(), onForward(code)}
+  // opts: {current: key, overPlayer: bool, onPreview(key), onApply(key), onCancel(), onForward(code, event)}
 
   function BrowseRail(opts) {
     this.opts = opts || {};
@@ -180,7 +180,7 @@
   BrowseRail.prototype.key = function (code, e) {
     // while it fades out, keys belong to the screen underneath (quick typing, OK then Down)
     if (this.closing) {
-      if (this.opts.onForward && code !== K.BLUE) this.opts.onForward(code);
+      if (this.opts.onForward && code !== K.BLUE) this.opts.onForward(code, e);
       return true;
     }
     var repeat = !!(e && e.repeat);
@@ -188,7 +188,7 @@
       // a channel number: close and let the guide (or the player) take it
       var fwd = this.opts.onForward;
       this.close();
-      fwd(code);
+      fwd(code, e);
       return true;
     }
     switch (code) {

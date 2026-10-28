@@ -289,7 +289,7 @@
         self.railOpen = false;
         self.focusArea(area === 'wall' && !self.isWall() ? 'grid' : area);
       },
-      onForward: function (code) { self.key(code); },
+      onForward: function (code, e) { self.key(code, e); },
     }));
   };
 
