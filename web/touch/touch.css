@@ -32,6 +32,8 @@ html.pl-touch {
   --t-grid-min: 100px;
   --t-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   width: auto; height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto;
+  /* the page never moves sideways: no sideways bounce, and (body) nothing wider than the screen */
+  overscroll-behavior-x: none;
   background: var(--t-ground); color-scheme: dark;
   -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
 }
@@ -45,7 +47,7 @@ html.pl-touch.t-tablet {
 html.pl-touch.t-short { --t-tabbar-h: 50px; --t-poster-w: 104px; --t-wide-w: 220px; }
 
 html.pl-touch body {
-  position: static; width: auto; height: auto; min-height: 100%; overflow: visible; margin: 0;
+  position: static; width: auto; height: auto; min-height: 100%; overflow: visible; overflow-x: clip; margin: 0;
   transform: none !important; background: var(--t-ground); color: var(--t-text);
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   font-feature-settings: "cv11", "ss01"; font-size: 16px; line-height: 1.35;
@@ -153,6 +155,7 @@ html.t-scrolled .t-root::before { background: rgba(24, 24, 27, 0.92); }
 
 .t-chips {
   display: flex; overflow-x: auto; padding: 4px var(--t-gr) 4px var(--t-g); scrollbar-width: none; scroll-padding-left: var(--t-g);
+  overscroll-behavior-x: contain;
 }
 .t-chips::-webkit-scrollbar { display: none; }
 .t-chip {
