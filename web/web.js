@@ -1,0 +1,318 @@
+// The web build's platform glue (docs/WEB.md): who we are to Plex, the 1920x1080 stage scaled to
+// the window, keyboard and mouse equivalents of the remote's buttons, the browser's Back button,
+// Chrome's local-network permission, and ending server sessions when the page goes away.
+// Loaded only by the web build (tools/build-web.mjs), after js/app.js. ES2015 like the rest.
+'use strict';
+
+(function () {
+  if (!PL.isWeb) return;
+  var K = PL.KEY;
+  var web = PL.web = {};
+
+  // ---- Who we are to Plex (dashboard, Authorized Devices) -------------------------------------
+
+  web.browser = (function () {
+    var ua = navigator.userAgent;
+    var m;
+    var name = 'Browser';
+    var version = '';
+    if ((m = /Edg\/(\d+)/.exec(ua))) { name = 'Edge'; version = m[1]; }
+    else if ((m = /Firefox\/(\d+)/.exec(ua))) { name = 'Firefox'; version = m[1]; }
+    else if ((m = /(?:Chrome|CriOS)\/(\d+)/.exec(ua))) { name = 'Chrome'; version = m[1]; }
+    else if ((m = /Version\/(\d+)[\d.]* .*Safari/.exec(ua))) { name = 'Safari'; version = m[1]; }
+    var os = /Windows/.test(ua) ? 'Windows' : /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Mac OS X/.test(ua) ? 'macOS'
+      : /Android/.test(ua) ? 'Android' : /CrOS/.test(ua) ? 'ChromeOS' : /Linux/.test(ua) ? 'Linux' : 'Web';
+    return { name: name, version: version, os: os };
+  })();
+
+  PL.plex.device = {
+    platform: web.browser.name,
+    platformVersion: web.browser.version,
+    device: web.browser.os,
+    deviceName: 'Plex Lite (' + web.browser.name + ' on ' + web.browser.os + ')',
+  };
+
+  // ---- On-screen key names -------------------------------------------------------------------
+
+  PL.keyLabels = {
+    OK: 'Enter', Back: 'Esc', Red: 'R', Green: 'G', Yellow: 'Y', Blue: 'B',
+    'Hold OK on': 'Right-click', 'hold OK on': 'right-click',
+  };
+
+  // ---- The stage: 1920x1080, scaled to fit the window (letterboxed) ----------------------------
+
+  function fit() {
+    var w = window.innerWidth;
+    var h = window.innerHeight;
+    var s = Math.min(w / 1920, h / 1080);
+    var x = Math.round((w - 1920 * s) / 2);
+    var y = Math.round((h - 1080 * s) / 2);
+    PL.stageScale = s;
+    document.body.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + s + ')';
+  }
+  window.addEventListener('resize', PL.rafThrottle(fit));
+  document.addEventListener('DOMContentLoaded', fit);
+
+  web.toggleFullscreen = function () {
+    var d = document;
+    var el = d.documentElement;
+    if (d.fullscreenElement || d.webkitFullscreenElement) {
+      (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+    } else if (el.requestFullscreen || el.webkitRequestFullscreen) {
+      var p = (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+      if (p && p.catch) p.catch(function () { PL.toast('This browser wouldn\'t go full screen'); });
+    }
+  };
+
+  // ---- Keyboard ------------------------------------------------------------------------------
+
+  // Keyboard keys for the remote's buttons. Letters are left alone where the screen types them
+  // (Search) and in text fields; browser shortcuts (Ctrl, Cmd, Alt) are never taken.
+  var MAP = {};
+  MAP[82] = K.RED; // R
+  MAP[71] = K.GREEN; // G
+  MAP[89] = K.YELLOW; // Y
+  MAP[66] = K.BLUE; // B
+  MAP[73] = K.INFO; // I
+  MAP[32] = K.PLAY_PAUSE; // Space
+  MAP[178] = K.STOP; // MediaStop
+  MAP[188] = K.REW; // ,
+  MAP[190] = K.FF; // .
+
+  function typingIn(e) {
+    var t = e.target;
+    return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  }
+
+  function screenTypes() {
+    var top = PL.app.top();
+    return !!(top && top.typesLetters && !PL.app.tabsFocused);
+  }
+
+  PL.app.mapKey = function (e) {
+    var code = e.keyCode;
+    if (e.ctrlKey || e.metaKey || e.altKey || typingIn(e)) return code;
+    if (screenTypes() && ((code >= 65 && code <= 90) || code === 32 || code === 188 || code === 190)) return code;
+    return MAP[code] || code;
+  };
+
+  // Hold OK: Shift+Enter or the context-menu key. F: full screen. These run before the app's own
+  // key handling (window capture comes before document capture).
+  window.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey || typingIn(e)) return;
+    var code = e.keyCode;
+    if ((code === K.ENTER && e.shiftKey) || code === 93) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (!e.repeat) PL.app.longPress();
+      return;
+    }
+    if (code === 70 && !screenTypes()) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (!e.repeat) web.toggleFullscreen();
+    }
+  }, true);
+  window.addEventListener('keyup', function (e) {
+    if ((e.keyCode === K.ENTER && e.shiftKey) || e.keyCode === 93 || (e.keyCode === 70 && !screenTypes() && !typingIn(e))) {
+      e.stopImmediatePropagation();
+    }
+  }, true);
+
+  // ---- Mouse and touch: right-click or a long press is hold OK ----------------------------------
+
+  // Cards handle their own right-click (js/ui.js, they know which title was clicked); anywhere
+  // else it acts on what has the focus, which in pointer mode follows the mouse.
+  document.addEventListener('contextmenu', function (e) {
+    if (typingIn(e)) return;
+    e.preventDefault();
+    if (!e.plHandled && PL.app.longPress()) e.plHandled = true;
+    lastHold.handled = !!e.plHandled;
+    lastHold.at = Date.now();
+  });
+
+  // A press held for 550 ms (the TV's hold-OK time) sends a contextmenu to what is under it; the
+  // click that follows the release is swallowed if the hold did something.
+  var HOLD_MS = 550;
+  var lastHold = { at: 0, handled: false };
+  var press = null;
+  document.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0 || typingIn(e)) return;
+    var target = e.target;
+    var x = e.clientX;
+    var y = e.clientY;
+    clearTimeout(press && press.timer);
+    press = {
+      x: x, y: y, fired: false,
+      timer: setTimeout(function () {
+        // a native contextmenu (Android's long-press) already did it
+        if (Date.now() - lastHold.at < 800) { press.fired = lastHold.handled; return; }
+        var ev;
+        try {
+          ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y });
+        } catch (err) { return; }
+        target.dispatchEvent(ev);
+        press.fired = lastHold.handled;
+      }, HOLD_MS),
+    };
+  }, true);
+  var cancelPress = function () { if (press) clearTimeout(press.timer); };
+  document.addEventListener('pointermove', function (e) {
+    if (press && Math.abs(e.clientX - press.x) + Math.abs(e.clientY - press.y) > 12) cancelPress();
+  }, true);
+  document.addEventListener('pointerup', cancelPress, true);
+  document.addEventListener('pointercancel', cancelPress, true);
+  document.addEventListener('click', function (e) {
+    if (press && press.fired) {
+      press = null;
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
+
+  // ---- The browser's Back button (and a mouse's back button) is the remote's Back --------------
+
+  // One history entry is kept above the page. Back pops it: the app goes back a step and the entry
+  // is put back. At the top level with the tab bar focused it is not put back, so the next Back
+  // leaves the site as usual.
+  var armed = false;
+  function arm() {
+    if (armed) return;
+    armed = true;
+    try { history.pushState({ pl: 1 }, ''); } catch (e) { armed = false; }
+  }
+  window.addEventListener('popstate', function () {
+    armed = false;
+    var app = PL.app;
+    if (app.stack.length <= 1 && (app.tabsFocused || !(app.top() && app.top().root))) return;
+    app.press(K.BACK);
+    arm();
+  });
+  var push = PL.app.push;
+  PL.app.push = function () {
+    arm();
+    return push.apply(this, arguments);
+  };
+  document.addEventListener('keydown', function () { arm(); }, true);
+  document.addEventListener('pointerdown', function () { arm(); }, true);
+
+  // ---- Local network access (Chrome 142+) --------------------------------------------------------
+
+  // A public site that reaches a device on the local network (the Plex server at home, through its
+  // *.plex.direct address) needs the user's permission: Chrome asks once, on the first such request.
+  // Until it's allowed, Plex Lite uses Remote Access or the relay; when it's allowed later, it moves
+  // to the local address. state: 'granted' | 'denied' | 'prompt' | null (no such permission here).
+  web.lna = { state: null, status: null };
+  function watchLna() {
+    if (!navigator.permissions || !navigator.permissions.query) return;
+    var names = ['local-network-access', 'local-network'];
+    var tryName = function (i) {
+      if (i >= names.length) return;
+      var q;
+      try { q = navigator.permissions.query({ name: names[i] }); } catch (e) { tryName(i + 1); return; }
+      q.then(function (status) {
+        web.lna.status = status;
+        web.lna.state = status.state;
+        status.onchange = function () {
+          web.lna.state = status.state;
+          PL.log('local network access', status.state);
+          onLnaChange(status.state);
+        };
+      }, function () { tryName(i + 1); });
+    };
+    tryName(0);
+  }
+
+  function onLnaChange(state) {
+    var s = PL.plex.server;
+    if (!PL.app.ready || !s) return;
+    if (state === 'granted' && (s.kind === 'remote' || s.kind === 'relay')) {
+      PL.plex.ensureServer(true).then(function (server) {
+        if (server.kind === 'lan') PL.toast('Now streaming over your local network');
+      }, function () {});
+    } else if (state === 'denied' && s.kind === 'lan') {
+      PL.plex.ensureServer(true).then(function () {
+        PL.toast('Local network access is off: using Plex Remote Access');
+      }, function () {});
+    }
+  }
+  watchLna();
+
+  web.lnaLabel = function () {
+    switch (web.lna.state) {
+      case 'granted': return 'Allowed';
+      case 'denied': return 'Blocked';
+      case 'prompt': return 'Not asked yet';
+      default: return 'Not needed here';
+    }
+  };
+
+  // ---- Settings rows (js/screens/settings.js shows them on the web) --------------------------------
+
+  var info = function () {};
+  web.settingsRows = function (rebuild) {
+    var full = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    return [
+      { label: 'Local network access', value: web.lnaLabel(), action: explainLna },
+      { label: 'Full screen', value: full ? 'On' : 'Off', action: function () {
+        web.toggleFullscreen();
+        setTimeout(rebuild, 400);
+      } },
+      { label: 'Keyboard and mouse', value: '', action: explainKeys },
+    ];
+  };
+
+  function sheet(heading, lines) {
+    PL.app.push(PL.screens.sheet([{ heading: heading, rows: lines.map(function (l) {
+      return { label: l[0], sub: l[1] || '', action: info };
+    }) }], { closeOnSelect: false }));
+  }
+
+  function explainLna() {
+    var s = PL.plex.server || {};
+    var lines = [['Now connected', s.kind === 'lan' ? 'over your local network' : s.kind === 'relay' ? 'through the Plex relay' : 'through Plex Remote Access']];
+    if (web.lna.state === 'denied') {
+      lines.push(['Blocked for this site', 'To stream directly at home: site settings (the icon left of the address), Local network access, Allow; then reload']);
+    } else if (web.lna.state === 'prompt') {
+      lines.push(['Not asked yet', 'At home, the browser asks to let this site reach devices on your local network: allow it to stream straight from your server']);
+    } else if (web.lna.state === 'granted') {
+      lines.push(['Allowed', 'At home, Plex Lite streams straight from your server']);
+    } else {
+      lines.push(['This browser doesn\'t ask', 'It reaches your server at home directly when it can']);
+    }
+    lines.push(['Away from home', 'Plex Lite uses Plex Remote Access, else the Plex relay (slower, limited quality)']);
+    sheet('Local network access', lines);
+  }
+
+  function explainKeys() {
+    sheet('Keyboard and mouse', [
+      ['Arrows, Enter', 'Move, OK'], ['Esc or Backspace', 'Back (the browser\'s Back button too)'],
+      ['Hold Enter, Shift+Enter, right-click or a long press', 'Hold OK (quick actions)'],
+      ['Space', 'Play / pause'], [', and .', 'Rewind / fast-forward'], ['Page Up / Page Down', 'Channel up / down, page'],
+      ['R  G  Y  B', 'Red, Green, Yellow and Blue buttons'], ['I', 'Info'], ['F', 'Full screen'],
+      ['Mouse', 'Point and click; the wheel moves between rows'],
+    ]);
+  }
+
+  web.explainPlugin = function (p) {
+    sheet(p.name + ' works in the TV app only', [
+      ['It signs in through a background service on the TV', 'A browser can\'t run one, and a web page can\'t hold its server\'s sign-in cookie'],
+      ['Use it on the TV', 'Requests, downloads and problem reports work there as before'],
+    ]);
+  };
+
+  // ---- Leaving the page: end playback and transcode sessions ------------------------------------
+
+  // Requests made while the page unloads go out with fetch keepalive (core.js PL.http), which the
+  // browser finishes after the page is gone.
+  window.addEventListener('pagehide', function () {
+    PL.leaving = true;
+    PL.app.stack.slice().forEach(function (s) { if (s.onPageHide) s.onPageHide(); });
+  });
+  // back from the back/forward cache: a player stopped on the way out closes
+  window.addEventListener('pageshow', function (e) {
+    PL.leaving = false;
+    if (!e.persisted) return;
+    PL.app.stack.slice().forEach(function (s) { if (s.state === 'stopped' && s.exit) s.exit(); });
+  });
+})();

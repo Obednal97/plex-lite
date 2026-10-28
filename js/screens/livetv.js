@@ -413,8 +413,8 @@
     if (!this.list.length) {
       this.cur = null;
       this.showStatus(!G.channels.length ? 'No channels found'
-        : this.sel.base === 'fav' ? 'No channels here yet. Hold OK on a channel to add it to Favourites.'
-          : 'No channels in ' + B.selLabel(this.sel, G.browseCtx()) + ' right now. Press Blue to browse.');
+        : this.sel.base === 'fav' ? 'No channels here yet. ' + PL.keyLabel('Hold OK on') + ' a channel to add it to Favourites.'
+          : 'No channels in ' + B.selLabel(this.sel, G.browseCtx()) + ' right now. Press ' + PL.keyLabel('Blue') + ' to browse.');
       if (this.area === 'grid') this.focusArea('subnav');
       this.paintDetail();
       return;

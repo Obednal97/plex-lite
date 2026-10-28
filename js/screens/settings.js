@@ -35,8 +35,10 @@
       var defs = [
         { label: 'Profile', value: (PL.storage.get('profile', null) || { title: 'Account owner' }).title, action: pickProfile },
         { label: 'Server', value: (s.name || '—') + ' · ' + (KIND_LABEL[s.kind] || 'Unknown'), action: reconnect },
-        addressRow('Local server address', 'local', 'e.g. http://192.168.0.10:32400'),
-        addressRow('Remote server address', 'remote', 'e.g. https://plex.example.com:32400'),
+        // a browser on an https page can only use https addresses: one row, tried before discovery
+        PL.isWeb ? null : addressRow('Local server address', 'local', 'e.g. http://192.168.0.10:32400'),
+        addressRow(PL.isWeb ? 'Server address' : 'Remote server address', 'remote', 'e.g. https://plex.example.com:32400'),
+        PL.isWeb ? PL.web.settingsRows(build) : null,
         toggle('Autoplay next episode', 'autoplayNext', true),
         toggle('Skip intros automatically', 'autoSkipIntro', false),
         toggle('Skip credits automatically', 'autoSkipCredits', false),
@@ -60,8 +62,12 @@
           },
         };
       });
-      defs.splice(defs.length - 2, 0, pluginToggles, externalPluginRows(), PL.plugins.settingsRows(build));
-      defs = [].concat.apply([], defs);
+      // plugins this build can't run (the web build: ones with a TV background service) say why
+      var unavailable = PL.plugins.unavailable.map(function (p) {
+        return { label: 'Plugin · ' + p.name, value: 'TV app only', action: function () { PL.web.explainPlugin(p); } };
+      });
+      defs.splice(defs.length - 2, 0, pluginToggles, unavailable, externalPluginRows(), PL.plugins.settingsRows(build));
+      defs = [].concat.apply([], defs).filter(Boolean);
       PL.clear(panel);
       rows = defs.map(function (d, i) {
         var n = PL.el('div', 'row', d.label);
@@ -153,6 +159,9 @@
           var st = store.state(e);
           var sub = !e.compatible && st.state === 'not-installed' ? e.needs
             : st.state === 'update-available' ? 'Update to ' + e.version : STATE_TEXT[st.state];
+          if (PL.isWeb && e.kind === 'service') {
+            return { label: e.name, sub: 'TV app only', action: function () { PL.web.explainPlugin({ name: e.name, reason: 'tv-service' }); } };
+          }
           return { label: e.name, sub: sub, action: function () { catalogueEntrySheet(e); } };
         });
         if (!rows.length) rows.push({ label: 'No plugins available', sub: c.errors[0] || '', action: function () {} });
@@ -313,7 +322,7 @@
 
     function signOut() {
       PL.app.push(screens.sheet([{
-        heading: 'Sign out of Plex?',
+        heading: PL.isWeb ? 'Sign out of Plex? This also clears Plex Lite\'s settings, favourites and plugins in this browser.' : 'Sign out of Plex?',
         rows: [
           { label: 'Sign out', action: function () { PL.plex.signOut(); PL.app.start(); } },
           { label: 'Cancel', action: function () {} },

@@ -1,0 +1,8 @@
+/* The web build only (tools/build-web.mjs). The app is drawn on a 1920x1080 stage (css/app.css);
+   web/web.js scales the body to fit the window, centred, with black bars round it. */
+html { width: 100%; height: 100%; background: #000; }
+body { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+
+/* Sign-in (web/web-signin.js) */
+.web-signin-buttons { margin: 8px 0 28px; }
+.web-signin .signin-url { margin-bottom: 4px; }

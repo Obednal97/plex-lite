@@ -239,11 +239,31 @@
     handleKey({ keyCode: PL.KEY.ENTER, target: document.body, repeat: false, preventDefault: function () {} });
   }
 
+  // The key code the app acts on. The web build maps keyboard keys onto remote buttons here
+  // (app.mapKey, web/web.js: R/G/Y/B for the colour buttons, Space for play/pause...).
+  function codeOf(e) {
+    return app.mapKey ? app.mapKey(e) : e.keyCode;
+  }
+
+  // Hold OK without holding a key (the web build: right-click, long-press, Shift+Enter). Returns
+  // true when the screen had quick actions to show.
+  app.longPress = function () {
+    var s = app.top();
+    if (!s || !s.longPress || app.tabsFocused || !s.key) return false;
+    return !!s.key(PL.KEY.OK_LONG);
+  };
+
+  // A remote button pressed from elsewhere (the web build's history Back).
+  app.press = function (code) {
+    handleKey({ keyCode: code, target: document.body, repeat: false, preventDefault: function () {} });
+  };
+
   function onKeyUp(e) {
     // screens that act on release (the player's seek bar) get every key-up
     var s = app.top();
-    if (s && s.keyUp) s.keyUp(e.keyCode);
-    if (e.keyCode !== PL.KEY.ENTER || !ok.down) return;
+    var code = codeOf(e);
+    if (s && s.keyUp) s.keyUp(code);
+    if (code !== PL.KEY.ENTER || !ok.down) return;
     ok.down = false;
     clearTimeout(ok.timer);
     if (!ok.long) okPress();
@@ -251,7 +271,7 @@
   }
 
   function onKey(e) {
-    if (e.keyCode === PL.KEY.ENTER && (ok.down || okWanted(e))) {
+    if (codeOf(e) === PL.KEY.ENTER && (ok.down || okWanted(e))) {
       e.preventDefault();
       if (e.repeat || ok.down) return;
       ok.down = true;
@@ -271,7 +291,7 @@
   }
 
   function handleKey(e) {
-    var code = e.keyCode;
+    var code = codeOf(e);
     if (e.repeat) {
       document.body.classList.add('fast');
       clearTimeout(fastTimer);
@@ -424,7 +444,7 @@
       if (!PL.storage.get('tip.holdOk', false)) {
         setTimeout(function () {
           if (!app.ready || !app.top() || !app.top().longPress || app.top().noHoldTip) return;
-          PL.toast('Tip: hold OK on any title for more options', 6000);
+          PL.toast('Tip: ' + PL.keyLabel('hold OK on') + ' any title for more options', 6000);
           PL.storage.set('tip.holdOk', true);
         }, 5000);
       }
@@ -491,7 +511,9 @@
     document.addEventListener('keydown', onKey, true);
     document.addEventListener('keyup', onKeyUp, true);
     document.addEventListener('visibilitychange', function () {
-      if (!document.hidden) return;
+      // the TV app leaving the foreground ends playback; a browser tab in the background keeps
+      // playing (the web build ends sessions when the page goes away, web/web.js)
+      if (!document.hidden || PL.isWeb) return;
       app.stack.slice().forEach(function (s) { if (s.onHidden) s.onHidden(); });
     });
     perf.on = !!PL.storage.get('perf', false);
@@ -529,13 +551,21 @@
         if (e.keyCode >= 37 && e.keyCode <= 40) pointer.set(false);
       }, true);
       var wheelAt = 0;
+      // trackpads send a stream of small deltas: in the browser a step needs ~40 px of travel
+      var need = PL.isWeb ? 40 : 0;
+      var sum = { x: 0, y: 0 };
       document.addEventListener('wheel', function (e) {
         e.preventDefault();
         var now = Date.now();
-        if (now - wheelAt < 180) return;
+        var px = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? 800 : 1;
+        if (!PL.isWeb || now - wheelAt > 400) sum.x = sum.y = 0; // the TV steps on each event alone
+        sum.x += e.deltaX * px;
+        sum.y += e.deltaY * px;
+        if (now - wheelAt < 180 || Math.max(Math.abs(sum.x), Math.abs(sum.y)) < need) return;
         wheelAt = now;
-        var horizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
-        var code = horizontal ? (e.deltaX > 0 ? PL.KEY.RIGHT : PL.KEY.LEFT) : (e.deltaY > 0 ? PL.KEY.DOWN : PL.KEY.UP);
+        var horizontal = Math.abs(sum.x) > Math.abs(sum.y);
+        var code = horizontal ? (sum.x > 0 ? PL.KEY.RIGHT : PL.KEY.LEFT) : (sum.y > 0 ? PL.KEY.DOWN : PL.KEY.UP);
+        sum.x = sum.y = 0;
         handleKey({ keyCode: code, target: document.body, preventDefault: function () {} });
       });
     },

@@ -556,11 +556,22 @@
     iframe.setAttribute('sandbox', 'allow-scripts');
     iframe.setAttribute('referrerpolicy', 'no-referrer');
     iframe.style.cssText = 'width:0;height:0;border:0';
+    // The web build: the page's Content-Security-Policy (no inline scripts) would also apply to a
+    // srcdoc frame, so the frame is a static page with its own policy (web/plugin-frame.html) that
+    // writes this document into itself when the app sends it.
+    var viaPage = PL.isWeb;
     var listener = function (e) {
-      if (e.source === iframe.contentWindow) onMessage(e.data);
+      if (e.source !== iframe.contentWindow) return;
+      if (viaPage && e.data && e.data.plFrameReady === 1) {
+        viaPage = false;
+        iframe.contentWindow.postMessage({ plFrameDoc: srcdoc }, '*');
+        return;
+      }
+      onMessage(e.data);
     };
     window.addEventListener('message', listener);
-    iframe.srcdoc = srcdoc;
+    if (viaPage) iframe.src = 'web/plugin-frame.html';
+    else iframe.srcdoc = srcdoc;
     holder.appendChild(iframe);
     return {
       post: function (m) { if (iframe.contentWindow) iframe.contentWindow.postMessage(m, '*'); },

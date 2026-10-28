@@ -120,7 +120,7 @@
     var hints = PL.el('div', 'osd-hints live-hints');
     hint(hints, '▲▼', 'Channels');
     hint(hints, '0–9', 'Channel number');
-    this.hintOk = hint(hints, 'OK', 'Pause');
+    this.hintOk = hint(hints, PL.keyLabel('OK'), 'Pause');
     b.appendChild(hints);
     root.appendChild(b);
 
@@ -138,10 +138,10 @@
     clip.appendChild(this.guideTrack);
     g.appendChild(clip);
     var gh = PL.el('div', 'osd-hints live-guide-hints');
-    hint(gh, 'OK', 'Watch');
+    hint(gh, PL.keyLabel('OK'), 'Watch');
     hint(gh, 'CH ±', 'Page');
     hint(gh, '●', 'Browse').firstChild.classList.add('key-blue');
-    hint(gh, 'Back', 'Close');
+    hint(gh, PL.keyLabel('Back'), 'Close');
     g.appendChild(gh);
     root.appendChild(g);
 

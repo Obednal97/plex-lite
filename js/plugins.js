@@ -39,7 +39,14 @@
     PL.storage.set('plugins.disabled', list);
   };
 
+  // Plugins this build can't run, with why (the web build has no webOS background services).
+  plugins.unavailable = [];
+
   plugins.register = function (def) {
+    if (PL.isWeb && def && def.services && def.services.length) {
+      plugins.unavailable.push({ id: def.id, name: def.name, reason: 'tv-service' });
+      return false;
+    }
     var problem = !def ? 'no definition'
       : !ID_RE.test(String(def.id || '')) ? 'bad id'
       : !def.name ? 'no name'

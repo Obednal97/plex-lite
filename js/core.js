@@ -6,6 +6,13 @@ var PL = window.PL = window.PL || {};
 
 PL.VERSION = '0.1.0';
 
+// The platform: the TV app (webOS), or the web build (tools/build-web.mjs sets PL_PLATFORM to 'web'
+// before this file loads; see docs/WEB.md). webOS-only paths check PL.isWeb and stay off on the web.
+PL.isWeb = window.PL_PLATFORM === 'web';
+// The web build scales the 1920x1080 stage to the window; measurements taken with
+// getBoundingClientRect are divided by this to get stage pixels.
+PL.stageScale = 1;
+
 PL.KEY = {
   LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13,
   BACK: 461, ESC: 27, BACKSPACE: 8,
@@ -18,6 +25,13 @@ PL.KEY = {
 
 PL.isBack = function (code) {
   return code === PL.KEY.BACK || code === PL.KEY.ESC || code === PL.KEY.BACKSPACE;
+};
+
+// The name of a remote button in on-screen hints ('OK', 'Back', 'Yellow', 'Hold OK'...). The web
+// build swaps in keyboard names (PL.keyLabels, web/web.js).
+PL.keyLabels = null;
+PL.keyLabel = function (name) {
+  return (PL.keyLabels && PL.keyLabels[name]) || name;
 };
 
 // Recent log lines are also kept in memory (PL.logs) so they can be read over DevTools, which
@@ -115,6 +129,14 @@ PL.query = function (params) {
 // has .abort(); an aborted request rejects with err.aborted = true.
 PL.http = function (method, url, opts) {
   opts = opts || {};
+  // the web build, while the page unloads: fetch keepalive outlives the page (an XHR would be
+  // cancelled), so "stopped" reports and transcode stops still reach the server
+  if (PL.leaving && window.fetch) {
+    var sent = fetch(url, { method: method, keepalive: true, credentials: 'omit', headers: { Accept: 'application/json' } })
+      .then(function () { return null; });
+    sent.abort = function () {};
+    return sent;
+  }
   var xhr = new XMLHttpRequest();
   var promise = new Promise(function (resolve, reject) {
     xhr.open(method, url, true);
@@ -247,6 +269,7 @@ PL.errorMessage = function (err) {
 };
 
 PL.exitApp = function () {
+  if (PL.isWeb) return; // a web page can't close itself; Back at the top just stays put
   if (window.PalmSystem && window.PalmSystem.platformBack) window.PalmSystem.platformBack();
   else window.close();
 };
