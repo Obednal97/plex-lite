@@ -13,6 +13,7 @@
 <script>
 'use strict';
 (function () {
+  if (window.parent === window) return; // opened on its own, not as the app's plugin frame
   var boot = function (e) {
     if (e.source !== window.parent || !e.data || typeof e.data.plFrameDoc !== 'string') return;
     window.removeEventListener('message', boot);

@@ -99,7 +99,9 @@
     PL.storage.set('token', token);
   };
 
-  plex.signOut = function () {
+  // forget: the user chose Sign out (Settings). In the web build that also clears everything else
+  // Plex Lite kept in the browser; a sign-in that expired or was revoked keeps the settings.
+  plex.signOut = function (forget) {
     plex.token = null;
     plex.server = null;
     PL.storage.del('token');
@@ -108,7 +110,7 @@
     PL.storage.del('manualServer');
     // a browser may be shared: drop everything the app kept (settings, favourites, search index,
     // plugins) and start again as a new device
-    if (PL.isWeb) {
+    if (PL.isWeb && forget) {
       try {
         for (var i = localStorage.length - 1; i >= 0; i--) {
           var k = localStorage.key(i);
@@ -188,7 +190,11 @@
   plex.connect = function (resource) {
     var cands = plex.candidates(resource);
     var token = resource.accessToken || plex.token;
-    if (!cands.length) return Promise.reject(new Error('This server has no addresses'));
+    if (!cands.length) {
+      return Promise.reject(new Error(PL.isWeb && (resource.connections || []).length
+        ? resource.name + ' has no secure address, which a browser needs: in Plex, Settings, Network, set Secure connections to Preferred'
+        : 'This server has no addresses'));
+    }
     return new Promise(function (resolve, reject) {
       var state = cands.map(function () { return 'pending'; });
       var settled = false;

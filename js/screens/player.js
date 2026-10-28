@@ -440,7 +440,9 @@
     // start of the stream. Once the video says so, positions stop adding the offset.
     if (PL.isWeb) {
       on('canplay', function () {
-        if (self.mode !== 'transcode' || self.live || !(self.base > 3)) return;
+        // once per stream: a later canplay (after a stall) must not move the base again
+        if (self.rebased || self.mode !== 'transcode' || self.live || !(self.base > 3)) return;
+        self.rebased = true;
         if (Math.abs(v.currentTime - self.base) > 5) return;
         PL.log('stream time is the file\'s time (offset ' + self.base + 's)');
         self.base = 0;
@@ -1604,14 +1606,15 @@
   Player.prototype.start = function (offsetMs) {
     var self = this;
     if (this.state === 'stopped') return;
-    this.teardownVideo();
-    this.stopTranscode();
-    var gen = ++this.gen;
     // The web build: a restart (seek, track change) gets a new session id, so the old one is
-    // reported stopped (Plex would list it as playing for minutes).
+    // reported stopped where it was (Plex would list it as playing for minutes).
     if (PL.isWeb && !this.live && this.session && this.full && this.lastReported && this.lastReported !== 'stopped') {
       this.report(true, 'stopped', this.position());
     }
+    this.rebased = false;
+    this.teardownVideo();
+    this.stopTranscode();
+    var gen = ++this.gen;
     // Live TV: Plex binds the tuned stream to the session id sent with the tune, so playback must
     // reuse it (a different id gets "Failed to find consumer" and no segments).
     this.session = this.live && this.liveSession ? this.liveSession : PL.uuid();
@@ -2524,6 +2527,8 @@
   // why: the web build's stream error (hls.js), when the <video> element itself has none
   Player.prototype.onVideoError = function (why) {
     if (!this.video.getAttribute('src') || this.state === 'stopped' || this.state === 'error' || this.state === 'ended') return;
+    // the web build: hls.js recovers media errors itself and calls back with `why` when it can't
+    if (!why && this.video.plHls) return;
     var err = this.video.error;
     PL.warn('video error', err && err.code, this.mode, typeof why === 'string' ? why : '');
     if (this.mode === 'direct' && !this.retried) {
@@ -2560,8 +2565,10 @@
     }
     PL.webMedia.attach(this.video, url, isHls, function (why) {
       if (gen !== self.gen) return;
-      self.onVideoError(why);
-    });
+      // nothing attached (no way to play HLS here): fail at once rather than wait on "Loading…"
+      if (!self.video.getAttribute('src')) self.fail(new Error(why));
+      else self.onVideoError(why);
+    }, !!this.live);
   };
 
   Player.prototype.teardownVideo = function () {

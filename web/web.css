@@ -6,3 +6,14 @@ body { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 /* Sign-in (web/web-signin.js) */
 .web-signin-buttons { margin: 8px 0 28px; }
 .web-signin .signin-url { margin-bottom: 4px; }
+
+/* Explanation cards (web/web.js: Local network access, Keyboard and mouse, TV-only plugins) */
+.web-info { left: 330px; top: 120px; width: 1148px; min-height: 0; padding: 48px 56px 40px; text-align: left; }
+.web-info h1 { margin-bottom: 24px; }
+.web-info-row { padding: 10px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.web-info-label { display: inline-block; width: 440px; padding-right: 24px; box-sizing: border-box; vertical-align: top; font-size: 24px; line-height: 32px; font-weight: 600; }
+.web-info-text { display: inline-block; width: 660px; vertical-align: top; font-size: 23px; line-height: 32px; color: var(--text-2); }
+.web-info .web-signin-buttons { margin: 28px 0 0; }
+
+/* the page never scrolls or bounces: the stage is the whole page */
+html, body { overscroll-behavior: none; }

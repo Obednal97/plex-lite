@@ -554,11 +554,14 @@
       // trackpads send a stream of small deltas: in the browser a step needs ~40 px of travel
       var need = PL.isWeb ? 40 : 0;
       var sum = { x: 0, y: 0 };
+      var lastWheel = 0;
       document.addEventListener('wheel', function (e) {
         e.preventDefault();
+        if (PL.isWeb && e.ctrlKey) return; // a pinch: the browser's zoom, not a step
         var now = Date.now();
         var px = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? 800 : 1;
-        if (!PL.isWeb || now - wheelAt > 400) sum.x = sum.y = 0; // the TV steps on each event alone
+        if (!PL.isWeb || now - lastWheel > 400) sum.x = sum.y = 0; // the TV steps on each event alone
+        lastWheel = now;
         sum.x += e.deltaX * px;
         sum.y += e.deltaY * px;
         if (now - wheelAt < 180 || Math.max(Math.abs(sum.x), Math.abs(sum.y)) < need) return;
@@ -567,7 +570,7 @@
         var code = horizontal ? (sum.x > 0 ? PL.KEY.RIGHT : PL.KEY.LEFT) : (sum.y > 0 ? PL.KEY.DOWN : PL.KEY.UP);
         sum.x = sum.y = 0;
         handleKey({ keyCode: code, target: document.body, preventDefault: function () {} });
-      });
+      }, PL.isWeb ? { passive: false } : undefined); // browsers make document wheel listeners passive
     },
   };
   app.pointer = pointer;

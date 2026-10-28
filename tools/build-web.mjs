@@ -10,11 +10,18 @@
 // scripts and stylesheet added. The TV's dev-config hook and the plugins' webOS services are left out.
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const APP = fileURLToPath(new URL('..', import.meta.url));
-const OUT = process.argv[2] ? join(process.cwd(), process.argv[2]) : join(APP, 'dist/web');
+const OUT = resolve(process.argv[2] || join(APP, 'dist/web'));
+// the output folder is emptied first: never the app itself, a folder above it, or one of its sources
+const appDir = resolve(APP);
+if (appDir === OUT || appDir.startsWith(OUT + sep) || ['css', 'js', 'img', 'plugins', 'catalog', 'web', 'tools', 'docs', 'test']
+  .some((d) => OUT === join(appDir, d) || OUT.startsWith(join(appDir, d) + sep))) {
+  console.error(`build-web: refusing to build into ${OUT}`);
+  process.exit(1);
+}
 
 // What ships. Plugin service/ folders are webOS background services (TV only).
 const COPY = ['css', 'js', 'img', 'plugins', 'catalog'];
@@ -61,6 +68,9 @@ for (const [src, dest] of Object.entries(WEB)) {
   cpSync(join(APP, src), join(OUT, dest));
   files++;
 }
+// hls.js points at a source map that isn't shipped (a 404 in the browser's developer tools)
+const hlsOut = join(OUT, 'web/vendor/hls.js/hls.light.min.js');
+writeFileSync(hlsOut, readFileSync(hlsOut, 'utf8').replace(/\n\/\/# sourceMappingURL=\S+\s*$/, '\n'));
 
 // ---- index.html --------------------------------------------------------------------------------
 

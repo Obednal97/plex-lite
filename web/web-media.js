@@ -104,7 +104,8 @@
   // ---- Attaching a stream ------------------------------------------------------------------------
 
   // url: a file (direct play) or an HLS playlist. onFatal(message) when hls.js gives up.
-  function attach(video, url, isHls, onFatal) {
+  // live: a Live TV channel.
+  function attach(video, url, isHls, onFatal, live) {
     detach(video);
     video.setAttribute('playsinline', '');
     if (!isHls || useNative || !hlsJs) {
@@ -141,6 +142,20 @@
     hls.loadSource(url);
     hls.attachMedia(video);
     video.plHls = hls;
+    // Right after a tune the server writes segments faster than real time, so hls.js starts well
+    // behind the live edge and the banner would say "25 sec behind live" before any pause. Once
+    // playback has settled, a channel that is still far behind catches up to the edge, once.
+    if (live) {
+      var settle = function () {
+        video.removeEventListener('playing', settle);
+        setTimeout(function () {
+          if (video.plHls !== hls || video.paused || !video.seekable.length) return;
+          var edge = video.seekable.end(video.seekable.length - 1);
+          if (edge - video.currentTime > 10) video.currentTime = edge - 6;
+        }, 3000);
+      };
+      video.addEventListener('playing', settle);
+    }
   }
 
   function detach(video) {

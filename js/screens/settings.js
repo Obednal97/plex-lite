@@ -324,7 +324,12 @@
       PL.app.push(screens.sheet([{
         heading: PL.isWeb ? 'Sign out of Plex? This also clears Plex Lite\'s settings, favourites and plugins in this browser.' : 'Sign out of Plex?',
         rows: [
-          { label: 'Sign out', action: function () { PL.plex.signOut(); PL.app.start(); } },
+          { label: 'Sign out', action: function () {
+            PL.plex.signOut(true);
+            // the web build starts afresh, so nothing from the old session stays in memory
+            if (PL.isWeb) location.reload();
+            else PL.app.start();
+          } },
           { label: 'Cancel', action: function () {} },
         ],
       }], { focus: 1 }));

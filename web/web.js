@@ -41,9 +41,11 @@
 
   // ---- The stage: 1920x1080, scaled to fit the window (letterboxed) ----------------------------
 
+  // The layout viewport, not innerWidth: a phone's browser zooms out to show the 1920 px body
+  // before it is scaled, which makes innerWidth that wide too.
   function fit() {
-    var w = window.innerWidth;
-    var h = window.innerHeight;
+    var w = document.documentElement.clientWidth || window.innerWidth;
+    var h = document.documentElement.clientHeight || window.innerHeight;
     var s = Math.min(w / 1920, h / 1080);
     var x = Math.round((w - 1920 * s) / 2);
     var y = Math.round((h - 1080 * s) / 2);
@@ -51,6 +53,7 @@
     document.body.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + s + ')';
   }
   window.addEventListener('resize', PL.rafThrottle(fit));
+  fit(); // this script runs at the end of <body>: scale before the first layout
   document.addEventListener('DOMContentLoaded', fit);
 
   web.toggleFullscreen = function () {
@@ -97,26 +100,35 @@
   };
 
   // Hold OK: Shift+Enter or the context-menu key. F: full screen. These run before the app's own
-  // key handling (window capture comes before document capture).
+  // key handling (window capture comes before document capture). A key whose key-down was taken
+  // here has its key-up taken too, and only then.
+  var taken = {};
+  // keys that toggle something: a held key's auto-repeat would flip it on and off
+  var NO_REPEAT = { 32: 1, 82: 1, 71: 1, 89: 1, 66: 1, 73: 1 };
   window.addEventListener('keydown', function (e) {
     if (e.ctrlKey || e.metaKey || e.altKey || typingIn(e)) return;
     var code = e.keyCode;
-    if ((code === K.ENTER && e.shiftKey) || code === 93) {
+    var take = function () {
       e.preventDefault();
       e.stopImmediatePropagation();
+      taken[code] = true;
+    };
+    if ((code === K.ENTER && e.shiftKey) || code === 93) {
+      take();
       if (!e.repeat) PL.app.longPress();
       return;
     }
     if (code === 70 && !screenTypes()) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
+      take();
       if (!e.repeat) web.toggleFullscreen();
+      return;
     }
+    if (e.repeat && NO_REPEAT[code] && !screenTypes()) take();
   }, true);
   window.addEventListener('keyup', function (e) {
-    if ((e.keyCode === K.ENTER && e.shiftKey) || e.keyCode === 93 || (e.keyCode === 70 && !screenTypes() && !typingIn(e))) {
-      e.stopImmediatePropagation();
-    }
+    if (!taken[e.keyCode]) return;
+    delete taken[e.keyCode];
+    e.stopImmediatePropagation();
   }, true);
 
   // ---- Mouse and touch: right-click or a long press is hold OK ----------------------------------
@@ -184,7 +196,11 @@
   window.addEventListener('popstate', function () {
     armed = false;
     var app = PL.app;
-    if (app.stack.length <= 1 && (app.tabsFocused || !(app.top() && app.top().root))) return;
+    // the top level: this Back leaves the site (the entry it popped was only ours)
+    if (app.stack.length <= 1 && (app.tabsFocused || !(app.top() && app.top().root))) {
+      history.back();
+      return;
+    }
     app.press(K.BACK);
     arm();
   });
@@ -225,7 +241,11 @@
 
   function onLnaChange(state) {
     var s = PL.plex.server;
-    if (!PL.app.ready || !s) return;
+    if (!PL.app.ready || !s) {
+      // allowed while Plex Lite was still connecting: look again once it has started
+      setTimeout(function () { if (web.lna.state === state) onLnaChange(state); }, 2000);
+      return;
+    }
     if (state === 'granted' && (s.kind === 'remote' || s.kind === 'relay')) {
       PL.plex.ensureServer(true).then(function (server) {
         if (server.kind === 'lan') PL.toast('Now streaming over your local network');
@@ -249,7 +269,6 @@
 
   // ---- Settings rows (js/screens/settings.js shows them on the web) --------------------------------
 
-  var info = function () {};
   web.settingsRows = function (rebuild) {
     var full = !!(document.fullscreenElement || document.webkitFullscreenElement);
     return [
@@ -262,10 +281,29 @@
     ];
   };
 
+  // A card of explanations: a title, then each line as a label with its text under it. Enter or
+  // Back closes it.
   function sheet(heading, lines) {
-    PL.app.push(PL.screens.sheet([{ heading: heading, rows: lines.map(function (l) {
-      return { label: l[0], sub: l[1] || '', action: info };
-    }) }], { closeOnSelect: false }));
+    var el = PL.el('div', 'web-info-screen');
+    var card = PL.el('div', 'center-card web-info');
+    card.appendChild(PL.el('h1', '', heading));
+    var list = PL.el('div', 'web-info-list');
+    lines.forEach(function (l) {
+      var row = PL.el('div', 'web-info-row');
+      row.appendChild(PL.el('div', 'web-info-label', l[0]));
+      if (l[1]) row.appendChild(PL.el('div', 'web-info-text', l[1]));
+      list.appendChild(row);
+    });
+    card.appendChild(list);
+    var row = new PL.ui.ButtonRow([{ label: 'Done', kind: 'primary', action: function () { PL.app.pop(); } }]);
+    row.setFocused(true);
+    card.appendChild(PL.el('div', { className: 'web-signin-buttons' }, [row.el]));
+    el.appendChild(card);
+    PL.app.push({
+      el: el,
+      show: function () { PL.app.backdrop.set(null, 'none'); },
+      key: function (code) { return PL.isBack(code) ? false : row.key(code) || true; },
+    });
   }
 
   function explainLna() {

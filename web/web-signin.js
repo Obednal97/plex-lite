@@ -24,6 +24,14 @@
     return null;
   }
 
+  // plex.tv's errors in words (PL.errorMessage speaks of "the Plex server"), and how long to wait
+  // before asking again: longer when plex.tv says it's getting too many requests.
+  function tvProblem(err) {
+    if (err && err.status === 429) return { text: 'plex.tv is busy. Trying again in a moment…', ms: 30000 };
+    var why = !err || !err.status ? 'no connection' : 'HTTP ' + err.status;
+    return { text: 'Could not reach plex.tv (' + why + '). Retrying…', ms: 5000 };
+  }
+
   // Where Plex sends the browser after sign-in: a small page that closes the popup, or this app.
   function forwardUrl(popup) {
     var base = location.origin + location.pathname.replace(/[^/]*$/, '');
@@ -74,7 +82,14 @@
         }, function (err) {
           if (!alive) return;
           // 404: the PIN expired
-          if (err && err.status === 404) { if (view === 'code') newLinkPin(); else freshPin(); return; }
+          if (err && err.status === 404) {
+            pending(null);
+            if (view === 'code') { newLinkPin(); return; }
+            setStatus('That sign-in timed out. Choose Sign in with Plex to try again.', false);
+            freshPin();
+            return;
+          }
+          if (err && err.status === 429) { clearTimeout(timers.poll); timers.poll = setTimeout(function () { poll(p); }, 15000); return; }
           poll(p);
         });
       }, POLL_MS);
@@ -95,8 +110,9 @@
         return p;
       }, function (err) {
         if (!alive) return null;
-        setStatus('Could not reach plex.tv (' + PL.errorMessage(err) + '). Retrying…', false);
-        timers.pin = setTimeout(freshPin, 5000);
+        var t = tvProblem(err);
+        setStatus(t.text, false);
+        timers.pin = setTimeout(freshPin, t.ms);
         return null;
       });
     }
@@ -125,7 +141,7 @@
         return;
       }
       clearTimeout(timers.pin); // keep this PIN while its page is open
-      setStatus('Waiting for you to sign in in the Plex window…', true);
+      setStatus('Waiting for you to sign in in the Plex window. Closed it? Choose Sign in with Plex again.', true);
       poll(p);
     }
 
@@ -145,8 +161,9 @@
         poll(p);
       }, function (err) {
         if (!alive || view !== 'code') return;
-        setStatus('Could not reach plex.tv (' + PL.errorMessage(err) + '). Retrying…', false);
-        timers.pin = setTimeout(newLinkPin, 5000);
+        var t = tvProblem(err);
+        setStatus(t.text, false);
+        timers.pin = setTimeout(newLinkPin, t.ms);
       });
     }
 

@@ -9,11 +9,11 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
-import { extname, join, normalize } from 'node:path';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const APP = fileURLToPath(new URL('..', import.meta.url));
-const ROOT = normalize(process.argv[2] ? join(process.cwd(), process.argv[2]) : join(APP, 'dist/web'));
+const ROOT = resolve(process.argv[2] || join(APP, 'dist/web'));
 const PORT = Number(process.env.PORT || 8940);
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -32,7 +32,7 @@ createServer(async (req, res) => {
   // upgrade-insecure-requests would turn this server's own http URLs into https ones
   if (headers['Content-Security-Policy']) headers['Content-Security-Policy'] = headers['Content-Security-Policy'].replace(/;\s*upgrade-insecure-requests/, '');
   const file = normalize(join(ROOT, path.endsWith('/') ? path + 'index.html' : path));
-  if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
+  if (file !== ROOT && !file.startsWith(ROOT + sep)) { res.writeHead(403); return res.end(); }
   try {
     const body = await readFile(file);
     res.writeHead(200, { ...headers, 'Content-Type': TYPES[extname(file)] || 'application/octet-stream' });
