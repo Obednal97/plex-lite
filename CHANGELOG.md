@@ -31,6 +31,12 @@ releases are fixes only.
   the guide shows as many channels as fit). With a mouse, every screen above the tab bar has a
   Back [Esc] button top left, tooltips name their key, `/` opens Search, `M` mutes, `N` plays the
   next episode, and `?` (or Settings → Keyboard shortcuts) shows every key in one overlay.
+- **Cards and rows with a mouse on the web** (docs/WEB.md, "Cards and rows with a mouse"): in the
+  mouse and keyboard mode a hovered card lifts and shows ▶ (plays or resumes at once; a show plays
+  its next episode) and "…" (the hold-OK quick actions, like a right-click); rows page with › and ‹
+  at their edges while hovered; the Recommended hero follows the card the mouse rests on (350 ms, not
+  during a sweep); the library grid gets ▶ and "…"; the details page's buttons have tooltips from their
+  hints. Keys bring back the focus plate; remote and touch modes and the TV app are unchanged.
 - **Overseerr on the web** (docs/OVERSEERR.md, "On the web"): in the web build the Overseerr plugin
   calls your Overseerr straight from the browser (`plugins/overseerr/seerr-web.js`, the same methods
   and messages as the TV's service, per-profile sign-in over the browser's one cookie, changes checked
