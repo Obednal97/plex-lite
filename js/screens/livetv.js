@@ -69,6 +69,9 @@
     this.visible = false;
     this.alive = true;
     this.entry = null;          // {digits, timer}
+    // Search asked to open on a channel and time ("On TV", "Show in guide"): done once it is loaded
+    this.pendingOpen = G.openAt || null;
+    G.openAt = null;
     this.build();
     var self = this;
     this.detailSoon = PL.debounce(function () { self.paintDetailSlow(); }, 350);
@@ -201,7 +204,8 @@
     }, function (err) {
       if (!self.alive) return;
       PL.warn('guide load failed', err && err.message);
-      if (G.channels.length) return;
+      // (Search may have loaded the lineup alone: say why the guide is empty all the same)
+      if (G.channels.length && self.list.length) return;
       self.showStatus(err && err.noDvr ? err.message : 'Couldn\'t load the guide: ' + PL.errorMessage(err));
     });
   };
@@ -223,6 +227,34 @@
     var values = avail.map(function (f) { return f.value; }).join(',');
     if (values !== (this.filters || []).map(function (f) { return f.value; }).join(',')) this.buildSubnav(avail);
     this.applyFilter(true);
+    if (this.pendingOpen && this.openAt(this.pendingOpen.identifier, this.pendingOpen.t)) this.pendingOpen = null;
+  };
+
+  // Focuses a channel at a time (switching to All when the filter hides it). False while the
+  // channel isn't in the guide yet.
+  LiveTVScreen.prototype.openAt = function (identifier, t) {
+    var find = function (list) {
+      for (var i = 0; i < list.length; i++) if (list[i].identifier === identifier) return i;
+      return -1;
+    };
+    if (find(G.channels) < 0) return false;
+    if (find(this.list) < 0) {
+      this.filter = 'all';
+      this.buildSubnav(this.filters);
+      this.applyFilter(false, identifier);
+    }
+    var row = find(this.list);
+    if (row < 0) return false;
+    this.row = row;
+    this.anchor = Math.max(t || 0, now());
+    this.start = this.origin;
+    this.area = 'grid';
+    this.waitingForGrid = false;
+    this.subnav.setFocused(false);
+    this.refocus();
+    this.render();
+    G.ensure(this.anchor, this.anchor + 3600).catch(function () {});
+    return true;
   };
 
   LiveTVScreen.prototype.setFilter = function (value) {
@@ -323,18 +355,8 @@
     var c = this.list[i];
     var chan = PL.el('div', 'lg-chan');
     var logo = PL.el('div', 'lg-logo');
-    var src = c.thumb ? PL.plex.image(c.thumb, 104, 56, { format: 'png' }) : null;
-    if (src) {
-      var img = PL.el('img');
-      img.width = 104;
-      img.height = 56;
-      img.onload = function () { logo.classList.add('loaded'); };
-      img.onerror = function () { img.style.visibility = 'hidden'; };
-      img.src = src;
-      logo.appendChild(img);
-    } else {
-      logo.appendChild(PL.el('span', 'lg-logo-text', c.name.slice(0, 10)));
-    }
+    // a dark plate for white logos (js/logos.js)
+    PL.logos.fill(logo, c, { w: 104, h: 56, textClass: 'lg-logo-text', label: c.name.slice(0, 10) });
     chan.appendChild(logo);
     var num = PL.el('div', 'lg-num', c.vcn);
     if (G.isFavourite(c.identifier)) num.appendChild(PL.el('span', 'lg-fav', '★'));

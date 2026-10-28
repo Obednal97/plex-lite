@@ -35,6 +35,7 @@
     G.blocks = {};
     G.base = 0;
     G.lineup = null;
+    G.lineupPending = null;
     G.summaries = {};
     G.gen++;
   };
@@ -90,6 +91,26 @@
       PL.log('no lineup, using the grid\'s channels', err && err.status);
       return [];
     });
+  }
+
+  // One lineup request at a time, shared by load() and loadChannels().
+  function lineupOnce(src) {
+    if (G.lineup) return Promise.resolve(G.lineup);
+    if (!G.lineupPending) {
+      var gen = G.gen;
+      G.lineupPending = readLineup(src).then(function (list) {
+        if (gen === G.gen) G.lineupPending = null;
+        return list;
+      });
+    }
+    return G.lineupPending;
+  }
+
+  function useLineup(list) {
+    if (G.lineup) return;
+    G.lineup = list;
+    rebuildChannels(null);
+    emit();
   }
 
   // Rebuilds the channel list from the lineup plus whatever the grid has named.
@@ -157,16 +178,21 @@
     return G.discover().then(function (src) {
       if (gen !== G.gen) return null;
       if (!G.base) G.base = L.floorTo(now(), L.HALF_HOUR);
-      var lineup = G.lineup ? Promise.resolve(G.lineup) : readLineup(src);
-      return Promise.all([lineup, G.ensure(now(), now() + 3600)]).then(function (res) {
+      return Promise.all([lineupOnce(src), G.ensure(now(), now() + 3600)]).then(function (res) {
         if (gen !== G.gen) return null;
-        if (!G.lineup) {
-          G.lineup = res[0];
-          rebuildChannels(null);
-          emit();
-        }
+        useLineup(res[0]);
         return G;
       });
+    });
+  };
+
+  // Just the channels (the lineup, one small request), without waiting for the guide: Search
+  // matches channel names even when the guide can't be loaded.
+  G.loadChannels = function () {
+    var gen = G.gen;
+    return G.discover().then(lineupOnce).then(function (list) {
+      if (gen === G.gen) useLineup(list);
+      return G;
     });
   };
 

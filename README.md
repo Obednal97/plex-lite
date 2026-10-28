@@ -30,7 +30,7 @@ More in [Screenshots](#screenshots).</sub>
   menus that keep the video playing, Info / Cast / Chapters / Episodes tabs, Skip Intro and Skip
   Credits, and an end-of-episode card with autoplay (see [Player](#player)).
 - **Search as you type**: typo-tolerant fuzzy search over your libraries, plus episodes and people
-  from the server
+  from the server, and with Live TV your channels (by name or number) and what's on in the guide
 - **Live TV**: a two-hour guide of every channel through Plex Live TV & DVR, favourites, channel
   numbers, a channel banner, a mini guide over the picture, last channel and pause (see
   [Live TV](#live-tv))

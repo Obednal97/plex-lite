@@ -1,0 +1,49 @@
+/* Search's Live TV rows (js/screens/search.js): Channels and On TV. Same language as the guide
+   (docs/DESIGN.md, docs/LIVETV-v2-design.md): channel logos on a light plate, a red LIVE pill, teal
+   progress and favourite star; cards focus like every other card (lit-glass edge and pop).
+   Nothing here animates; the cards pop with the shared card rules. Loaded after az.css. */
+
+/* ---- Channels: a 360x202 tile on the ground ---------------------------------------------------- */
+.card-stv-chan .card-inner::after { display: none; }
+.stv-logo {
+  position: absolute; left: 20px; top: 20px; width: 144px; height: 76px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.10); overflow: hidden;
+}
+.stv-logo.loaded, .stv-badge.loaded { background: #f4f4f6; }
+.stv-logo img { position: absolute; left: 8px; top: 4px; width: 128px; height: 68px; }
+.stv-logo-text {
+  display: block; padding: 0 10px; font-size: 20px; line-height: 76px; font-weight: 700; text-align: center;
+  color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stv-num { position: absolute; right: 20px; top: 24px; font-size: 26px; line-height: 32px; font-weight: 700; color: var(--text-2); white-space: nowrap; }
+.card-stv-chan.focused .stv-num { color: var(--text); }
+.stv-fav { color: var(--resume); font-size: 20px; margin-left: 8px; vertical-align: 2px; }
+.stv-name {
+  position: absolute; left: 20px; right: 20px; top: 108px; font-size: 26px; line-height: 32px; font-weight: 600;
+  color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stv-on {
+  position: absolute; left: 20px; right: 20px; top: 142px; font-size: 24px; line-height: 30px;
+  color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stv-on.stv-none { color: var(--text-3); }
+.stv-progress {
+  position: absolute; left: 20px; right: 20px; bottom: 14px; height: 5px; border-radius: 3px;
+  background: rgba(255, 255, 255, 0.22); overflow: hidden; z-index: 2;
+}
+.stv-progress-fill { width: 100%; height: 5px; background: var(--resume); transform-origin: 0 0; }
+
+/* ---- On TV: the programme's art (420x236) with its title on it ------------------------------------ */
+.card-stv-air .stv-progress { left: 22px; right: 22px; bottom: 12px; }
+.stv-pill {
+  position: absolute; left: 16px; top: 16px; z-index: 3; height: 32px; line-height: 32px; padding: 0 12px;
+  border-radius: 8px; background: rgba(5, 5, 8, 0.72); color: var(--text); font-size: 20px; font-weight: 700;
+  letter-spacing: 0.04em; white-space: nowrap;
+}
+.stv-pill.stv-live { background: #e33; color: #fff; letter-spacing: 0.08em; }
+.stv-badge {
+  position: absolute; right: 16px; top: 16px; z-index: 3; width: 96px; height: 52px; border-radius: 10px;
+  background: rgba(5, 5, 8, 0.72); overflow: hidden;
+}
+.stv-badge img { position: absolute; left: 6px; top: 4px; width: 84px; height: 44px; }
+.stv-badge .stv-logo-text { padding: 0 6px; font-size: 18px; line-height: 52px; color: var(--text); }
