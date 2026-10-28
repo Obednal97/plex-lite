@@ -606,7 +606,9 @@
     function paintRail() {
       const on = visible && f.sort === 'titleSort' && !!letters && rail.usable() && grid.total() > 0;
       if (letters && grid.total() > 0 && letters.total !== grid.total()) PL.warn('A-Z counts differ from the listing', letters.total, grid.total());
-      el.classList.toggle('t-bw-has-rail', on);
+      // the rail's room is kept from the start of a title sort, so the columns don't move when the
+      // letters arrive; only a list without a usable rail gives it back
+      el.classList.toggle('t-bw-has-rail', f.sort === 'titleSort' && (!letters || rail.usable()));
       rail.show(on);
       if (on) placeRail();
     }
@@ -614,7 +616,7 @@
       const gen = ++lettersGen;
       letters = null;
       rail.show(false);
-      el.classList.remove('t-bw-has-rail');
+      el.classList.toggle('t-bw-has-rail', f.sort === 'titleSort');
       if (f.sort !== 'titleSort') return;
       PL.plex.get('/library/sections/' + section.key + '/firstCharacter', B.filterParams(f, type)).then((mc) => {
         if (gen !== lettersGen || !alive) return;
