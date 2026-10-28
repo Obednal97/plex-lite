@@ -8,6 +8,7 @@
 //   def.badges(item, ctx)        -> Promise<[{label, tone?}]>                 keyline badges on a details page
 //   def.onSelect(item, ctx)      OK on an item that came from one of its shelves
 //   def.services                 [luna service ids] bundled in plugins/<id>/service/
+//   def.web                      true: runs in the web build without its services (its own browser path)
 //   def.tabs                     [{id, title}] tabs it adds (max 2 plugin tabs in total)
 //   def.screen(tabId, ctx)       -> Promise<model> what a tab shows (rendered by Plex Lite, see
 //                                   js/screens/plugin-screen.js): {type: 'shelves'|'grid'|'page', …}
@@ -43,7 +44,8 @@
   plugins.unavailable = [];
 
   plugins.register = function (def) {
-    if (PL.isWeb && def && def.services && def.services.length) {
+    // def.web: the plugin has a browser path of its own and doesn't need its services on the web
+    if (PL.isWeb && def && def.services && def.services.length && def.web !== true) {
       plugins.unavailable.push({ id: def.id, name: def.name, reason: 'tv-service' });
       return false;
     }

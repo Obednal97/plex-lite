@@ -84,11 +84,17 @@
 
   // ---- Service calls --------------------------------------------------------------------------------
 
+  // The webOS service on the TV; in the web build seerr-web.js answers the same methods from the
+  // browser (O.web, only loaded there).
+  function service(ctx, method, params) {
+    return O.web ? O.web.call(ctx, method, params) : ctx.service(method, params);
+  }
+
   O.signIn = function (ctx, url) {
     var token = ctx.plexToken();
     if (!token) return Promise.reject(new Error('Sign in to Plex first'));
     var key = O.profileKey(ctx);
-    return ctx.service('login', { url: url, plexToken: token, key: key }).then(function (r) {
+    return service(ctx, 'login', { url: url, plexToken: token, key: key }).then(function (r) {
       var cfg = O.config(ctx) || { profiles: {} };
       if (cfg.url && cfg.url !== r.url) cfg.profiles = {};
       cfg.url = r.url;
@@ -106,7 +112,7 @@
       delete cfg.profiles[key];
       saveConfig(ctx, cfg);
     }
-    return ctx.service('logout', { key: key }).then(null, function () {});
+    return service(ctx, 'logout', { key: key }).then(null, function () {});
   };
 
   // A service call as the active profile. If the service lost the session (it lives in /tmp) and
@@ -117,7 +123,7 @@
       var p = {};
       Object.keys(params || {}).forEach(function (k) { p[k] = params[k]; });
       p.key = key;
-      return ctx.service(method, p);
+      return service(ctx, method, p);
     };
     return withKey().then(null, function (err) {
       var cfg = O.config(ctx);
