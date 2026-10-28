@@ -32,6 +32,9 @@
   var LL = PL.liveLogic;
   var GUIDE_AHEAD = 6 * 3600;     // Search keeps this much of the guide loaded (two or three blocks)
   var GUIDE_DELAY_MS = 800;       // after Search opens, so the first frames and keys come first
+  // TV rows follow the typing by this much: matching and two more shelves cost ~35 ms a keystroke on
+  // a 2019 TV, so the key's own frame (field, titles) comes first and a fast typist pays once
+  var TV_DEBOUNCE_MS = 150;
   // Channels row: a quiet tile with the logo plate, number, name and what's on (DESIGN.md)
   var CHANNEL_GEO = { w: 360, h: 202, pitch: 388, scale: 1.09 };
 
@@ -105,7 +108,7 @@
     this.tvIndex = null;        // {channels, guide, gen, at}
     this.tvGen = 0;
     this.tvCache = {};
-    this.timing = null;         // {local, tv, render} ms for the last keystroke (measured on the TV)
+    this.timing = null;         // {local, render} ms for the last keystroke; tvTiming {tv, render} for the TV rows
     if (liveTv()) {
       // the guide changed: rebuild the index while idle (not on the next keystroke), then the rows
       this.offGuide = PL.liveGuide.listen(function () {
@@ -115,8 +118,9 @@
       this.tvSoon = PL.debounce(function () {
         if (!self.alive || !self.visible || !PL.liveGuide.channels.length) return;
         self.tvIndexNow();
-        if (self.query.trim()) self.update(true);
+        if (self.query.trim()) self.updateTv();
       }, 250);
+      this.runTv = PL.debounce(function () { if (self.alive && self.visible) self.updateTv(); }, TV_DEBOUNCE_MS);
     }
     this.renderField();
   }
@@ -259,10 +263,10 @@
     var t0 = Date.now();
     this.local = PL.fuzzy.ready ? PL.fuzzy.query(q, 40) : [];
     var t1 = Date.now();
-    this.tv = this.tvSearch(q);
-    var t2 = Date.now();
     this.render();
-    this.timing = { local: t1 - t0, tv: t2 - t1, render: Date.now() - t2 };
+    this.timing = { local: t1 - t0, render: Date.now() - t1 };
+    // (until then the rows of the query a moment ago stay, like the server's rows do)
+    if (this.runTv) this.runTv();
     if (!indexChanged) {
       this.serverDone = false;
       if (this.visible) this.runServer(q);
@@ -317,6 +321,16 @@
       ms: Date.now() - started,
     };
     return this.tvIndex;
+  };
+
+  SearchScreen.prototype.updateTv = function () {
+    var q = this.query.trim();
+    if (!q) return;
+    var t0 = Date.now();
+    this.tv = this.tvSearch(q);
+    var t1 = Date.now();
+    this.render();
+    this.tvTiming = { tv: t1 - t0, render: Date.now() - t1 };
   };
 
   SearchScreen.prototype.tvSearch = function (text) {
@@ -524,7 +538,11 @@
     var focusedId = current ? current.sectionId : null;
     var zones = sections.map(function (s) {
       var shelf = old[s.id];
+      // the same items as last time (the TV rows until their debounce, the server's rows until they
+      // answer): the cards stay as they are
+      if (shelf && shelf.srcItems === s.items) return shelf;
       if (shelf) {
+        shelf.srcItems = s.items;
         if (!sameQuery) shelf.index = 0;
         shelf.replaceItems(s.items, s.items.length);
         if (!sameQuery && shelf.index !== 0) {
@@ -546,6 +564,7 @@
         onSelect: function (item) { self.open(item); },
       });
       shelf.sectionId = s.id;
+      shelf.srcItems = s.items;
       return shelf;
     });
     var key = ids.join(',');
@@ -667,6 +686,7 @@
     this.visible = false;
     clearTimeout(this.guideTimer);
     if (this.tvSoon) this.tvSoon.cancel();
+    if (this.runTv) this.runTv.cancel();
     this.ambient.cancel();
     if (this.query.trim() && !this.serverDone) this.serverStale = true;
     this.runServer.cancel();
@@ -692,6 +712,7 @@
     this.offIndex();
     if (this.offGuide) this.offGuide();
     if (this.tvSoon) this.tvSoon.cancel();
+    if (this.runTv) this.runTv.cancel();
     clearTimeout(this.guideTimer);
     this.runServer.cancel();
     this.runPlugins.cancel();
