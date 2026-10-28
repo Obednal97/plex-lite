@@ -379,8 +379,8 @@ only the screens are new.
   shorter rows.
 - **Speed.** Rows are virtualised: only the rows in view plus six each way exist, each with the
   programmes of the hours in view plus one either side. Scrolling sideways adds and drops cells hour by
-  hour and keeps the rest; new guide data rebuilds only the rows whose programmes changed; logo plates
-  are made once per channel. Measured with 600 channels on an emulated iPhone (headless Chromium with
+  hour and keeps the rest; new guide data rebuilds the rows built, nothing else; logo plates in the
+  channel column are made once per channel. Measured with 600 channels on an emulated iPhone (headless Chromium with
   the CPU slowed 4x, and WebKit): a vertical fling holds 60 fps with under 1.5 ms of script per frame
   and never shows an unbuilt row; scrolling sideways at 9,000 px/s keeps about 95% of frames under 20 ms.
 

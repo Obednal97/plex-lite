@@ -64,6 +64,7 @@
     let failed = null;
     let sel = G.openingSel();
     G.setBrowse(sel, true);
+    let seenSeq = G.browseSeq; // the player's Browse rail can change the filter: followed on return
     let list = [];
     let geoKey = null;
     let saved = { top: 0, left: 0 };
@@ -78,8 +79,12 @@
       const key = T.kind + (html.classList.contains('t-short') ? 's' : '');
       canvas.style.setProperty('--lv-w', scroller.clientWidth + 'px');
       if (key !== geoKey) {
+        // (rotating the phone changes the px per minute: keep the same time at the left edge)
+        const t = geoKey && grid.geo ? grid.leftTime() : null;
         geoKey = key;
         grid.setGeometry(geo);
+        canvas.style.width = isWall() || !list.length ? '' : grid.width() + 'px';
+        if (t != null) grid.showTime(t + 24 / geo.pps);
       }
       canvas.style.width = isWall() || !list.length ? '' : grid.width() + 'px';
       grid.measure();
@@ -109,8 +114,11 @@
       // the kit's chips know only its own icons: the family chip gets the filter glyph here
       items.forEach((it, i) => { if (it.icon === 'filter') chips.nodes[i].insertBefore(LV.icon('filter'), chips.nodes[i].firstChild); });
       chipHost.replaceChildren(chips);
+      // the chosen chip in view (only the chip row moves: scrollIntoView would move the page too)
       const on = chips.querySelector('.t-chip.on');
-      if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      if (on && (on.offsetLeft + on.offsetWidth > chips.clientWidth || on.offsetLeft < chips.scrollLeft)) {
+        chips.scrollLeft = Math.max(0, on.offsetLeft - 24);
+      }
       grid.measure();
     }
 
@@ -119,8 +127,11 @@
       sel = ctx ? B.normalise(next, ctx) : { base: next.base, refine: next.refine || null };
       // Favourites with none yet stays chosen (it says how to add some) but isn't saved
       G.setBrowse(sel, sel.base === 'fav' && !G.favourites().length);
+      seenSeq = G.browseSeq;
       paintChips();
       paintBody(false);
+      // a new list starts at its top (when the rows had been scrolled to)
+      if (!isWall() && list.length && scroller.scrollTop > grid.rowsTop()) scroller.scrollTop = grid.rowsTop();
       if (focusId) {
         const i = list.findIndex((c) => c.identifier === focusId);
         if (i >= 0) grid.showRow(i, true);
@@ -192,7 +203,10 @@
       list = wall || !G.channels.length ? [] : G.channelsFor(sel);
       grid.setList(list, keep);
       if (wall) feed.refresh(!keep);
-      else if (keep) grid.refresh();
+      else {
+        feed.clear();
+        if (keep) grid.refresh();
+      }
       page.el.classList.toggle('t-lv-empty', !wall && !list.length);
       paintStatus();
       layout();
@@ -205,6 +219,7 @@
         if (norm.base !== sel.base || norm.refine !== sel.refine) {
           sel = norm;
           G.setBrowse(sel, true);
+          seenSeq = G.browseSeq;
         }
       }
       paintChips();
@@ -238,7 +253,7 @@
       if (isWall() || LV.indexOf(list, c) < 0) setSel({ base: 'all', refine: null });
       const i = LV.indexOf(list, c);
       if (i < 0) return;
-      if (t) grid.showTime(Math.max(t, LV.now()));
+      grid.showTime(t ? Math.max(t, LV.now()) : grid.origin);
       grid.showRow(i, true);
     }
 
@@ -284,6 +299,8 @@
     let timer = 0;
     let minute = 0;
     function tick() {
+      // (nothing to do while the player has the screen: onShow catches up)
+      if (!T.visible || !shown) return;
       grid.paintNow();
       const m = Math.floor(Date.now() / 60000);
       if (m === minute) return;
@@ -299,14 +316,22 @@
       shown = true;
       grid.hidden = false;
       grid.measure();
-      LV.takeWatching();
+      const watched = LV.takeWatching();
       // back after a long time away: start the guide again at the current half hour
       if (LV.now() - grid.origin > 90 * 60 && grid.rebase()) saved.left = 0;
       layout();
       if (scroller.scrollTop !== saved.top || scroller.scrollLeft !== saved.left) scroller.scrollTo({ top: saved.top, left: saved.left });
       scrolled = saved.top > 8;
       html.classList.toggle('t-scrolled', scrolled);
+      // the player's Browse rail changed the filter: follow it, on the channel that was on
+      if (seenSeq !== G.browseSeq) {
+        const g = G.getBrowse();
+        seenSeq = G.browseSeq;
+        if (g.base !== sel.base || g.refine !== sel.refine) setSel(g, watched);
+      }
       if (loaded) onData();
+      // the shell's own scroll listener may clear the status bar band after this (its window moved)
+      requestAnimationFrame(() => requestAnimationFrame(() => { if (shown) html.classList.toggle('t-scrolled', scrolled); }));
       clearInterval(timer);
       minute = Math.floor(Date.now() / 60000);
       timer = setInterval(tick, 15000);
@@ -326,10 +351,12 @@
       window.removeEventListener('resize', onResize);
       grid.destroy();
       feed.destroy();
+      LV.forgetPlates();
       if (LV.page === page) LV.page = null;
     };
 
-    const unlisten = G.listen(() => { if (alive && loaded) onData(); });
+    // (not while the player has the screen: onShow catches up)
+    const unlisten = G.listen(() => { if (alive && loaded && shown && T.visible) onData(); });
     paintChips();
     paintStatus();
     load();

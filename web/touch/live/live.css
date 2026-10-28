@@ -4,6 +4,10 @@
 /* ---- The page: one scroller that scrolls both ways ---------------------------------------------- */
 
 .t-lv { padding: 0; min-height: 0; }
+/* the page's scroller is position: fixed; a transform on the page (the push and pop animations)
+   would make the page, 0 px tall, its box: no animation here */
+.t-lv.t-enter-push, .t-lv.t-enter-pop { animation: none; }
+.t-lv:not(.t-lv-wall) .t-lv-feed { display: none; }
 .t-lv-scroll {
   position: fixed; left: 0; right: 0; top: 0; bottom: 0; overflow: auto; overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch; scrollbar-width: none; background: var(--t-ground);
@@ -111,13 +115,20 @@
 .t-lv-cell-bar span { display: block; height: 100%; background: var(--t-accent); transform-origin: 0 0; }
 .t-lv-none { background: rgba(255, 255, 255, 0.03); }
 .t-lv-none .t-lv-cell-title { font-weight: 500; color: var(--t-text-3); }
-.t-short .t-lv-cell-in { padding-top: 7px; }
-.t-short .t-lv-cell-bar { bottom: 6px; }
+
 .t-tablet .t-lv-cell { border-radius: 12px; }
 .t-tablet .t-lv-cell-in { padding: 12px 14px 0; }
 .t-tablet .t-lv-cell-title { font-size: 16px; }
 .t-tablet .t-lv-cell-sub { font-size: 13px; margin-top: 3px; }
 .t-tablet .t-lv-cell-bar { left: 14px; right: 14px; bottom: 10px; }
+/* a phone on its side (the shell gives it the tablet class by its width): short rows, phone type */
+html.t-short .t-lv-cell { border-radius: 10px; }
+html.t-short .t-lv-cell-in { padding: 6px 10px 0; }
+html.t-short .t-lv-cell-title { font-size: 14px; }
+html.t-short .t-lv-cell-sub { font-size: 12px; margin-top: 1px; }
+html.t-short .t-lv-cell-bar { left: 10px; right: 10px; bottom: 6px; }
+html.t-short .t-lv-num { font-size: 11px; margin-top: 3px; }
+html.t-short .t-lv-ch .t-lv-plate-text { font-size: 10px; }
 @media (hover: hover) and (pointer: fine) { .t-lv-cell:hover { background: rgba(255, 255, 255, 0.16); } }
 
 .t-lv-nowline { position: absolute; left: -1px; top: -6px; bottom: 0; width: 2px; background: var(--t-accent); pointer-events: none; }

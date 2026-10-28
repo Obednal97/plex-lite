@@ -28,7 +28,7 @@ test('touch live: geometry for a phone, a phone on its side and a tablet', () =>
   assert.equal(X.geometry('phone', true).pitch, 60);
   const t = X.geometry('tablet', false);
   assert.ok(t.pitch > p.pitch && t.pps > p.pps && t.col > p.col);
-  assert.equal(X.geometry('tablet', true).pitch, t.pitch); // a tablet is never "short"
+  assert.equal(X.geometry('tablet', true).pitch, 60); // a phone on its side is "tablet" by width, short by height
   // touch targets: rows are at least 44 px
   Object.values(X.GEOMETRY).forEach((g) => assert.ok(g.cell >= 44));
 });
@@ -54,6 +54,16 @@ test('touch live: the hours built change only every hour of scrolling, never bef
   // two hours on: a later window
   const w2 = X.timeWindow(origin, 7200 * pps, 300, pps, 3600, 3600);
   assert.ok(w2.from > origin && w2.from <= origin + 3600);
+});
+
+test('touch live: scroll targets put a row just under the ruler and a time near the left edge', () => {
+  const g = X.geometry('phone', false);
+  // rows start 300 px down the page, the ruler sticks under a 47 px status bar
+  assert.equal(X.rowTop(10, 300, g, 47), 300 + 680 - 47 - g.ruler - 34);
+  assert.equal(X.rowTop(0, 50, g, 47), 0); // never above the top
+  const origin = 3600 * 100;
+  assert.equal(X.timeLeft(origin + 3600, origin, g.pps), Math.round(3600 * g.pps - 24));
+  assert.equal(X.timeLeft(origin - 600, origin, g.pps), 0);
 });
 
 test('touch live: airingsIn finds the airings overlapping a window', () => {

@@ -192,8 +192,13 @@
 
     render() {
       const sc = this.scroller;
-      // (not while the stage covers the layer: nothing has a size then, and a size of 0 would stick)
-      if (!sc || !this.geo || this.hidden || !sc.clientHeight) return;
+      if (!sc || !this.geo || this.hidden) return;
+      // nothing has a size while the stage covers the layer (a size of 0 would stick), or for a
+      // moment while the page animates in: try again next frame, unless the stage has the screen
+      if (!sc.clientHeight) {
+        if (T.visible) this.schedule();
+        return;
+      }
       const t0 = performance.now();
       const g = this.geo;
       // (positions are left/top, not transforms: a layer per cell would cost the phone more than it saves)
@@ -363,14 +368,13 @@
 
     // ---- Moving -----------------------------------------------------------------------------------------
 
-    // Scrolls so row i sits just under the ruler, and flashes it.
+    // Scrolls so row i sits just under the ruler (sideways it stays put), and flashes it.
     showRow(i, flash) {
       const sc = this.scroller;
       if (!sc || i < 0 || i >= this.list.length) return;
       if (this.bodyTop == null) this.bodyTop = this.body.offsetTop;
       if (this.stickTop == null) this.stickTop = parseFloat(getComputedStyle(this.ruler).top) || 0;
-      const y = this.bodyTop + i * this.geo.pitch - this.stickTop - this.geo.ruler - Math.round(this.geo.pitch * 0.5);
-      sc.scrollTo({ top: Math.max(0, y), left: 0 });
+      sc.scrollTo({ top: X.rowTop(i, this.bodyTop, this.geo, this.stickTop) });
       this.render();
       if (flash) {
         const r = this.rows.get(i);
@@ -380,16 +384,25 @@
             void n.offsetWidth;
             n.classList.add('t-lv-flash');
           });
-          setTimeout(() => { if (r.row) [r.row, r.ch].forEach((n) => n.classList.remove('t-lv-flash')); }, 1800);
+          setTimeout(() => [r.row, r.ch].forEach((n) => n.classList.remove('t-lv-flash')), 1800);
         }
       }
     }
 
-    // Scrolls sideways so time t is near the left edge (a little of what came before still shows).
-    showTime(t) {
-      const x = Math.max(0, (t - this.origin) * this.pps - 24);
-      this.scroller.scrollTo({ left: x });
+    // The top of the rows (the header scrolled away), for a new filter.
+    rowsTop() {
+      if (this.bodyTop == null) this.bodyTop = this.body.offsetTop;
+      if (this.stickTop == null) this.stickTop = parseFloat(getComputedStyle(this.ruler).top) || 0;
+      return Math.max(0, this.bodyTop - this.stickTop - this.geo.ruler);
     }
+
+    // Scrolls sideways so time t is near the left edge.
+    showTime(t) {
+      this.scroller.scrollTo({ left: X.timeLeft(t, this.origin, this.pps) });
+    }
+
+    // The time at the left edge, and back there after the sizes change (rotating the phone).
+    leftTime() { return this.origin + (this.scroller ? this.scroller.scrollLeft : 0) / this.pps; }
 
     destroy() {
       if (this.scroller) this.scroller.removeEventListener('scroll', this.onScroll);

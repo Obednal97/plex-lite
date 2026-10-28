@@ -75,6 +75,7 @@
     plates.set(key, p);
     return p;
   };
+  LV.forgetPlates = () => plates.clear();
 
   // ---- Watching ---------------------------------------------------------------------------------------
 
@@ -90,7 +91,9 @@
   LV.watchChannel = (c, list, label) => {
     const i = LV.indexOf(list, c);
     if (i >= 0) return LV.watch(list, i, label);
-    LV.watch(G.channels, Math.max(0, LV.indexOf(G.channels, c)), 'All channels');
+    const j = LV.indexOf(G.channels, c);
+    // (a channel the lineup no longer has: nothing to play)
+    if (j >= 0) LV.watch(G.channels, j, 'All channels');
   };
 
   // A channel's place in a list. By identifier: every guide block makes new channel objects.
@@ -172,9 +175,9 @@
   LV.menu = (c, a, opts = {}) => {
     const t = now();
     const fav = G.isFavourite(c.identifier);
-    const on = a && X.when(a, t) === 'now';
+    const state = a ? X.when(a, t) : 'now';
     const rows = [
-      { label: on || !a ? 'Watch' : 'Watch ' + c.name + ' now', sub: !on && a ? L.times(a, t) + ' is later' : null, icon: 'play',
+      { label: state === 'now' ? 'Watch' : 'Watch ' + c.name + ' now', sub: state === 'later' ? 'This is on ' + L.times(a, t) : state === 'past' ? 'This has ended' : null, icon: 'play',
         action: () => LV.watchChannel(c, opts.list, opts.label) },
       { label: fav ? 'Remove from Favourites' : 'Add to Favourites', icon: 'star', action: () => LV.toggleFavourite(c) },
     ];
@@ -287,15 +290,20 @@
     box.appendChild(actions);
     paint();
     entry = T.sheet({ title: 'Go to channel', content: box, cls: 't-lv-padsheet' });
-    // a hardware keyboard types too
+    // A hardware keyboard types too. On the window, capturing: before the app's own key handling
+    // (js/app.js), which reads Backspace as Back and would close the sheet.
     const onKey = (e) => {
-      if (e.key >= '0' && e.key <= '9') { press(e.key); e.preventDefault(); e.stopPropagation(); }
-      else if (e.key === 'Backspace') { press('del'); e.preventDefault(); e.stopPropagation(); }
-      else if (e.key === 'Enter' && target) { finish(opts.onGuide); e.preventDefault(); e.stopPropagation(); }
+      const onButton = document.activeElement && document.activeElement.tagName === 'BUTTON' && box.contains(document.activeElement);
+      const stop = () => { e.preventDefault(); e.stopImmediatePropagation(); };
+      if (e.key >= '0' && e.key <= '9') { press(e.key); stop(); }
+      else if (e.key === 'Backspace') { press('del'); stop(); }
+      // Enter on a focused key or button presses it; otherwise it shows the channel in the guide
+      else if (e.key === 'Enter' && onButton) e.stopImmediatePropagation();
+      else if (e.key === 'Enter' && target) { finish(opts.onGuide); stop(); }
     };
-    document.addEventListener('keydown', onKey, true);
+    window.addEventListener('keydown', onKey, true);
     const prevClose = entry.opts.onClose;
-    entry.opts.onClose = () => { document.removeEventListener('keydown', onKey, true); if (prevClose) prevClose(); };
+    entry.opts.onClose = () => { window.removeEventListener('keydown', onKey, true); if (prevClose) prevClose(); };
     return entry;
   };
 })();

@@ -101,7 +101,7 @@
     let timer = 0;
     input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(paint, 90); });
     input.addEventListener('keydown', (e) => {
-      // Enter puts the keyboard away; Esc goes back (the stage's keys must not see either)
+      // Enter puts the keyboard away (js/app.js leaves keys typed into a field alone)
       if (e.key === 'Enter') { input.blur(); e.preventDefault(); }
       e.stopPropagation();
     });

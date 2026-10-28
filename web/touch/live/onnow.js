@@ -119,6 +119,14 @@
       return n;
     }
 
+    // Off the wall: nothing left behind, nothing loading.
+    clear() {
+      if (this.sig === null && !this.el.firstChild) return;
+      this.disconnect();
+      this.el.replaceChildren();
+      this.sig = null;
+    }
+
     destroy() { this.disconnect(); }
   }
 

@@ -17,8 +17,10 @@
     short: { col: 88, pitch: 60, cell: 56, ppm: 4.4, ruler: 32, gap: 4, plateW: 58, plateH: 30 },
     tablet: { col: 120, pitch: 84, cell: 78, ppm: 6, ruler: 38, gap: 6, plateW: 84, plateH: 44 },
   };
+  // short: a phone on its side (under 500 px tall; the shell calls it a tablet by its width) gets
+  // short rows whatever its width.
   function geometry(kind, short) {
-    const g = GEOMETRY[kind === 'tablet' ? 'tablet' : short ? 'short' : 'phone'];
+    const g = GEOMETRY[short ? 'short' : kind === 'tablet' ? 'tablet' : 'phone'];
     return Object.assign({ pps: g.ppm / 60 }, g);
   }
 
@@ -59,6 +61,17 @@
     const out = [];
     for (let t = origin; t <= origin + hours * 3600; t += 1800) out.push({ t, x: Math.round((t - origin) * pps) });
     return out;
+  }
+
+  // Where the page scroller goes to show row i just under the sticky ruler, half a row down.
+  // bodyTop: where the rows start in the scroller; stick: the ruler's sticky top (the status bar).
+  function rowTop(i, bodyTop, g, stick) {
+    return Math.max(0, Math.round(bodyTop + i * g.pitch - stick - g.ruler - g.pitch * 0.5));
+  }
+
+  // Where it goes sideways to show time t near the left edge (a little of what came before shows).
+  function timeLeft(t, origin, pps) {
+    return Math.max(0, Math.round((t - origin) * pps - 24));
   }
 
   // ---- Labels ---------------------------------------------------------------------------------------
@@ -112,5 +125,5 @@
     return d.length >= max ? key : d + key;
   }
 
-  PL.touchLiveLogic = { geometry, rowRange, timeWindow, airingsIn, ticks, left, when, chips, noteRecent, padKey, GEOMETRY };
+  PL.touchLiveLogic = { geometry, rowRange, rowTop, timeLeft, timeWindow, airingsIn, ticks, left, when, chips, noteRecent, padKey, GEOMETRY };
 })();
