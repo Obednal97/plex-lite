@@ -145,7 +145,7 @@ html.pl-touch.t-covered, html.pl-touch.t-covered body { overflow: hidden; }
 
 .t-root .tp .tp-tabsrow { flex: none; display: flex; align-items: center; margin-top: 26px; padding: 0 var(--tp-gr) 0 calc(var(--tp-g) + 8px); }
 .t-root .tp:not(.tp-has-tabs) .tp-tabsrow .tp-tabs { display: none; }
-.t-root .tp .tp-tabs { display: flex; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.t-root .tp .tp-tabs { display: flex; min-width: 0; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
 .t-root .tp .tp-tabs::-webkit-scrollbar { display: none; }
 .t-root .tp .tp-tab {
   position: relative; flex: none; height: 34px; padding: 0 14px; margin-right: 6px; border-radius: 17px;

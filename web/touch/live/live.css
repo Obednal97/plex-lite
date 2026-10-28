@@ -9,11 +9,19 @@
 .t-lv.t-enter-push, .t-lv.t-enter-pop { animation: none; }
 .t-lv:not(.t-lv-wall) .t-lv-feed { display: none; }
 .t-lv-scroll {
-  position: fixed; left: 0; right: 0; top: 0; bottom: 0; overflow: auto; overscroll-behavior: contain;
+  position: fixed; left: 0; right: 0; top: 0; bottom: 0; overflow: auto;
+  /* at the guide's edges nothing moves: no sideways bounce (it carries the header and the channel
+     column with it, which reads as the page sliding), and no scroll handed to the page either way */
+  overscroll-behavior-x: none; overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch; scrollbar-width: none; background: var(--t-ground);
 }
 .t-lv-scroll::-webkit-scrollbar { display: none; }
-.t-lv-canvas { position: relative; min-width: 100%; padding-bottom: calc(var(--t-bottom) + 20px); --lv-w: 100vw; }
+.t-lv-canvas {
+  position: relative; min-width: 100%; padding-bottom: calc(var(--t-bottom) + 20px); --lv-w: 100vw;
+  /* the header rides along sideways (sticky): without the clip, where it is stuck at the right end
+     would count as content there, and every scroll to the end would make the guide wider */
+  overflow-x: clip;
+}
 .t-lv-wall .t-lv-canvas, .t-lv-empty .t-lv-canvas { width: auto !important; }
 
 /* the header and anything page-wide scroll away upwards but never sideways */
