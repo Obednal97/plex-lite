@@ -402,6 +402,20 @@
       this.scroller.scrollTo({ left: X.timeLeft(t, this.origin, this.pps) });
     }
 
+    // The row at the top of the view (a fraction while the rows show), and back there after the
+    // sizes change; null while the header shows (then the scroll stays as it is).
+    topRow() {
+      if (!this.scroller || !this.geo) return null;
+      if (this.bodyTop == null) this.bodyTop = this.body.offsetTop;
+      const y = this.scroller.scrollTop - this.bodyTop;
+      return y > 0 ? y / this.geo.pitch : null;
+    }
+
+    showTopRow(row) {
+      this.bodyTop = this.body.offsetTop;
+      this.scroller.scrollTop = Math.round(this.bodyTop + row * this.geo.pitch);
+    }
+
     // The time at the left edge, and back there after the sizes change (rotating the phone).
     leftTime() { return this.origin + (this.scroller ? this.scroller.scrollLeft : 0) / this.pps; }
 

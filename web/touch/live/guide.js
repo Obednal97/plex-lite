@@ -79,12 +79,15 @@
       const key = T.kind + (html.classList.contains('t-short') ? 's' : '');
       canvas.style.setProperty('--lv-w', scroller.clientWidth + 'px');
       if (key !== geoKey) {
-        // (rotating the phone changes the px per minute: keep the same time at the left edge)
+        // (rotating the phone changes the px per minute and the row height: keep the same time at
+        // the left edge and the same row at the top)
         const t = geoKey && grid.geo ? grid.leftTime() : null;
+        const row = geoKey && grid.geo ? grid.topRow() : null;
         geoKey = key;
         grid.setGeometry(geo);
         canvas.style.width = isWall() || !list.length ? '' : grid.width() + 'px';
         if (t != null) grid.showTime(t + 24 / geo.pps);
+        if (row != null) grid.showTopRow(row);
       }
       canvas.style.width = isWall() || !list.length ? '' : grid.width() + 'px';
       grid.measure();
@@ -113,7 +116,11 @@
       }, 't-lv-chips');
       // the kit's chips know only its own icons: the family chip gets the filter glyph here
       items.forEach((it, i) => { if (it.icon === 'filter') chips.nodes[i].insertBefore(LV.icon('filter'), chips.nodes[i].firstChild); });
+      // (a rebuild, categories arriving, keeps where the row was swiped to)
+      const old = chipHost.firstChild;
+      const was = old ? old.scrollLeft : 0;
       chipHost.replaceChildren(chips);
+      chips.scrollLeft = was;
       // the chosen chip in view (only the chip row moves: scrollIntoView would move the page too)
       const on = chips.querySelector('.t-chip.on');
       if (on && (on.offsetLeft + on.offsetWidth > chips.clientWidth || on.offsetLeft < chips.scrollLeft)) {
@@ -320,6 +327,8 @@
       // back after a long time away: start the guide again at the current half hour
       if (LV.now() - grid.origin > 90 * 60 && grid.rebase()) saved.left = 0;
       layout();
+      // time moved on while away (the player, another tab): the now line, the "left" times, what ended
+      grid.tick();
       if (scroller.scrollTop !== saved.top || scroller.scrollLeft !== saved.left) scroller.scrollTo({ top: saved.top, left: saved.left });
       scrolled = saved.top > 8;
       html.classList.toggle('t-scrolled', scrolled);

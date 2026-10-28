@@ -108,7 +108,7 @@
     // scrolling the results puts the keyboard away
     const dismiss = () => { if (document.activeElement === input && !page.el.hidden) input.blur(); };
     results.addEventListener('touchmove', dismiss, { passive: true });
-    const unlisten = G.listen(() => { if (!page.el.hidden && input.value) paint(); });
+    const unlisten = G.listen(() => { if (!page.el.hidden && !T.covered && input.value) paint(); });
     page.onShow = ({ back } = {}) => {
       paint();
       if (!back) setTimeout(() => input.focus(), 280);
