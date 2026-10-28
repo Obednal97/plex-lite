@@ -75,7 +75,13 @@ Transform and opacity only.
   and Episodes arrive): **Channels**, 360×202 quiet tiles with the guide's light logo plate, the
   number top right (teal ★ for favourites), the name and what's on now over a teal progress line;
   **On TV**, landscape programme cards with the title on the art, a red LIVE pill (or the start
-  time) top left and a small logo plate top right (`css/search-tv.css`).
+  time) top left and a small logo plate top right (`css/search-tv.css`). When the query is about
+  channels (a word of a channel's name or a channel number starts with it, and no library title is
+  exactly it), Channels and On TV go above Movies & Shows; On TV stays in view without scrolling.
+- **Channel logo plates** (guide, Search): light by default; a logo that would be lost on it (white,
+  silver or pale on a transparent background, with little that is dark) gets a dark `#3b3e46` plate
+  with a hairline rim. Each logo is sampled once in a 32×16 canvas (Plex sends CORS headers);
+  mid-grey if it can't be read (`js/logos.js`, `css/logos.css`).
 - **Settings:** quiet rows on the ground (hairline separators), white plate on focus.
 - **Live TV** (spec and remote tables in [LIVETV-v2-design.md](LIVETV-v2-design.md)): a two-hour time
   grid on the plain ground, six channels down. The focused programme's details sit above it like a small

@@ -23,6 +23,9 @@ releases are fixes only.
   guide and Favourites. Matched on the TV with the library search's scorer, from an index rebuilt
   when the guide changes, so typing doesn't wait. Without guide data, channel names still match.
 - The demo server's `PLEXLITE_DEMO_CHANNELS=600` pads the lineup with invented IPTV-style channels.
+- Search puts Channels and On TV first when the query is about channels (a channel name word or
+  number starts with it, and no library title is exactly it); the order never changes under the focus.
+- White channel logos get a dark plate in the guide and Search (each logo is sampled once).
 
 ### Changed
 

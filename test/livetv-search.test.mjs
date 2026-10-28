@@ -213,7 +213,14 @@ test('logo tone: white logos on transparent backgrounds need the dark plate', ()
   assert.equal(tone(img((i) => (i % 3 ? CLEAR : [255, 255, 255, 255]))), 'light', 'white text on transparent');
   assert.equal(tone(img((i) => (i % 3 ? CLEAR : [230, 232, 236, 255]))), 'light', 'light grey / silver');
   assert.equal(tone(img((i) => (i % 3 ? CLEAR : [20, 30, 120, 255]))), 'dark', 'dark blue text');
-  assert.equal(tone(img((i) => (i % 3 ? CLEAR : (i % 2 ? [255, 255, 255, 255] : [200, 20, 20, 255])))), 'dark', 'half white, half red: the light plate still shows the red');
+  assert.equal(tone(img((i) => (i % 3 ? CLEAR : (i % 2 ? [255, 255, 255, 255] : [240, 120, 20, 255])))), 'light', 'white text with an orange mark: colour shows on the dark plate too');
+  assert.equal(tone(img((i) => (i % 3 ? CLEAR : (i % 2 ? [255, 255, 255, 255] : [10, 10, 10, 255])))), 'dark', 'white and black: the black needs the light plate');
+  assert.equal(tone(img((i) => (i % 3 ? CLEAR : (i % 2 ? [255, 255, 255, 255] : [225, 20, 60, 255])))), 'light', 'white and a saturated red: the red shows on the dark plate');
+  assert.equal(tone(img((i) => (i % 3 ? CLEAR : (i % 2 ? [255, 255, 255, 255] : [20, 30, 110, 255])))), 'dark', 'white and navy: the navy needs the light plate');
+  assert.equal(tone(img((i) => (i % 3 ? CLEAR : (i % 5 ? [200, 20, 20, 255] : [255, 255, 255, 255])))), 'light', 'white text beside a red shape: both show on the dark plate');
+  assert.equal(tone(img((i) => (i % 3 ? CLEAR : (i % 21 ? [200, 20, 20, 255] : [255, 255, 255, 255])))), 'dark', 'a red logo with a white glint: keep the light plate');
+  assert.equal(tone(img((i) => (i % 3 ? CLEAR : [250, 235, 90, 255]))), 'light', 'pale yellow');
+  assert.equal(tone(img((i) => (i % 3 ? CLEAR : (i % 2 ? [255, 255, 255, 255] : [0, 0, 0, 255])))), 'dark', 'black boxes with white letters (half and half)');
   assert.equal(tone(img(() => [255, 255, 255, 255])), 'dark', 'an opaque logo brings its own background');
   assert.equal(tone(img(() => CLEAR)), 'dark', 'nothing drawn');
 });

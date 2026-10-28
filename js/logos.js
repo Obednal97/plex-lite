@@ -1,7 +1,8 @@
 // Channel logos on their plate (the guide's channel column, Search's Live TV rows). Most logos are
 // dark or colourful and sit on a light plate, but some are white on a transparent background and
-// vanish on it. Each logo is looked at once, in a 32x16 canvas: when most of its visible pixels are
-// near-white and it has a transparent background, its plate turns dark (`logo-dark`). Plex answers
+// vanish on it. Each logo is looked at once, in a 32x16 canvas: when it has a transparent background
+// and more of it would be lost on the light plate than on a dark one (logos.tone), its plate turns
+// dark (`logo-dark`). Plex answers
 // image requests with Access-Control-Allow-Origin (the app's file:// origin is "null"), so the
 // canvas can be read; if a server doesn't, the logo loads again without CORS on a mid-grey plate
 // (`logo-mid`) that shows white and dark logos alike. CSS: css/logos.css.
@@ -15,25 +16,26 @@
   var H = 16;
 
   // RGBA bytes -> 'light' (needs the dark plate) or 'dark' (the light plate is fine). Pure; tested.
+  // Counts the visible pixels each plate would lose: bright ones (white, silver, pale yellow, pastel)
+  // on the light plate, ones with no bright channel at all (black, navy, dark green) on the dark one.
+  // Saturated colours (red, orange, green, blue) show on both and count for neither. A logo with its
+  // own background (under 10% transparent) keeps the light plate.
   logos.tone = function (data) {
     var seen = 0;
     var clear = 0;
-    var white = 0;
+    var bright = 0;
+    var dark = 0;
     for (var i = 0; i < data.length; i += 4) {
-      var a = data[i + 3];
-      if (a < 96) { clear++; continue; }
+      if (data[i + 3] < 96) { clear++; continue; }
       seen++;
       var r = data[i];
       var g = data[i + 1];
       var b = data[i + 2];
-      var max = Math.max(r, g, b);
-      var min = Math.min(r, g, b);
-      // near-white: bright and barely tinted (white, light grey, silver)
-      if (0.2126 * r + 0.7152 * g + 0.0722 * b > 205 && max - min < 40) white++;
+      if (0.2126 * r + 0.7152 * g + 0.0722 * b > 190) bright++;
+      else if (Math.max(r, g, b) < 140) dark++;
     }
-    var total = data.length / 4;
-    if (!seen || clear < total * 0.1) return 'dark'; // nothing drawn, or the logo has its own background
-    return white >= seen * 0.5 ? 'light' : 'dark';
+    if (!seen || clear < data.length / 4 * 0.1) return 'dark';
+    return bright >= seen * 0.15 && dark < bright * 0.5 ? 'light' : 'dark';
   };
 
   function measure(img) {
