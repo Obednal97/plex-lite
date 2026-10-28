@@ -1,7 +1,7 @@
 // The phone and tablet layer's shell (docs/WEB.md, "Phones and tablets"): when it takes over from
 // the 1920x1080 TV stage, the bottom tabs, a stack of pages per tab, Back (the chevron, the
-// browser's Back, Esc), and the hand-off to stage screens it doesn't have its own version of yet,
-// above all the player (PL.touch.play: phase 3 replaces it with a touch player).
+// browser's Back, Esc), and the hand-off to the player (PL.touch.play, the touch player in
+// web/touch/player.js) and to stage screens it doesn't have its own version of yet.
 //
 // How it sits on the app (js/app.js): while the layer is in charge, the stage's root screen is a
 // stand-in (an empty screen that passes Back to the layer), the stage is hidden (html.pl-touch) and
@@ -76,12 +76,35 @@
     };
   }
 
-  // Shows the layer or the stage, from what is on the stage's stack.
+  // Shows the layer or the stage, from what is on the stage's stack. A screen of the layer's own
+  // (touchOverlay: the touch player) covers the layer instead: the layer stays in charge under it,
+  // its pages keep their place, and nothing of the stage shows.
   function sync() {
     const st = app.stack;
     const ours = !!(st[0] && st[0].touchStandIn);
     T.engaged = ours;
-    setVisible(ours && st.length === 1);
+    const covered = ours && st.length > 1 && st.slice(1).every((s) => s.touchOverlay);
+    setVisible(ours && (st.length === 1 || covered));
+    setCovered(covered);
+  }
+
+  T.covered = false;
+  function setCovered(on) {
+    if (on === T.covered) return;
+    T.covered = on;
+    const top = topPage();
+    if (on) {
+      if (top) top.scrollY = window.scrollY;
+      closeAllSheets();
+      html.classList.add('t-covered');
+      return;
+    }
+    html.classList.remove('t-covered');
+    // back from the player: the page shows its progress again
+    if (T.visible && top) {
+      restoreScroll(top);
+      if (top.onShow) top.onShow({ back: true });
+    }
   }
 
   function setVisible(on) {
@@ -360,8 +383,8 @@
 
   // ---- Playback: the hand-off to the player ---------------------------------------------------------------
 
-  // Phase 3 replaces these two with a touch player (same arguments as PL.screens.player). Until then
-  // the TV player opens on the stage; closing it comes back here and the page refreshes (onShow).
+  // The TV player on the stage, until web/touch/player.js replaces these two with the touch player
+  // (same arguments as PL.screens.player). Closing it comes back here and the page refreshes (onShow).
   T.play = (item, opts) => app.push(PL.screens.player(item, opts || {}));
   // live: {label, dvrKey, channel, channels, index} (js/screens/livetv.js playList)
   T.playLive = (live) => app.push(PL.screens.player(null, { live }));
