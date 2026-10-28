@@ -105,6 +105,8 @@
     this.indexError = null;
     // Live TV: channel and guide indexes, rebuilt when the guide changes (not per keystroke)
     this.tv = { channels: [], shows: [] };
+    this.tvFirst = false;       // the TV rows go above Movies & Shows (LS.channelsFirst)
+    this.tvFirstFor = null;     // the query that decided it
     this.tvIndex = null;        // {channels, guide, gen, at}
     this.tvGen = 0;
     this.tvCache = {};
@@ -255,6 +257,8 @@
       this.pluginRows = [];
       this.local = [];
       this.tv = { channels: [], shows: [] };
+      this.tvFirst = false;
+      this.tvFirstFor = null;
       this.server = { titles: [], people: [], episodes: [] };
       this.serverDone = false;
       this.render();
@@ -328,6 +332,12 @@
     if (!q) return;
     var t0 = Date.now();
     this.tv = this.tvSearch(q);
+    // Order: decided here, with the TV rows, from local results only. It never changes under a
+    // focus that is in the results for the same query (a late index or guide update can't move it).
+    var first = this.tv.first;
+    if (this.area === 'results' && this.tvFirstFor === q) first = this.tvFirst;
+    this.tvFirst = first;
+    this.tvFirstFor = q;
     var t1 = Date.now();
     this.render();
     this.tvTiming = { tv: t1 - t0, render: Date.now() - t1 };
@@ -340,14 +350,16 @@
     if (!q) return { channels: [], shows: [] };
     var idx = this.tvIndexNow();
     var t = now();
-    var channels = LS.matchChannels(idx.channels, q, { limit: 30, isFavourite: G.isFavourite }).map(function (c) {
+    var matched = LS.matchChannels(idx.channels, q, { limit: 30, isFavourite: G.isFavourite });
+    var first = LS.channelsFirst(q, matched.best, LS.titleScore(this.local[0], q));
+    var channels = matched.map(function (c) {
       var nn = G.nowNext(c.identifier, t);
       return { ratingKey: 'live-ch-' + c.identifier, liveChannel: c, airing: nn.now, next: nn.next };
     });
     var shows = LS.matchProgrammes(idx.guide, q, t, 30).map(function (h) {
       return { ratingKey: 'live-air-' + h.c.identifier + '-' + h.a.b, liveChannel: h.c, airing: h.a, onNow: h.onNow, art: h.a.art };
     });
-    return { channels: channels, shows: shows };
+    return { channels: channels, shows: shows, first: first };
   };
 
   // OK on a channel, or on a programme that is on now: watch it from live, with CH+/CH- along
@@ -494,13 +506,16 @@
     var sections = [];
     if (q) {
       var titles = this.titles();
-      if (titles.length) sections.push({ id: 'titles', title: 'Movies & Shows', kind: 'poster', items: titles });
-      // local like the titles, so they sit above the server's rows and don't move when those arrive
+      var titleRow = titles.length ? { id: 'titles', title: 'Movies & Shows', kind: 'poster', items: titles } : null;
+      // local like the titles, so they sit above the server's rows and don't move when those arrive;
+      // above the titles when the query is about channels (this.tvFirst)
+      if (titleRow && !this.tvFirst) sections.push(titleRow);
       var live = this.liveMenu.bind(this);
       if (this.tv.channels.length) {
         sections.push({ id: 'channels', title: 'Channels', kind: 'wide', geometry: CHANNEL_GEO, makeCard: makeChannelCard, onLongPress: live, items: this.tv.channels });
       }
       if (this.tv.shows.length) sections.push({ id: 'ontv', title: 'On TV', kind: 'wide', makeCard: makeAiringCard, onLongPress: live, items: this.tv.shows });
+      if (titleRow && this.tvFirst) sections.push(titleRow);
       if (this.server.people.length) {
         sections.push({ id: 'people', title: 'People', kind: 'poster', geometry: ui.PERSON_GEO, makeCard: ui.makePersonCard, items: this.server.people });
       }
@@ -576,7 +591,9 @@
     this.stack.focus(false);
     this.shadow.hide();
     this.zoneIds = key;
-    var keep = sameQuery && focusedId ? ids.indexOf(focusedId) : -1;
+    // the focused row stays put only while the focus is in the results; from the keyboard, Right
+    // always lands on the top row (which may have changed: the TV rows can go first)
+    var keep = sameQuery && focusedId && wasResults ? ids.indexOf(focusedId) : -1;
     this.stack.setZones(zones, keep >= 0 ? keep : 0);
     if (wasResults) {
       if (zones.length) this.stack.focus(true);
@@ -725,18 +742,7 @@
 
   function logoPlate(c, cls) {
     var plate = PL.el('div', cls);
-    var src = c.thumb ? PL.plex.image(c.thumb, 128, 68, { format: 'png' }) : null;
-    if (src) {
-      var img = PL.el('img');
-      img.width = 128;
-      img.height = 68;
-      img.onload = function () { plate.classList.add('loaded'); };
-      img.onerror = function () { img.style.visibility = 'hidden'; plate.appendChild(PL.el('span', 'stv-logo-text', c.name)); };
-      img.src = src;
-      plate.appendChild(img);
-    } else {
-      plate.appendChild(PL.el('span', 'stv-logo-text', c.name));
-    }
+    PL.logos.fill(plate, c, { w: 128, h: 68, textClass: 'stv-logo-text' });
     return plate;
   }
 

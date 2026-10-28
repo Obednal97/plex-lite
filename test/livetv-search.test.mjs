@@ -118,6 +118,12 @@ test('programmes: article, word start and typo, best match first', () => {
   assert.deepEqual(shows('ligthouse keeper').slice(0, 1), ['105 The Lighthouse Keeper now']);
 });
 
+test('programmes: letters across words don\'t join word matches', () => {
+  const a3 = { 101: [air(0, 60, 'Star Quiz'), air(60, 120, 'The Lost Art')] };
+  const g = S.indexGuide(CHANNELS, (id) => a3[id] || [], NOW, {});
+  assert.deepEqual(plain(S.matchProgrammes(g, S.query('star'), NOW)).map((h) => h.a.title), ['Star Quiz']);
+});
+
 test('programmes that ended since the index was built are skipped', () => {
   assert.deepEqual(shows('weather', NOW + 15 * 60), ['101 Weather Watchers 30']);
 });
@@ -159,4 +165,55 @@ test('600 channels and a day of guide: a keystroke stays cheap', () => {
   console.log(`  600 channels, ${gi.titles.length} titles, ${gi.airings} airings: index ${built.toFixed(1)} ms, ${per.toFixed(2)} ms a keystroke (node)`);
   assert.ok(per < 15, `a keystroke took ${per} ms in node`);
   assert.equal(S.matchChannels(ci, S.query('harbour news 1'))[0].title.indexOf('Harbour News 1') !== -1, true);
+});
+
+// ---- order: TV rows first when the query is about channels ---------------------------------------
+
+test('TV rows first: a channel word or number starts with the query, and no title is exactly it', () => {
+  const first = (text, titleBest = 0) => {
+    const q = S.query(text);
+    return S.channelsFirst(q, S.matchChannels(index, q).best, titleBest);
+  };
+  assert.equal(first('harbour'), true, 'channel name prefix');
+  assert.equal(first('news'), true, 'channel word start');
+  assert.equal(first('news', 900), true, 'even when a title starts with it');
+  assert.equal(first('news', 1000), false, 'an exact title wins');
+  assert.equal(first('105'), true, 'a channel number');
+  assert.equal(first('11'), true, 'two digits starting channel numbers');
+  assert.equal(first('1'), false, 'one digit says too little');
+  assert.equal(first('ha'), false, 'two letters say too little');
+  assert.equal(first('harbuor'), false, 'a typo match is not enough');
+  assert.equal(first('arbour'), false, 'inside a word is not enough');
+  assert.equal(first('lighthouse'), false, 'no channel');
+});
+
+test('titleScore: the fuzzy score of a library title or its original title', () => {
+  const q = S.query('newsroom');
+  assert.equal(S.titleScore({ title: 'The Newsroom' }, q), 1000);
+  assert.equal(S.titleScore({ title: 'Other', originalTitle: 'Newsroom Stories' }, q), 895);
+  assert.equal(S.titleScore(null, q), 0);
+});
+
+test('guide filler and channel numbers are not programmes', () => {
+  const air2 = { 101: [air(0, 60, '..programmes start at 7.00pm'), air(60, 120, 'Harbour 100 Club')] };
+  const g = S.indexGuide(CHANNELS, (id) => air2[id] || [], NOW, {});
+  assert.deepEqual(plain(g.titles.map((t) => t.title)), ['Harbour 100 Club']);
+  assert.equal(S.matchProgrammes(g, S.query('1001'), NOW).length, 0, 'no near misses for digits');
+  assert.equal(S.matchProgrammes(g, S.query('100'), NOW).length, 1, 'a number in the title still matches');
+});
+
+// ---- logo plates (js/logos.js) -------------------------------------------------------------------
+
+test('logo tone: white logos on transparent backgrounds need the dark plate', () => {
+  const lctx = vm.createContext({ PL: { el() {} }, document: {}, Math });
+  vm.runInContext(readFileSync(here + '../js/logos.js', 'utf8'), lctx);
+  const tone = lctx.PL.logos.tone;
+  const img = (fill) => { const d = new Uint8ClampedArray(32 * 16 * 4); for (let i = 0; i < 32 * 16; i++) d.set(fill(i), i * 4); return d; };
+  const CLEAR = [0, 0, 0, 0];
+  assert.equal(tone(img((i) => (i % 3 ? CLEAR : [255, 255, 255, 255]))), 'light', 'white text on transparent');
+  assert.equal(tone(img((i) => (i % 3 ? CLEAR : [230, 232, 236, 255]))), 'light', 'light grey / silver');
+  assert.equal(tone(img((i) => (i % 3 ? CLEAR : [20, 30, 120, 255]))), 'dark', 'dark blue text');
+  assert.equal(tone(img((i) => (i % 3 ? CLEAR : (i % 2 ? [255, 255, 255, 255] : [200, 20, 20, 255])))), 'dark', 'half white, half red: the light plate still shows the red');
+  assert.equal(tone(img(() => [255, 255, 255, 255])), 'dark', 'an opaque logo brings its own background');
+  assert.equal(tone(img(() => CLEAR)), 'dark', 'nothing drawn');
 });
