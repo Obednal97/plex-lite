@@ -283,6 +283,39 @@
 
   G.lastChannel = null; // identifier of the channel watched before the current one
 
+  // ---- What the guides share (the TV's Live TV tab and the phone guide, web/touch/live/) ------------
+
+  // The filter a guide opens on: Favourites whenever there are some (the owner's choice), else the
+  // last one chosen.
+  G.openingSel = function () {
+    return G.favourites().length ? { base: 'fav', refine: null } : G.getBrowse();
+  };
+
+  // What is on now: [{channel, airing, cat}] in channel order, without guide filler.
+  G.onNow = function (t) {
+    if (t == null) t = now();
+    var out = [];
+    G.channels.forEach(function (c) {
+      var a = G.nowNext(c.identifier, t).now;
+      // a channel showing only guide filler has nothing on to show
+      if (a && !L.isFiller(a.title)) out.push({ channel: c, airing: a, cat: G.airingCat(a) || null });
+    });
+    return out;
+  };
+
+  // What the live player takes (js/screens/player.js opts.live): list[index] plays, and the mini
+  // guide and CH+/CH- go through list. label names the list ("All channels", "Sport").
+  G.liveSpec = function (list, index, label) {
+    var shape = function (x) { return { identifier: x.identifier, id: x.id, vcn: x.vcn, title: x.name, thumb: x.thumb }; };
+    return {
+      label: label || 'All channels',
+      dvrKey: G.src ? G.src.dvrKey : null,
+      channel: shape(list[index]),
+      channels: list.map(shape),
+      index: index,
+    };
+  };
+
   // ---- Browse: categories, families and the shared filter (docs/LIVETV-browse-design.md) ------------
   // Categories come from programme genres. A film's genres are in the grid; an episode's are on its
   // show, so after a block arrives the shows it names are looked up 40 at a time

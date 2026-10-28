@@ -45,7 +45,7 @@
     this.anchor = now();        // the time Up/Down keep
     this.rows = {};             // index -> {chan, cells, track, nodes:[{a, node, label}], key, shifted}
     // opens on Favourites once there are some (the owner's choice); otherwise the last choice
-    this.sel = G.favourites().length ? { base: 'fav', refine: null } : G.getBrowse();
+    this.sel = G.openingSel();
     G.setBrowse(this.sel, true);
     this.seenSeq = G.browseSeq;
     this.area = 'grid';
@@ -735,17 +735,8 @@
   LiveTVScreen.prototype.playList = function (list, index, label) {
     var c = list[index];
     if (!c || !G.src) return;
-    var shape = function (x) { return { identifier: x.identifier, id: x.id, vcn: x.vcn, title: x.name, thumb: x.thumb }; };
     this.cancelEntry();
-    PL.app.push(screens.player(null, {
-      live: {
-        label: label || 'All channels',
-        dvrKey: G.src.dvrKey,
-        channel: shape(c),
-        channels: list.map(shape),
-        index: index,
-      },
-    }));
+    PL.app.push(screens.player(null, { live: G.liveSpec(list, index, label) }));
   };
 
   LiveTVScreen.prototype.favourite = function (chan) {

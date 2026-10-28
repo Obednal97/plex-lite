@@ -218,6 +218,7 @@ player) is open. Sign-in and the first-run screens stay as they are.
 | `web/touch/shell.js` | Taking over from the stage, the tabs, a stack of pages per tab, Back, the hand-off to the player and other stage screens. |
 | `web/touch/sheets.js` | Bottom sheets (a centred card on a tablet), a title's quick actions, toasts, confirmations. |
 | `web/touch/screens/*.js` | The screens. A screen not built yet opens the TV's version on the stage. |
+| `web/touch/live/` | Live TV (see [Live TV on phones and tablets](#live-tv-on-phones-and-tablets)). |
 
 **How it sits on the app.** While the layer is in charge, the stage's root screen is a stand-in
 that passes Back to the layer, `<html>` has the class `pl-touch` (the stage is hidden, the page
@@ -245,6 +246,55 @@ destroy(), onReselect()}`; `PL.touch.push(page)`, `PL.touch.back()`, `PL.touch.s
 **Long press.** `web/web.js` turns a 550 ms press into a `contextmenu` event (Android sends its own);
 `PL.touch.ui.onHold` opens the title's quick actions from it, and the click at the end of the press
 is swallowed. Every title also has a "…" button.
+
+### Live TV on phones and tablets
+
+The Live TV tab (board P4) uses the TV's guide data and rules unchanged (`js/livetv-data.js`,
+`js/livetv-logic.js`, `js/livetv-browse.js`, `js/livetv-search.js`, the logo plates in `js/logos.js`);
+only the screens are new.
+
+| File | What it does |
+| --- | --- |
+| `live/logic.js` | Pure parts, tested in `test/touch-live.test.mjs`: the grid's sizes, which rows and hours to build, cell labels, the chips, Last watched, the number pad. |
+| `live/parts.js` | `PL.touch.live`: watching (through `PL.touch.playLive`), Last watched, logo plates, a programme's details, the long-press actions, the filter sheet, Go to channel. |
+| `live/grid.js` | The time grid. |
+| `live/onnow.js` | On now as a feed. |
+| `live/search.js` | Searching channels and programmes from the guide. |
+| `live/guide.js` | The tab's page (`PL.touch.screens.live`). |
+| `live/live.css` | Their styles. |
+
+- **The page** is one scroller that scrolls both ways. The header (search, Go to channel, the filter
+  and the profile), the chips and Last watched scroll away upwards and never sideways; the time ruler
+  sticks under the status bar, the channel column (logo plate and number) sticks on the left, and a
+  long programme keeps its title in view while it scrolls off to the left. All of that is
+  `position: sticky`, so nothing waits on script while scrolling.
+- **Chips:** Favourites, All, On now and the categories (Entertainment, Movies, Sport...). The filter
+  button opens the TV's Browse rail as a sheet: the same choices with counts, the channel families,
+  and the current choice narrowed by the other dimension (a category's families, a family's
+  categories). A family gets its own chip while chosen. The choice is the TV guide's, saved per server.
+- **Opens on Favourites** whenever there are some (the owner's choice, as on the TV), else on the
+  last choice. With none, Favourites says how to add some.
+- **Taps:** a programme on now plays (`PL.touch.playLive`, with the guide's filter as the channel
+  list, so channel up/down stay inside it); a later one opens its details (art, time, synopsis,
+  Watch the channel now, Favourite). A long press on a programme or a channel: Watch, Favourite,
+  Details. A tap on a channel's logo plays it.
+- **Last watched:** the channels watched most recently (per server, newest first), each a card with
+  what is on now and a Play button. The player reports the channel that was on in
+  `PL.liveGuide.watching` when it closes (the TV player already does), so a channel changed inside
+  the player counts too.
+- **On now** is the TV's On now wall as a feed: Favourites, then each category, shelves of 16:9
+  cards that scroll sideways; a card's art and logo load only when it nears the screen.
+- **Go to channel:** a number pad sheet. It shows the channel the digits mean (exact, starting with
+  them, else the nearest, as on the TV) with what is on; Watch, or Show in guide (switching to All
+  channels when the filter hides it).
+- **Tablets** get bigger rows, wider half hours and a wider channel column; a phone on its side gets
+  shorter rows.
+- **Speed.** Rows are virtualised: only the rows in view plus six each way exist, each with the
+  programmes of the hours in view plus one either side. Scrolling sideways adds and drops cells hour by
+  hour and keeps the rest; new guide data rebuilds only the rows whose programmes changed; logo plates
+  are made once per channel. Measured with 600 channels on an emulated iPhone (headless Chromium with
+  the CPU slowed 4x, and WebKit): a vertical fling holds 60 fps with under 1.5 ms of script per frame
+  and never shows an unbuilt row; scrolling sideways at 9,000 px/s keeps about 95% of frames under 20 ms.
 
 ## Plugins
 
@@ -315,7 +365,7 @@ is swallowed. Every title also has a "…" button.
 - The server's local address needs Chrome's local-network permission; without it streams go through
   Remote Access or the relay.
 - No Chromecast/AirPlay, no picture-in-picture button, no offline downloads.
-- Phones and tablets: the touch player and the phone guide are still the TV's, scaled to the screen (see above).
+- Phones and tablets: the touch player is still the TV's, scaled to the screen (see above).
 
 ## Building and deploying
 

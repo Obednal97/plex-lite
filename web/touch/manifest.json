@@ -5,7 +5,8 @@
     "browse.css",
     "details.css",
     "search.css",
-    "settings.css"
+    "settings.css",
+    "live/live.css"
   ],
   "scripts": [
     "logic.js",
@@ -17,7 +18,12 @@
     "screens/details.js",
     "screens/person.js",
     "screens/search.js",
-    "screens/live.js",
+    "live/logic.js",
+    "live/parts.js",
+    "live/grid.js",
+    "live/onnow.js",
+    "live/search.js",
+    "live/guide.js",
     "screens/settings.js"
   ]
 }
