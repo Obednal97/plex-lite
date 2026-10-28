@@ -118,6 +118,7 @@
     var hls = new Hls({
       enableWorker: true,
       liveDurationInfinity: true, // a live channel's buffer shows as video.seekable (pause and rewind)
+      liveSyncDurationCount: 2, // start a channel close to live (the banner counts "behind live" from the edge)
       backBufferLength: 120,
       maxBufferLength: 30,
       // the transcoder writes segments as it goes: be patient with a fresh session
