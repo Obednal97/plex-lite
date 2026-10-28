@@ -1,0 +1,95 @@
+/* The player with a mouse (web/web-player.js, docs/WEB.md "Player with a mouse"). Web build only;
+   sizes are stage px (the D3 / D3k mockups x 1.333). The mouse layout is html[data-input="pointer"];
+   with the mouse in use (D3) data-nav is "pointer", after a navigation key (D3k) it is "keys" and
+   the TV's look comes back. Remote mode never sees any of this. */
+
+/* ---- Idle while playing: no cursor ---------------------------------------------------------------- */
+
+html[data-input="pointer"] .player.web-idle, html[data-input="pointer"] .player.web-idle * { cursor: none; }
+
+/* ---- The transport row (D3): under the bar, where the times start on the TV -------------------- */
+
+.web-transport { display: none; position: absolute; left: 96px; bottom: 97px; height: 64px; align-items: center; white-space: nowrap; }
+html[data-input="pointer"][data-nav="pointer"] .web-transport { display: flex; }
+.scrubbing .web-transport { opacity: 0; pointer-events: none; }
+.web-tbtn { position: relative; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: var(--text); cursor: pointer; transition: background-color 120ms linear; }
+.web-tbtn .glyph { display: block; }
+.web-play { width: 64px; height: 64px; margin-right: 13px; background: var(--focus); color: var(--focus-ink); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); }
+.web-play:hover { background: #dfe3ea; }
+.web-play.is-play .glyph { margin-left: 3px; }
+.web-skip { width: 59px; height: 59px; margin-right: 5px; }
+.web-skip-n { position: absolute; left: 0; top: 0; width: 59px; height: 59px; line-height: 61px; text-align: center; font-size: 13px; font-weight: 700; color: var(--text); }
+.web-skip + .web-volbtn { margin-left: 14px; }
+.web-volbtn { width: 52px; height: 52px; }
+.web-skip:hover, .web-volbtn:hover { background: rgba(255, 255, 255, 0.14); }
+/* the slider: a 112 px line in a taller hit area; a knob while hovered or dragged */
+.web-vol { position: relative; width: 112px; height: 40px; margin-left: 8px; cursor: pointer; }
+.web-vol-track { position: absolute; left: 0; top: 18px; width: 112px; height: 5px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, 0.3); }
+.web-vol-fill { width: 112px; height: 5px; background: #fff; transform-origin: 0 0; }
+.web-vol-knob {
+  position: absolute; left: -8px; top: 12px; width: 16px; height: 16px; border-radius: 8px; background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); opacity: 0; transition: opacity 120ms linear;
+}
+.web-vol:hover .web-vol-knob, .web-vol.dragging .web-vol-knob { opacity: 1; }
+
+/* the times follow the transport row; the play button says paused, so no pause glyph */
+html[data-input="pointer"][data-nav="pointer"] .player:not(.scrubbing) .osd-times .left { left: 405px; }
+html[data-input="pointer"][data-nav="pointer"] .player .osd-times .osd-glyph { display: none; }
+
+/* ---- The bar with a mouse: thin at rest, thicker under the pointer, a line where it would jump ---- */
+
+html[data-nav="pointer"] .player:not(.scrubbing) .zone-bar .bar-segs { transform: scaleY(0.5); }
+html[data-nav="pointer"] .player:not(.scrubbing) .osd.hovering .bar-segs { transform: scaleY(0.8333); }
+html[data-nav="pointer"] .player:not(.scrubbing) .zone-bar .bar-knob { opacity: 0; transform: scale(0.5); }
+.web-hover-tick { position: absolute; left: -1px; top: -3px; width: 3px; height: 18px; border-radius: 2px; background: #fff; opacity: 0; pointer-events: none; transition: opacity 120ms linear; }
+html[data-nav="pointer"] .player:not(.scrubbing) .osd.hovering .web-hover-tick { opacity: 1; }
+
+/* the time under the pointer: one line, "7:02 Chapter 4" (the TV's large two-line label is for
+   scrubbing with keys) */
+html[data-nav="pointer"] .player:not(.scrubbing) .osd.hovering .bar-preview { bottom: 30px; }
+html[data-nav="pointer"] .player:not(.scrubbing) .osd.hovering .no-thumb .bar-label {
+  padding: 0 22px; height: 61px; border-radius: 13px; background: rgba(12, 12, 14, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 14px 34px rgba(0, 0, 0, 0.45);
+}
+html[data-nav="pointer"] .player:not(.scrubbing) .osd.hovering .no-thumb .bar-label::after {
+  bottom: -9px; margin-left: -9px; border-left-width: 9px; border-right-width: 9px; border-top: 9px solid rgba(12, 12, 14, 0.92);
+}
+html[data-nav="pointer"] .player:not(.scrubbing) .osd.hovering .no-thumb .bar-time {
+  display: inline-block; vertical-align: top; font-size: 27px; line-height: 61px; letter-spacing: 0;
+}
+html[data-nav="pointer"] .player:not(.scrubbing) .osd.hovering .no-thumb .bar-chapter {
+  display: inline-block; vertical-align: top; max-width: 300px; margin-left: 11px; font-size: 20px; line-height: 61px; color: var(--text-2);
+}
+html[data-nav="pointer"] .player:not(.scrubbing) .osd.hovering .no-thumb .bar-chapter:empty { display: none; }
+
+/* tabs open on a click with the mouse: hovering only lights the label */
+html[data-nav="pointer"] .player .ptab:hover { color: var(--text); }
+
+/* ---- Key hints after a key press (D3k): bottom right, by what has the focus ------------------------ */
+
+.web-osd-keys {
+  display: none; position: absolute; right: 96px; bottom: 44px; height: 52px; line-height: 52px; white-space: nowrap;
+  font-size: 19px; font-weight: 600; color: var(--text-2); transition: opacity 160ms linear;
+}
+html[data-input="pointer"][data-nav="keys"] .web-osd-keys { display: block; }
+.web-osd-keys.empty, .scrubbing .web-osd-keys, .tab-open .web-osd-keys { opacity: 0; }
+.web-hint { display: inline-block; margin-left: 21px; }
+.web-hint:first-child { margin-left: 0; }
+.web-hint-label { margin-left: 11px; vertical-align: middle; }
+.web-keycap-next { margin-left: 5px; }
+.web-osd-keys .web-keycap { height: 29px; min-width: 29px; line-height: 27px; padding: 0 8px; font-size: 16px; }
+
+/* ---- The first-play strip (D3): top centre, once per browser --------------------------------------- */
+
+.web-firstplay { position: absolute; left: 0; top: 45px; width: 1920px; z-index: 8; text-align: center; opacity: 0; transform: translate3d(0, -12px, 0); pointer-events: none; transition: opacity 300ms var(--ease), transform 300ms var(--ease); }
+.web-firstplay.on { opacity: 1; transform: none; }
+.web-firstplay-strip {
+  display: inline-flex; align-items: center; height: 59px; padding: 0 24px; border-radius: 30px; box-sizing: border-box;
+  white-space: nowrap; font-size: 20px; font-weight: 600; color: var(--text); cursor: pointer; pointer-events: auto;
+  background: linear-gradient(180deg, rgba(58, 58, 64, 0.94), rgba(36, 36, 40, 0.96));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 24px 54px rgba(0, 0, 0, 0.45);
+}
+.web-firstplay .web-keycap { height: 29px; min-width: 29px; line-height: 27px; padding: 0 9px; font-size: 16px; }
+.web-firstplay-label { margin: 0 21px 0 11px; }
+.web-firstplay-label:last-child { margin-right: 0; }
+.web-firstplay:not(.on) .web-firstplay-strip { pointer-events: none; }
