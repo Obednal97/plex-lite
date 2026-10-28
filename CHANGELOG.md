@@ -11,6 +11,14 @@ releases are fixes only.
 
 ### Added
 
+- **The player with a mouse on the web** (docs/WEB.md, "Player with a mouse"): Back [Esc] at the
+  top left; play/pause, back 10 s, ahead 30 s and volume (mute, click or drag; kept per browser) under
+  the bar; a full screen button with the round icons; tooltips that name the key ("Pause [Space]");
+  a click on the picture plays or pauses, a double-click goes full screen; the controls, Back and the
+  cursor hide after 3 s while playing (not while paused or hovered); M mutes, N plays the next episode.
+  After an arrow key the TV's focus marks and key hints come back. A one-time strip of the main keys
+  the first time the player opens with a mouse. Live TV gets Back, hiding, M and double-click. Remote
+  mode and the TV app are unchanged.
 - **Input modes on the web** (docs/WEB.md, "Input modes"): the web build tells remote, mouse and
   keyboard, and touch apart. It starts from the browser's pointer media queries (TV browsers and
   anything unclear start as remote), then follows the last input used: a touch, a real mouse move,

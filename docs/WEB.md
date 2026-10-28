@@ -18,6 +18,7 @@ and on the TV `PL.isWeb` is false, so it behaves exactly as before.
 | `web/env.js` | Marks the platform. |
 | `web/web-input.js` | The input mode: remote, mouse and keyboard, or touch (see [Input modes](#input-modes)). |
 | `web/web.js` | Who we are to Plex (browser and OS), the 1920x1080 stage scaled to the window, keyboard and mouse for the remote's buttons, the browser's Back button, Chrome's local-network permission, Settings rows, ending sessions when the page goes away. |
+| `web/web-player.js` | The player with a mouse: transport row, volume, full screen, tooltips, hiding after 3 s, M and N (see [Player with a mouse](#player-with-a-mouse)). |
 | `web/web-signin.js` | The sign-in screen (Plex's own sign-in page, or a plex.tv/link code). |
 | `web/web-media.js` | What this browser can decode, the client profile for the Plex transcoder, HLS through hls.js or the browser. |
 | `web/plugin-frame.html` | The sandboxed frame external plugins run in (see [Plugins](#plugins)). |
@@ -193,6 +194,34 @@ focuses, click selects, the wheel moves between rows (a trackpad needs a short s
 key hints on screen use these names (Enter, Esc, Y, right-click) in the mouse and keyboard mode, and
 the remote's names in remote mode ([Input modes](#input-modes)). The browser's Back button goes back
 inside the app; at the top level with the tab bar focused, Back leaves the site as usual.
+
+### Player with a mouse
+
+In the mouse and keyboard mode (`web/web-player.js`, `web/web-player.css`; remote mode and the TV
+are unchanged) the player adds what a laptop or desktop expects:
+
+- **Back [Esc]** at the top left, which leaves the player. Esc leaves too while the mouse is in use
+  (it closes an open menu or tab first); after an arrow key it hides the controls first, as on the TV.
+- **A transport row** under the bar: play/pause, back 10 s, ahead 30 s, and the volume (a mute
+  button and a slider you click or drag; kept per browser). **Full screen** joins the round icons
+  (Subtitles, Audio, Next episode). Every control has a tooltip that names its key: "Pause [Space]",
+  "Back 10 s [←]", "Ahead 30 s [→]", "Mute [M]", "Next episode [N]", "Full screen [F]".
+- **The bar**: hovering shows the time (and chapter) under the pointer with a line where a click
+  would jump; a click jumps there.
+- **The picture**: a click plays or pauses (closing an open menu or tab instead); a double-click
+  goes full screen.
+- **Idle**: while playing, the controls, the Back button and the cursor go after 3 s without a mouse
+  move. They stay while paused, while the mouse is over the controls (or Back), or while a menu is open.
+- **Keys**: M mutes, N plays the next episode; the arrows keep the remote's meaning (they never change
+  the volume), Space and F as above. After an arrow key the player looks as on the TV: the focus marks
+  come back, the transport row steps aside, a row of key hints shows what the keys do where the focus
+  is ("← → Move · ↓ Back to the bar · Space Pause · ? Shortcuts"), and a focused icon shows its
+  tooltip with Enter ("Subtitles [Enter]"). A mouse move brings the transport row back.
+- **The first time** the player opens with a mouse in a browser, a strip at the top shows the main
+  keys ("Esc Back · Space Pause · ← → −10 s / +30 s · ? All shortcuts"); it fades after 6 s or on a
+  click (`pl.tip.firstPlay` in `localStorage`).
+- **Live TV** keeps its own banner and guide; it gets the Back button, the 3 s hiding of the banner and
+  cursor, M to mute and a double-click for full screen.
 
 **Phones and tablets.** Not designed for yet. In portrait the whole TV layout shrinks to the
 screen's width, so it is usable (tap is click, a long press is hold OK, pinch to zoom) but small. A
