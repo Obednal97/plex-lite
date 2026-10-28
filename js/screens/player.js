@@ -459,24 +459,33 @@
       on('canplay', rebase);
       on('playing', rebase);
       on('timeupdate', rebase);
-      // Safari's own HLS shows the stream's WebVTT rendition by itself. Text tracks the player
-      // didn't add (plOwn) stay off, except that rendition while embedded subtitles are on: Safari
-      // times its cues against the picture, which polling the segments can't match (seen 4 s
-      // early), so the player draws its cues (the track stays hidden) instead of its own.
+      // Safari's own HLS shows the stream's WebVTT rendition by itself, under the text subtitles
+      // the player draws. While it draws some (and only then, so captions in a channel's stream
+      // stay the viewer's), the stream's subtitle tracks are kept off, except the one for the
+      // chosen language: Safari times its cues against the picture, which polling the segments
+      // can't match (seen 4 s early), so the player draws that track's cues (hidden) instead.
       var tracks = v.textTracks;
-      if (tracks && tracks.addEventListener) {
+      if (tracks && tracks.addEventListener && PL.webMedia && PL.webMedia.hls === 'native') {
         this.syncTextTracks = function () {
           var sub = self.subs;
-          var want = sub.kind === 'embedded' && PL.webMedia && PL.webMedia.hls === 'native';
-          for (var i = 0; i < tracks.length; i++) {
-            var tr = tracks[i];
-            if (tr.plOwn) continue;
-            if (want && !sub.inband && (tr.kind === 'subtitles' || tr.kind === 'captions')) self.adoptInband(tr);
-            if (tr === sub.inband) {
-              if (tr.mode === 'disabled') tr.mode = 'hidden';
-            } else if (tr.mode !== 'disabled') {
-              tr.mode = 'disabled';
+          if (sub.kind !== 'embedded' && sub.kind !== 'external') return;
+          var i;
+          var tr;
+          if (sub.kind === 'embedded' && !sub.inband) {
+            var lang = (selectedSubtitle(self.full, self.mediaIndex) || {}).languageCode || '';
+            var pick = null;
+            for (i = 0; i < tracks.length; i++) {
+              tr = tracks[i];
+              if (tr.plOwn || tr.kind !== 'subtitles') continue;
+              if (!pick || (lang && String(tr.language || '').indexOf(lang.slice(0, 2)) === 0)) pick = tr;
             }
+            if (pick) self.adoptInband(pick);
+          }
+          for (i = 0; i < tracks.length; i++) {
+            tr = tracks[i];
+            if (tr.plOwn || tr.kind !== 'subtitles') continue;
+            var mode = tr === sub.inband ? (sub.inbandShowing ? 'showing' : 'hidden') : 'disabled';
+            if (tr.mode !== mode) tr.mode = mode;
           }
         };
         tracks.addEventListener('addtrack', this.syncTextTracks);
@@ -1758,6 +1767,7 @@
     sub.kind = want.kind;
     sub.id = id;
     sub.inband = null; // a new stream brings its own tracks (the web build, Safari)
+    sub.inbandShowing = false;
     if (this.syncTextTracks) this.syncTextTracks();
     if (want.kind === 'external') this.loadExternalSubs(want.stream);
     else if (want.kind === 'embedded' && this.mode === 'transcode') this.pollHlsSubs();
@@ -1783,6 +1793,7 @@
     var session = this.session;
     var tick = function () {
       if (self.session !== session || self.state === 'stopped') return;
+      if (self.subs.inband) return; // drawn from the stream's own track (the web build, Safari)
       var dir = '/video/:/transcode/universal/session/' + session + '/vtt-base/';
       PL.http('GET', PL.plex.url(dir + 'index.m3u8'), { text: true, timeout: 8000 }).then(function (m3u8) {
         if (self.session !== session) return;

@@ -276,7 +276,16 @@
 
     // the picture's own events, for our controls
     const on = (name, fn) => v.addEventListener(name, fn);
-    on('playing', () => { this.wake(true); this.paintState(); });
+    on('playing', () => { t.quietUntil = 0; this.wake(true); this.paintState(); });
+    on('seeked', () => { t.quietUntil = 0; });
+    // iOS refuses play() without a tap when the opening tap was spent (a title fetched first):
+    // the player then waits, paused, for the play button instead of spinning on "Loading…"
+    const realPlay = v.play.bind(v);
+    v.play = () => {
+      const p = realPlay();
+      if (p && p.catch) p.catch((e) => { if (e && e.name === 'NotAllowedError') this.onAutoplayRefused(); });
+      return p;
+    };
     on('pause', () => { this.wake(false); this.paintState(); });
     on('ended', () => this.wake(false));
     on('timeupdate', () => this.onTick());
@@ -462,6 +471,15 @@
     this.pokeHide();
   };
 
+  TP.onAutoplayRefused = function () {
+    if (this.state !== 'loading' || !this.video.getAttribute('src')) return;
+    PL.log('autoplay refused: waiting for a tap');
+    this.state = 'paused';
+    this.setStatus(null);
+    this.paintState();
+    this.showChrome();
+  };
+
   TP.tapPlay = function () {
     if (this.state === 'ended' && this.upnextNext) { this.playNext(); return; }
     if (this.state === 'error' && this.live) { this.tune(this.live.channel); return; }
@@ -485,6 +503,7 @@
     const pointers = new Map();
     s.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.isPrimary) pointers.clear(); // a lost pointerup must not turn every touch into a pinch
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       try { s.setPointerCapture(e.pointerId); } catch (err) { /* gone already */ }
       if (pointers.size === 2) {
@@ -601,7 +620,9 @@
       t.tapTimer = setTimeout(() => this.settleTap(), act.ms);
       return;
     }
-    // a seek: one step now, the ripple shows the streak's total
+    // a seek: one step now, the ripple shows the streak's total (a tap with nothing to seek in,
+    // such as a stream still restarting, neither seeks nor counts)
+    if (!seekable) { t.tapState = null; return; }
     this.tapSeek(act.dir, act.step, act.total, x, y);
     t.tapTimer = setTimeout(() => this.settleTap(), G.STREAK_MS);
   };
@@ -617,7 +638,8 @@
 
   TP.tapSeek = function (dir, step, total, x, y) {
     const t = this.t;
-    t.quietUntil = Date.now() + 2500;
+    // the controls stay down until the seek has landed (a server stream restarts: its playing)
+    t.quietUntil = Date.now() + 8000;
     if (this.liveOsd) {
       const lo = this.liveOsd;
       if (lo.buffer()) lo.jump(dir * step);
@@ -625,6 +647,16 @@
       // shownPosition counts a seek still landing, so quick taps add up
       this.lastSeekAt = Date.now();
       this.seekNow(this.shownPosition() + dir * step);
+      // a server stream restarts once the streak is over, not after each tap (the TV's 400 ms
+      // would restart it under the next tap)
+      if (this.mode !== 'direct' && this.jumpTarget != null) {
+        clearTimeout(this.jumpTimer);
+        this.jumpTimer = setTimeout(() => {
+          const to = this.jumpTarget;
+          this.jumpTarget = null;
+          if (to != null && this.state !== 'stopped') this.start(to * 1000);
+        }, G.STREAK_MS);
+      }
     }
     const other = this.ripples[-dir];
     other.el.classList.remove('on');
@@ -951,6 +983,7 @@
     const sub = this.subs;
     // Safari's own subtitle track (the TV player draws from it): the native player shows it as it is
     if (sub.inband) {
+      sub.inbandShowing = t.nativeFull;
       sub.inband.mode = t.nativeFull ? 'showing' : 'hidden';
       if (t.track) t.track.mode = 'disabled';
       return;
@@ -1441,7 +1474,9 @@
 
   TP.stop = function () {
     const t = this.t;
-    if (t && this.state !== 'stopped') {
+    // also when the TV player marked it stopped itself (a second player refused in show())
+    if (t && !t.cleaned) {
+      t.cleaned = true;
       clearTimeout(t.tapTimer);
       clearTimeout(t.unlockTimer);
       clearInterval(t.liveTimer);
@@ -1474,8 +1509,16 @@
     }
     if (t.oriLocked) { try { screen.orientation.unlock(); } catch (e) { /* */ } }
     if (T.sheets) T.sheets.closeAll();
-    this.el.classList.add('tp-leaving');
-    setTimeout(() => base.exit.call(this), 200);
+    // off the stage's stack now (a tap during the animation lands on the page, which may open
+    // another player); the element slides away on its own
+    const el = this.el;
+    const parent = el.parentNode;
+    const next = el.nextSibling;
+    base.exit.call(this);
+    if (parent && !el.parentNode) parent.insertBefore(el, next && next.parentNode === parent ? next : null);
+    void el.offsetWidth;
+    el.classList.add('tp-leaving');
+    setTimeout(() => el.remove(), 220);
   };
 
   // An error: the message, and the controls stay up so Close (and for a channel, the others) can be
