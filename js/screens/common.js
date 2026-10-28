@@ -78,11 +78,15 @@
     };
     if (!watched) rows.push({ label: 'Mark as watched', action: mark(true) });
     if (watched || partial) rows.push({ label: 'Mark as unwatched', action: mark(false) });
+    // the title's pages last (after any plugin actions): Go to episode and Go to show, or Details
+    var pages = [];
+    if (t === 'episode') pages.push({ label: 'Go to episode', action: open(item) });
+    else pages.push({ label: 'Details', action: open(item) });
     if (t === 'episode' && item.grandparentRatingKey) {
-      rows.push({ label: 'Go to show', action: open({ ratingKey: item.grandparentRatingKey, type: 'show', title: item.grandparentTitle }) });
+      pages.push({ label: 'Go to show', action: open({ ratingKey: item.grandparentRatingKey, type: 'show', title: item.grandparentTitle }) });
     }
     if (t === 'season' && item.parentRatingKey) {
-      rows.push({ label: 'Go to show', action: open({ ratingKey: item.parentRatingKey, type: 'show', title: item.parentTitle }) });
+      pages.push({ label: 'Go to show', action: open({ ratingKey: item.parentRatingKey, type: 'show', title: item.parentTitle }) });
     }
     var heading = t === 'episode' ? (item.grandparentTitle || '') + ' · ' + PL.fmt.episode(item) : (item.title || '');
     var shown = false;
@@ -90,7 +94,7 @@
       if (shown) return;
       shown = true;
       (extra || []).forEach(function (a) { rows.push({ label: a.label, action: a.run }); });
-      rows.push({ label: 'Details', action: open(item) });
+      rows = rows.concat(pages);
       PL.app.push(screens.sheet([{ heading: heading, rows: rows }], { focus: 0 }));
     };
     var extra = PL.plugins && PL.plugins.actions ? PL.plugins.actions(item) : null;

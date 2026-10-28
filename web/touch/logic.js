@@ -90,9 +90,11 @@
     const partial = item.viewOffset > 0 || (item.viewedLeafCount > 0 && !watched);
     if (!watched) rows.push({ id: 'watched', label: 'Mark as watched' });
     if (watched || partial) rows.push({ id: 'unwatched', label: 'Mark as unwatched' });
+    // the title's pages last: Go to episode and Go to show (an episode's card may play when chosen,
+    // PL.ui.playsOnSelect), or Details
+    if (!o.onDetails) rows.push({ id: 'details', label: t === 'episode' ? 'Go to episode' : 'Details' });
     if (t === 'episode' && item.grandparentRatingKey) rows.push({ id: 'show', label: 'Go to show' });
     if (t === 'season' && item.parentRatingKey) rows.push({ id: 'show', label: 'Go to show' });
-    if (!o.onDetails) rows.push({ id: 'details', label: 'Details' });
     return rows;
   }
 

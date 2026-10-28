@@ -190,7 +190,11 @@
         shadow: shadow,
         loadMore: hub.more ? function (start) { return PL.plex.hubPage(hub, start, 20); } : null,
         onFocusItem: function (item) { self.hero.update(item); },
-        onSelect: function (item) { PL.app.push(screens.details(item)); },
+        // Continue Watching and Recently Released Episodes play at once (ui.playsOnSelect)
+        onSelect: function (item) {
+          if (ui.playsOnSelect(hub, item)) PL.app.push(screens.player(item, { offset: item.viewOffset || 0 }));
+          else PL.app.push(screens.details(item));
+        },
       });
     });
     this.stack.setZones(zones, 0);
