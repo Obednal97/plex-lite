@@ -60,8 +60,9 @@ html.pl-touch.t-sheet-open, html.pl-touch.t-sheet-open body { overflow: hidden; 
 /* the status bar stays legible over whatever scrolls under it */
 .t-root::before {
   content: ""; position: fixed; z-index: 40; left: 0; right: 0; top: 0; height: var(--t-safe-t);
-  background: rgba(24, 24, 27, 0.9); pointer-events: none;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0)); pointer-events: none; transition: background-color 160ms linear;
 }
+html.t-scrolled .t-root::before { background: rgba(24, 24, 27, 0.92); }
 
 /* the reset is :where()d so any component class beats it */
 :where(.t-root) button { appearance: none; -webkit-appearance: none; margin: 0; border: 0; padding: 0; background: none; font: inherit; color: inherit; text-align: inherit; cursor: pointer; }
@@ -317,6 +318,7 @@ html.pl-touch.t-sheet-open, html.pl-touch.t-sheet-open body { overflow: hidden; 
 
 /* tablets: a centred card */
 .t-tablet .t-sheet {
+  --t-g: 24px; --t-gr: 24px;
   left: 50%; right: auto; bottom: auto; top: 50%; width: 460px; max-height: 80vh; max-height: 80dvh; padding-bottom: 10px; border-radius: 20px;
   transform: translate3d(-50%, -46%, 0) scale(0.96); opacity: 0; transition: transform 220ms var(--t-ease), opacity 160ms linear;
 }

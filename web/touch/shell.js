@@ -171,6 +171,12 @@
     }
   }, 200);
   window.addEventListener('resize', () => { if (T.visible) applyLayout(); decide(); });
+  // scrolled: the status bar gets a solid band behind it (at the top the hero runs under it)
+  let scrolled = false;
+  window.addEventListener('scroll', () => {
+    const on = T.visible && window.scrollY > 8;
+    if (on !== scrolled) { scrolled = on; html.classList.toggle('t-scrolled', on); }
+  }, { passive: true });
   // Settings -> Controls pinned to Remote (the TV layout) or back
   PL.input.on(() => decide());
   // a stage screen closed while the window changed: look again once it's gone
