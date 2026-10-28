@@ -28,6 +28,8 @@
   };
 
   function now() { return Math.floor(Date.now() / 1000); }
+  // a guide channel as the player keeps it
+  function shape(x) { return { identifier: x.identifier, id: x.id, vcn: x.vcn, title: x.name, thumb: x.thumb }; }
   function pointing() { return document.body.classList.contains('pointer'); }
   function glyph(name, size) { return PL.glyph(GLYPHS[name], size || 32, 1.8); }
 
@@ -69,6 +71,7 @@
     this.gRows = {};
     this.painted = {};
     this.build();
+    player.wantsBlue = true; // Blue opens the Browse rail over the picture (docs/LIVETV-browse-design.md)
     var self = this;
     this.unlisten = G.listen(function () {
       if (self.view === 'banner') self.paintBanner();
@@ -142,6 +145,8 @@
     g.appendChild(clip);
     var gh = PL.el('div', 'osd-hints live-guide-hints');
     hint(gh, 'OK', 'Watch');
+    hint(gh, 'CH ±', 'Page');
+    hint(gh, '●', 'Browse').firstChild.classList.add('key-blue');
     hint(gh, 'Back', 'Close');
     g.appendChild(gh);
     root.appendChild(g);
@@ -445,13 +450,17 @@
     if (last) this.p.tuneChannel(last, 0);
   };
 
+  // Number entry reaches every channel, not only the filter's (G.channels once the guide has them).
+  LiveOsd.prototype.allChannels = function () {
+    return G.channels.length ? G.channels.map(shape) : (this.live().channels || []);
+  };
+
   LiveOsd.prototype.numbers = function () {
-    var list = this.live().channels || [];
-    return list.map(function (c) { return c.vcn; });
+    return this.allChannels().map(function (c) { return c.vcn; });
   };
 
   LiveOsd.prototype.typeDigit = function (d) {
-    var list = this.live().channels || [];
+    var list = this.allChannels();
     if (!list.length) return;
     var numbers = this.numbers();
     var max = L.maxDigits(numbers);
@@ -479,16 +488,81 @@
   LiveOsd.prototype.commitEntry = function () {
     var e = this.entry;
     if (!e) return;
-    var list = this.live().channels || [];
+    var list = this.allChannels();
     var m = L.matchNumber(this.numbers(), e.digits);
     this.cancelEntry();
     if (!m || this.p.state === 'stopped') return;
     if (this.view === 'guide') this.closeGuide();
-    if (list[m.index].identifier === this.channel().identifier && this.p.state !== 'error') {
+    var target = list[m.index];
+    // outside the filter: CH+/CH− and the mini guide switch to All channels
+    if (this.indexOf(target.identifier) < 0 && G.channels.length) {
+      G.setBrowse({ base: 'all' });
+      this.useList(G.channels.map(shape), 'All channels');
+    }
+    if (target.identifier === this.channel().identifier && this.p.state !== 'error') {
       this.showBanner();
       return;
     }
-    this.p.tuneChannel(list[m.index], 0);
+    this.p.tuneChannel(target, 0);
+  };
+
+  // ---- Browse over the picture -------------------------------------------------------------------------
+  // Blue: the Browse rail (js/screens/live-browse.js) over the playing channel. A choice becomes the
+  // guide's filter, CH+/CH− and the mini guide follow it, and the mini guide opens on it.
+
+  LiveOsd.prototype.openBrowse = function () {
+    if (!G.channels.length || this.p.state === 'stopped') return;
+    var self = this;
+    this.cancelEntry();
+    clearTimeout(this.hideTimer);
+    clearTimeout(this.guideTimer);
+    this.clearGuide();
+    this.setView('none');
+    this.paintZone();
+    PL.app.push(PL.screens.liveBrowse({
+      current: G.getBrowse().base,
+      overPlayer: true,
+      onApply: function (key) { self.applyBrowse(key); },
+      onCancel: function () { self.showBanner(); },
+      onForward: function (code) { self.key(code, false); },
+    }));
+  };
+
+  LiveOsd.prototype.applyBrowse = function (key) {
+    var sel = { base: key, refine: null };
+    var list = G.channelsFor(sel);
+    if (!list.length) {
+      PL.toast('Nothing in ' + PL.liveBrowse.selLabel(sel, G.browseCtx()) + ' right now');
+      this.showBanner();
+      return;
+    }
+    G.setBrowse(sel);
+    this.useList(list.map(shape), PL.liveBrowse.selLabel(sel, G.browseCtx()));
+    this.openGuide();
+  };
+
+  // The channel list CH+/CH− and the mini guide go through.
+  LiveOsd.prototype.useList = function (list, label) {
+    var live = this.live();
+    live.channels = list;
+    live.label = label;
+    var i = this.indexOf(this.channel().identifier);
+    live.index = i >= 0 ? i : 0;
+  };
+
+  // "MOVIES › SKY CINEMA  13 channels" (upper case by CSS)
+  LiveOsd.prototype.paintGuideHead = function () {
+    var label = this.live().label || 'Channels';
+    var n = (this.live().channels || []).length;
+    var cut = label.lastIndexOf(' › ');
+    PL.clear(this.guideHead);
+    if (cut > 0) {
+      this.guideHead.appendChild(document.createTextNode(label.slice(0, cut + 3)));
+      this.guideHead.appendChild(PL.el('span', 'lgh-last', label.slice(cut + 3)));
+    } else {
+      this.guideHead.appendChild(document.createTextNode(label));
+    }
+    this.guideHead.appendChild(PL.el('span', 'lgh-count', n + (n === 1 ? ' channel' : ' channels')));
   };
 
   // ---- The mini guide -------------------------------------------------------------------------------
@@ -499,7 +573,7 @@
     clearTimeout(this.hideTimer);
     var idx = this.indexOf(this.channel().identifier);
     this.gIndex = idx >= 0 ? idx : 0;
-    this.guideHead.textContent = this.live().label || 'Channels';
+    this.paintGuideHead();
     this.clearGuide();
     this.setView('guide');
     this.paintZone();
@@ -662,6 +736,9 @@
     var playing = this.playing();
     switch (code) {
       case K.STOP: p.exit(); return true;
+      case K.BLUE:
+        if (!held) this.openBrowse();
+        return true;
       case K.CH_UP:
       case K.CH_DOWN:
         if (this.view === 'guide') this.guideMove(code === K.CH_UP ? -(ROWS_ABOVE + ROWS_BELOW) : ROWS_ABOVE + ROWS_BELOW);

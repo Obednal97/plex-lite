@@ -1,7 +1,9 @@
 // Live TV tab: a two-hour time grid of every channel (docs/LIVETV-v2-design.md). The focused
-// programme's details and artwork sit above the grid; filters (All, Favourites, Movies, Sports,
-// News) above that. Rows and cells are virtualised: only the rows near the focus exist, each with
-// the cells of a few hours around the view, and scrolling is a transform on two tracks.
+// programme's details and artwork sit above the grid; the chip row above that shows the Browse
+// choice and its refinements (docs/LIVETV-browse-design.md: Blue, Left at the start of the grid or
+// OK on the first chip open the Browse rail; its On now choice swaps the grid for the On now wall).
+// Rows and cells are virtualised: only the rows near the focus exist, each with the cells of a few
+// hours around the view, and scrolling is a transform on two tracks.
 'use strict';
 
 (function () {
@@ -10,6 +12,7 @@
   var K = PL.KEY;
   var L = PL.liveLogic;
   var G = PL.liveGuide;
+  var B = PL.liveBrowse;
 
   var STEP = L.HALF_HOUR;
   var SPAN = 4 * STEP;          // two hours in view
@@ -24,30 +27,8 @@
   var BUCKET = 4 * 3600;        // cells are built for the view +- a bucket, rebuilt when it changes
   var ENTRY_MS = 2000;          // number entry commits after this pause
 
-  var FILTERS = [
-    { label: 'All', value: 'all', test: function () { return true; } },
-    { label: 'Favourites', value: 'favourites', test: function (c) { return G.isFavourite(c.identifier); } },
-    {
-      label: 'Movies', value: 'movies', test: function (c, nn) {
-        return !!((nn.now && nn.now.type === 'movie') || (nn.next && nn.next.type === 'movie'));
-      },
-    },
-    {
-      label: 'Sports', value: 'sports', test: function (c, nn) {
-        return genreOf(nn, /sport|football|soccer|golf|tennis|cricket|rugby|boxing|racing|wrestling|darts|snooker|nfl|nba|nhl|mlb|ufc/i) ||
-          /sport|espn|bein|dazn|eurosport|premier|racing|golf|nfl|nba|tnt sports|ufc|wwe/i.test(c.title);
-      },
-    },
-    {
-      label: 'News', value: 'news', test: function (c, nn) {
-        return genreOf(nn, /news/i) || /news|cnn|cnbc|bloomberg|al jazeera|msnbc|euronews|parliament/i.test(c.title);
-      },
-    },
-  ];
-
-  function genreOf(nn, re) {
-    return !!((nn.now && re.test(nn.now.genres)) || (nn.next && re.test(nn.next.genres)));
-  }
+  var BROWSE_GLYPH = [['path', { d: 'M4 7h16M6.5 12h11M9 17h6' }]];
+  var RAIL = '@rail';
 
   function now() { return Math.floor(Date.now() / 1000); }
   function pointing() { return document.body.classList.contains('pointer'); }
@@ -63,8 +44,10 @@
     this.start = this.origin;   // view start
     this.anchor = now();        // the time Up/Down keep
     this.rows = {};             // index -> {chan, cells, track, nodes:[{a, node, label}], key, shifted}
-    // opens on Favourites once there are some (the owner's choice); otherwise the last filter used
-    this.filter = G.favourites().length ? 'favourites' : PL.storage.get('livetv.filter', 'all');
+    // opens on Favourites once there are some (the owner's choice); otherwise the last choice
+    this.sel = G.favourites().length ? { base: 'fav', refine: null } : G.getBrowse();
+    G.setBrowse(this.sel, true);
+    this.seenSeq = G.browseSeq;
     this.area = 'grid';
     this.visible = false;
     this.alive = true;
@@ -76,7 +59,8 @@
     var self = this;
     this.detailSoon = PL.debounce(function () { self.paintDetailSlow(); }, 350);
     this.unlisten = G.listen(function () { if (self.alive) self.onData(); });
-    this.buildSubnav([FILTERS[0]]);
+    this.wantsBlue = true;
+    this.buildChips();
     this.load();
   }
 
@@ -146,18 +130,151 @@
     this.paintRuler();
   };
 
-  LiveTVScreen.prototype.buildSubnav = function (filters) {
+  // ---- Browse: the chip row, the filter, the rail and the On now wall --------------------------------
+
+  LiveTVScreen.prototype.isWall = function () { return this.sel.base === 'now'; };
+
+  // [≡ choice] | All … · the other dimension (a category's families, a family's categories); on the
+  // wall, its shelves.
+  LiveTVScreen.prototype.chipList = function () {
+    var ctx = G.browseCtx();
+    var base = this.sel.base;
+    var first = { label: B.label(base, ctx), value: RAIL, cls: 'chip-browse', glyph: PL.glyph(BROWSE_GLYPH, 30, 2.2) };
+    if (this.isWall()) {
+      return [first].concat((this.wall ? this.wall.shelves : []).map(function (sh) { return { label: sh.label, value: sh.key }; }));
+    }
+    var all = { label: B.allLabel(base, ctx), value: '', count: G.channels.length ? B.filter(G.channels, { base: base }, ctx).length : null };
+    return [first, all].concat(B.chips(base, G.channels, ctx).map(function (c) { return { label: c.label, value: c.key, count: c.count }; }));
+  };
+
+  // The chip that shows the current refinement (or the focused shelf on the wall).
+  LiveTVScreen.prototype.chipWanted = function () {
+    if (this.isWall()) {
+      var sh = this.wall && this.wall.shelves[this.wall.shelfIndex()];
+      return sh ? sh.key : null;
+    }
+    return this.sel.refine || '';
+  };
+
+  // Rebuilt only when the chips' labels or counts change; otherwise just reselected.
+  LiveTVScreen.prototype.buildChips = function () {
     var self = this;
+    var chips = this.chipList();
+    var sig = chips.map(function (c) { return c.value + ':' + c.label + ':' + (c.count == null ? '' : c.count); }).join('|');
+    var values = chips.map(function (c) { return c.value; });
+    var want = values.indexOf(this.chipWanted());
+    if (want < 0) want = values.length > 1 ? 1 : 0;
+    if (sig === this.chipSig && this.subnav) {
+      if (this.subnav.selected !== want) {
+        this.subnav.selected = want;
+        if (!this.subnav.focused) this.subnav.index = want;
+        this.subnav.paint();
+      }
+      return;
+    }
+    this.chipSig = sig;
     PL.clear(this.subnavHost);
-    this.filters = filters;
-    var selected = Math.max(0, filters.map(function (f) { return f.value; }).indexOf(this.filter));
-    this.subnav = new ui.ChipRow(filters.map(function (f) { return { label: f.label, value: f.value }; }), {
-      selected: selected,
-      onChange: function (value) { self.setFilter(value); },
+    this.chips = chips;
+    this.subnav = new ui.ChipRow(chips, {
+      selected: want,
+      onChange: function (value) { self.chooseChip(value); },
     });
     this.subnav.el.style.top = '136px';
     this.subnavHost.appendChild(this.subnav.el);
     this.subnav.setFocused(this.area === 'subnav' && this.visible && !PL.app.tabsFocused);
+  };
+
+  LiveTVScreen.prototype.chooseChip = function (value) {
+    if (value === RAIL) {
+      this.openRail();
+      return;
+    }
+    if (this.isWall()) {
+      var keys = this.wall.shelves.map(function (sh) { return sh.key; });
+      this.wall.focusShelf(Math.max(0, keys.indexOf(value)));
+      return;
+    }
+    this.setSel({ base: this.sel.base, refine: value || null });
+  };
+
+  // Applies a filter. focusId: the channel to keep focused (else the first, on now). transient: a
+  // preview from the rail (not saved).
+  LiveTVScreen.prototype.setSel = function (sel, focusId, transient) {
+    var wasWall = this.isWall();
+    var next = G.channels.length ? B.normalise(sel, G.browseCtx()) : { base: sel.base, refine: sel.refine || null };
+    if (next.base === 'now' && !wasWall) this.beforeWall = { base: this.sel.base, refine: this.sel.refine };
+    this.sel = next;
+    G.setBrowse(next, transient);
+    this.seenSeq = G.browseSeq;
+    this.syncMode();
+    this.buildChips();
+    if (this.isWall()) return;
+    if (this.area === 'wall') this.area = 'grid';
+    this.applyFilter(false, focusId);
+  };
+
+  // The wall replaces the details, ruler and grid while "On now" is the choice.
+  LiveTVScreen.prototype.syncMode = function () {
+    var on = this.isWall();
+    var self = this;
+    if (on && !this.wall) {
+      this.wall = new PL.LiveWall(this.el, {
+        onTune: function (list, i, label) { self.playList(list, i, label); },
+        onRail: function () { self.openRail(); },
+        onTop: function () { self.focusArea('subnav'); },
+        onFocusShelf: function () { self.buildChips(); },
+        onMenu: function (c) { return self.menu(c); },
+      });
+    }
+    this.el.classList.toggle('mode-wall', on);
+    if (this.wall) this.wall.show(on);
+    if (on) {
+      this.list = [];
+      this.row = 0;
+      this.cur = null;
+      this.clearRows();
+      this.status.style.display = 'none';
+      this.wall.refresh(true);
+      if (this.area === 'grid') this.area = 'wall';
+      this.focusArea(this.area);
+    } else if (this.area === 'wall') {
+      this.area = 'grid';
+    }
+  };
+
+  // The Browse rail (Blue, Left at the start of the grid, OK on the first chip): the guide behind
+  // follows the focus after a rest; OK applies, Back puts back what was there.
+  LiveTVScreen.prototype.openRail = function () {
+    if (!G.channels.length || this.railOpen) return;
+    var self = this;
+    var before = { base: this.sel.base, refine: this.sel.refine };
+    var focusId = this.channel() ? this.channel().identifier : null;
+    var area = this.area;
+    this.cancelEntry();
+    if (PL.app.tabsFocused) PL.app.blurTabs(true);
+    this.railOpen = true;
+    this.subnav.setFocused(false);
+    if (this.wall) this.wall.setFocused(false);
+    this.paintFocus();
+    var done = function () {
+      self.railOpen = false;
+      self.focusArea(self.isWall() ? 'wall' : self.list.length ? 'grid' : 'subnav');
+    };
+    PL.app.push(screens.liveBrowse({
+      current: this.sel.base,
+      onPreview: function (key) { self.setSel({ base: key }, null, true); },
+      onApply: function (key) {
+        self.setSel(key === before.base ? before : { base: key });
+        done();
+      },
+      onCancel: function () {
+        if (self.sel.base !== before.base || self.sel.refine !== before.refine) self.setSel(before, focusId, true);
+        else G.setBrowse(before, true);
+        self.railOpen = false;
+        self.focusArea(area === 'wall' && !self.isWall() ? 'grid' : area);
+      },
+      onForward: function (code) { self.key(code); },
+    }));
   };
 
   LiveTVScreen.prototype.paintRuler = function () {
@@ -219,13 +336,23 @@
   // The guide changed (a block arrived, a favourite was toggled): refilter, keep the focus.
   LiveTVScreen.prototype.onData = function () {
     if (!this.loaded && !G.channels.length) return;
-    var t = now();
-    var avail = FILTERS.filter(function (f) {
-      return f.value === 'all' || G.channels.some(function (c) { return f.test(c, G.nowNext(c.identifier, t)); });
-    });
-    if (avail.map(function (f) { return f.value; }).indexOf(this.filter) === -1) this.filter = 'all';
-    var values = avail.map(function (f) { return f.value; }).join(',');
-    if (values !== (this.filters || []).map(function (f) { return f.value; }).join(',')) this.buildSubnav(avail);
+    var ctx = G.browseCtx();
+    var norm = B.normalise(this.sel, ctx);
+    // Favourites with none left, or a family the lineup no longer has: All
+    if (norm.base === 'fav' && !G.favourites().length) norm = { base: 'all', refine: null };
+    if (norm.base !== this.sel.base || norm.refine !== this.sel.refine) {
+      this.sel = norm;
+      G.setBrowse(norm, true);
+      this.seenSeq = G.browseSeq;
+      this.syncMode();
+    }
+    if (this.isWall()) {
+      if (!this.wall) this.syncMode();
+      else this.wall.refresh();
+      this.buildChips();
+      return;
+    }
+    this.buildChips();
     this.applyFilter(true);
     if (this.pendingOpen && this.openAt(this.pendingOpen.identifier, this.pendingOpen.t)) this.pendingOpen = null;
   };
@@ -238,11 +365,7 @@
       return -1;
     };
     if (find(G.channels) < 0) return false;
-    if (find(this.list) < 0) {
-      this.filter = 'all';
-      this.buildSubnav(this.filters);
-      this.applyFilter(false, identifier);
-    }
+    if (find(this.list) < 0) this.setSel({ base: 'all' }, identifier);
     var row = find(this.list);
     if (row < 0) return false;
     this.row = row;
@@ -257,18 +380,12 @@
     return true;
   };
 
-  LiveTVScreen.prototype.setFilter = function (value) {
-    this.filter = value;
-    PL.storage.set('livetv.filter', value);
-    this.applyFilter(false);
-  };
-
   // keep: stay on the same channel (data refresh); otherwise start at the top, on now.
   LiveTVScreen.prototype.applyFilter = function (keep, focusId) {
     var t = now();
-    var f = FILTERS.filter(function (x) { return x.value === this.filter; }, this)[0] || FILTERS[0];
+    if (this.isWall()) return;
     var was = focusId || (keep && this.list[this.row] ? this.list[this.row].identifier : null);
-    this.list = G.channels.filter(function (c) { return f.test(c, G.nowNext(c.identifier, t)); });
+    this.list = G.channelsFor(this.sel);
     var idx = 0;
     if (was) for (var i = 0; i < this.list.length; i++) if (this.list[i].identifier === was) { idx = i; break; }
     if (!keep) {
@@ -279,7 +396,9 @@
     this.clearRows();
     if (!this.list.length) {
       this.cur = null;
-      this.showStatus(G.channels.length ? 'No channels here yet. Hold OK on a channel to add it to Favourites.' : 'No channels found');
+      this.showStatus(!G.channels.length ? 'No channels found'
+        : this.sel.base === 'fav' ? 'No channels here yet. Hold OK on a channel to add it to Favourites.'
+          : 'No channels in ' + B.selLabel(this.sel, G.browseCtx()) + ' right now. Press Blue to browse.');
       if (this.area === 'grid') this.focusArea('subnav');
       this.paintDetail();
       return;
@@ -446,7 +565,7 @@
 
   // Only two cells and two channel plates change class per move.
   LiveTVScreen.prototype.paintFocus = function () {
-    var on = this.area === 'grid' && this.visible && !PL.app.tabsFocused;
+    var on = this.area === 'grid' && this.visible && !PL.app.tabsFocused && !this.railOpen;
     var r = this.rows[this.row];
     var node = null;
     var chan = null;
@@ -525,7 +644,9 @@
 
   LiveTVScreen.prototype.focusArea = function (area) {
     this.area = area;
-    this.subnav.setFocused(area === 'subnav' && !PL.app.tabsFocused);
+    var active = !PL.app.tabsFocused && !this.railOpen;
+    this.subnav.setFocused(area === 'subnav' && active);
+    if (this.wall) this.wall.setFocused(area === 'wall' && active && this.isWall());
     this.paintFocus();
   };
 
@@ -544,6 +665,11 @@
     var list = G.list(c.identifier);
     var t = now();
     if (!this.cur) {
+      // Left at the start: the Browse rail
+      if (dir < 0 && this.start === this.origin) {
+        this.openRail();
+        return;
+      }
       // a row without guide data: walk the view in half hours
       this.start = PL.clamp(this.start + dir * STEP, this.origin, this.origin + 3 * 86400);
       this.anchor = Math.max(this.start, t);
@@ -554,6 +680,8 @@
     var next = list[i + dir];
     if (!next || next.e <= t) {
       if (dir > 0) G.ensure(this.cur.e, this.cur.e + 3 * 3600).catch(function () {});
+      // nothing earlier: Left opens the Browse rail
+      else this.openRail();
       return;
     }
     this.cur = next;
@@ -593,18 +721,23 @@
   };
 
   LiveTVScreen.prototype.play = function () {
-    var c = this.channel();
+    if (!this.channel()) return;
+    this.playList(this.list, this.row, B.selLabel(this.sel, G.browseCtx()));
+  };
+
+  // Watches list[index]; the player's mini guide and CH+/CH− go through `list` (the filter).
+  LiveTVScreen.prototype.playList = function (list, index, label) {
+    var c = list[index];
     if (!c || !G.src) return;
     var shape = function (x) { return { identifier: x.identifier, id: x.id, vcn: x.vcn, title: x.name, thumb: x.thumb }; };
-    var f = (this.filters || []).filter(function (x) { return x.value === this.filter; }, this)[0];
     this.cancelEntry();
     PL.app.push(screens.player(null, {
       live: {
-        label: f && f.value !== 'all' ? f.label : 'All channels',
+        label: label || 'All channels',
         dvrKey: G.src.dvrKey,
         channel: shape(c),
-        channels: this.list.map(shape),
-        index: this.row,
+        channels: list.map(shape),
+        index: index,
       },
     }));
   };
@@ -616,8 +749,8 @@
     PL.toast(on ? 'Added ' + c.name + ' to Favourites' : 'Removed ' + c.name + ' from Favourites');
   };
 
-  LiveTVScreen.prototype.menu = function () {
-    var c = this.channel();
+  LiveTVScreen.prototype.menu = function (chan) {
+    var c = chan || this.channel();
     if (!c) return false;
     var self = this;
     var fav = G.isFavourite(c.identifier);
@@ -674,9 +807,8 @@
     this.area = 'grid';
     this.subnav.setFocused(false);
     if (!inList) {
-      this.filter = 'all';
-      this.buildSubnav(this.filters);
-      this.applyFilter(false, target.identifier);
+      this.setSel({ base: 'all' }, target.identifier);
+      this.focusArea('grid');
       return;
     }
     this.row = this.list.indexOf(target);
@@ -693,14 +825,34 @@
       if (code === K.ENTER) { clearTimeout(this.entry.timer); this.commitEntry(); return true; }
       if (PL.isBack(code)) return this.cancelEntry();
     }
+    if (code === K.BLUE) {
+      this.openRail();
+      return true;
+    }
     if (this.area === 'subnav') {
+      var onRail = this.chips[this.subnav.index] && this.chips[this.subnav.index].value === RAIL;
+      if (code === K.ENTER && onRail) {
+        this.openRail();
+        return true;
+      }
       if (code === K.DOWN) {
-        this.subnav.choose();
-        if (this.list.length) this.focusArea('grid');
+        if (!onRail) this.subnav.choose();
+        if (this.isWall()) this.focusArea('wall');
+        else if (this.list.length) this.focusArea('grid');
         return true;
       }
       if (code === K.UP) return PL.app.focusTabs();
       return this.subnav.key(code);
+    }
+    if (this.area === 'wall' && this.isWall()) {
+      if (code === K.OK_LONG || this.wall.key(code)) return true;
+      // Back: the guide as it was before On now
+      if (PL.isBack(code)) {
+        this.setSel(this.beforeWall && this.beforeWall.base !== 'now' ? this.beforeWall : { base: 'all' });
+        this.focusArea(this.list.length ? 'grid' : 'subnav');
+        return true;
+      }
+      return false;
     }
     if (!this.list.length) return false;
     switch (code) {
@@ -727,11 +879,12 @@
   };
 
   LiveTVScreen.prototype.focusFromTabs = function () {
-    this.focusArea(this.list.length ? 'grid' : 'subnav');
+    this.focusArea(this.isWall() ? 'wall' : this.list.length ? 'grid' : 'subnav');
   };
 
   LiveTVScreen.prototype.onTabsFocus = function () {
     this.subnav.setFocused(false);
+    if (this.wall) this.wall.setFocused(false);
     this.paintFocus();
   };
 
@@ -739,6 +892,17 @@
   LiveTVScreen.prototype.tick = function () {
     var t = now();
     var origin = L.floorTo(t, STEP);
+    if (this.isWall()) {
+      // the wall rebuilds only when a programme ended or began
+      if (origin !== this.origin) {
+        this.origin = this.start = origin;
+        G.prune();
+        this.paintRuler();
+      }
+      if (this.wall.refresh()) this.buildChips();
+      G.ensure(t, t + 3600).catch(function () {});
+      return;
+    }
     if (origin !== this.origin) {
       var atStart = this.start === this.origin;
       this.origin = origin;
@@ -773,6 +937,12 @@
     // back from the player: focus the channel that was being watched
     var watched = G.watching;
     G.watching = null;
+    // the Browse rail over the picture changed the filter: follow it
+    if (this.seenSeq !== G.browseSeq) {
+      var g = G.getBrowse();
+      this.seenSeq = G.browseSeq;
+      if (g.base !== this.sel.base || g.refine !== this.sel.refine) this.setSel(g, watched);
+    }
     if (watched && this.list.length) {
       for (var i = 0; i < this.list.length; i++) {
         if (this.list[i].identifier === watched) {
@@ -786,7 +956,10 @@
     }
     if (this.loaded) this.tick();
     if (!this.list.length && !this.loaded) this.waitingForGrid = true;
-    if (!PL.app.tabsFocused) this.focusArea(this.list.length ? this.area : 'subnav');
+    if (!PL.app.tabsFocused) {
+      if (this.isWall()) this.focusArea(this.area === 'subnav' ? 'subnav' : 'wall');
+      else this.focusArea(this.list.length ? this.area : 'subnav');
+    }
     if (this.list.length) this.render();
   };
 

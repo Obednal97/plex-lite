@@ -113,7 +113,7 @@
 
   // A /grid MediaContainer -> {channels: {identifier: {identifier, id, vcn, title, thumb}},
   // airings: {identifier: [airing]}}. One programme can air on several channels or several times.
-  // airing: {b, e, title, sub, type, art, key, genres}
+  // airing: {b, e, title, sub, type, art, key, genres, show (the show's ratingKey, for its genres)}
   L.parseGrid = function (mc) {
     var channels = {};
     var airings = {};
@@ -133,6 +133,7 @@
         (airings[id] = airings[id] || []).push({
           b: m.beginsAt, e: m.endsAt, title: name.title, sub: name.sub, type: p.type,
           art: p.thumb || p.grandparentThumb || null, key: p.key || null, genres: genres,
+          show: p.grandparentRatingKey || null,
         });
       });
     });
