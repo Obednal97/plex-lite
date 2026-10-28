@@ -11,6 +11,17 @@ releases are fixes only.
 
 ### Added
 
+- **Plex Lite on the web** (https://plexlite.vercel.app, docs/WEB.md): the same app in a desktop
+  browser, built by `tools/build-web.mjs` and deployed on Vercel. Sign in with Plex (Plex's sign-in
+  page in a popup, or a plex.tv/link code), https `*.plex.direct` connections only (local, Remote
+  Access, relay) with Chrome's local-network permission handled, browser playback (direct play of what
+  the browser decodes, H.264/AAC HLS from the Plex transcoder otherwise, through hls.js or Safari's
+  own HLS) including Live TV, the 1920x1080 layout scaled to any window, keyboard and mouse
+  equivalents for the remote (right-click or a long press is hold OK), the browser's Back button as
+  Back, and sessions stopped when the tab closes. Overseerr is TV-only for now; web plugins run in a
+  sandboxed frame page. Strict Content-Security-Policy and security headers in `vercel.json`.
+  The TV app is unchanged.
+
 - A–Z rail in the Library view (title sort): the current letter follows the focus; Right from the
   last column enters it, OK jumps to the letter's first title, and the number keys jump like a phone
   keypad (2 = A, again = B ...). Uses Plex's `firstCharacter` counts with the active filters, so a

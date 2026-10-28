@@ -100,8 +100,8 @@
     this.lastY = null;
 
     var hints = PL.el('div', 'lb-hints');
-    hint(hints, 'OK', 'Show');
-    hint(hints, 'Back', 'Close');
+    hint(hints, PL.keyLabel('OK'), 'Show');
+    hint(hints, PL.keyLabel('Back'), 'Close');
     panel.appendChild(hints);
     this.el.appendChild(panel);
     this.paint(true);

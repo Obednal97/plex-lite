@@ -283,6 +283,7 @@
         node = item ? (this.opts.makeCard || makeCard)(item, this.kind, this.geo, this.opts.cardOpts) : makePlaceholder(this.kind, this.geo);
         node.style.left = (i * pitch) + 'px';
         node.addEventListener('click', this.onClick.bind(this, i));
+        if (PL.isWeb) node.addEventListener('contextmenu', this.onContext.bind(this, i));
         this.track.appendChild(node);
         this.nodes[i] = node;
       }
@@ -298,6 +299,20 @@
     this.index = i;
     if (this.opts.onSelect && this.items[i]) this.opts.onSelect(this.items[i], i);
   };
+
+  // The web build: right-click (or a long press) on a card is hold OK on that card.
+  function contextHold(list, i, e) {
+    var held = list.items[i];
+    var top = PL.app && PL.app.top();
+    if (!held || !top || !top.longPress) return;
+    var done = (list.opts.onLongPress || ui.longPress)(held, function () { list.refreshItem(held.ratingKey); });
+    if (done) {
+      e.preventDefault();
+      e.plHandled = true;
+    }
+  }
+
+  Shelf.prototype.onContext = function (i, e) { contextHold(this, i, e); };
 
   Shelf.prototype.loadMore = function () {
     if (this.loading || !this.opts.loadMore) return;
@@ -922,6 +937,7 @@
         // a fresh grid's first two rows rise in, row by row and left to right (capped at ~0.3 s)
         if (item && this.entering && i < this.cols * 2) ui.enter(node, 'card-enter', this.rowOf(i) * 70 + (i % this.cols) * 28);
         node.addEventListener('click', this.onClick.bind(this, i));
+        if (PL.isWeb) node.addEventListener('contextmenu', this.onContext.bind(this, i));
         this.inner.appendChild(node);
         this.nodes[i] = node;
       }
@@ -941,6 +957,8 @@
     this.index = i;
     if (this.items[i]) this.opts.onSelect(this.items[i]);
   };
+
+  Grid.prototype.onContext = function (i, e) { contextHold(this, i, e); };
 
   Grid.prototype.setFocused = function (on) {
     this.focused = on;

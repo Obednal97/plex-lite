@@ -22,15 +22,20 @@
     plex.server = (dev && dev.server) || PL.storage.get('server', null);
   };
 
+  // How this client shows up in Plex (dashboard, Authorized Devices). The web build replaces it
+  // with the browser and OS (web/web.js).
+  plex.device = { platform: 'webOS', platformVersion: '4.5', device: 'LG TV', deviceName: 'LG TV (Plex Lite)' };
+
   plex.commonParams = function (token) {
+    var d = plex.device;
     return {
       'X-Plex-Product': 'Plex Lite',
       'X-Plex-Version': PL.VERSION,
       'X-Plex-Client-Identifier': plex.clientId,
-      'X-Plex-Platform': 'webOS',
-      'X-Plex-Platform-Version': '4.5',
-      'X-Plex-Device': 'LG TV',
-      'X-Plex-Device-Name': 'LG TV (Plex Lite)',
+      'X-Plex-Platform': d.platform,
+      'X-Plex-Platform-Version': d.platformVersion,
+      'X-Plex-Device': d.device,
+      'X-Plex-Device-Name': d.deviceName,
       'X-Plex-Language': 'en',
       'X-Plex-Token': token || undefined,
     };
@@ -64,8 +69,23 @@
     return PL.http(method, url, { timeout: 15000 });
   };
 
-  plex.createPin = function () {
-    return plex.tvRequest('POST', '/api/v2/pins', { strong: 'false' }, null);
+  // strong: a long code for the app.plex.tv/auth page (web sign-in); otherwise the four-character
+  // code that is typed in at plex.tv/link.
+  plex.createPin = function (strong) {
+    return plex.tvRequest('POST', '/api/v2/pins', { strong: strong ? 'true' : 'false' }, null);
+  };
+
+  // Plex's own sign-in page for a strong PIN; Plex sends the browser on to forwardUrl afterwards.
+  plex.authUrl = function (pin, forwardUrl) {
+    return 'https://app.plex.tv/auth#?' + PL.query({
+      clientID: plex.clientId,
+      code: pin.code,
+      forwardUrl: forwardUrl,
+      'context[device][product]': 'Plex Lite',
+      'context[device][platform]': plex.device.platform,
+      'context[device][device]': plex.device.device,
+      'context[device][version]': PL.VERSION,
+    });
   };
 
   plex.checkPin = function (id) {
@@ -79,13 +99,28 @@
     PL.storage.set('token', token);
   };
 
-  plex.signOut = function () {
+  // forget: the user chose Sign out (Settings). In the web build that also clears everything else
+  // Plex Lite kept in the browser; a sign-in that expired or was revoked keeps the settings.
+  plex.signOut = function (forget) {
     plex.token = null;
     plex.server = null;
     PL.storage.del('token');
     PL.storage.del('server');
     PL.storage.del('profile');
     PL.storage.del('manualServer');
+    // a browser may be shared: drop everything the app kept (settings, favourites, search index,
+    // plugins) and start again as a new device
+    if (PL.isWeb && forget) {
+      try {
+        for (var i = localStorage.length - 1; i >= 0; i--) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf('pl.') === 0) localStorage.removeItem(k);
+        }
+        sessionStorage.clear();
+      } catch (e) { /* storage blocked */ }
+      plex.clientId = PL.uuid();
+      PL.storage.set('clientId', plex.clientId);
+    }
     if (PL.fuzzy && PL.fuzzy.reset) PL.fuzzy.reset();
     if (plex.onServerChange) plex.onServerChange();
   };
@@ -128,13 +163,18 @@
   };
 
   // Candidate addresses in order of preference. Plain http on the LAN skips TLS work on the TV's
-  // slow CPU; it is only offered when the server does not require secure connections.
+  // slow CPU; it is only offered when the server does not require secure connections. The web build
+  // is served over https, so it uses the https (*.plex.direct) addresses only: a browser blocks
+  // plain http from an https page (mixed content).
   plex.candidates = function (resource) {
     var out = [];
     var conns = resource.connections || [];
-    var add = function (uri, kind) { if (out.every(function (c) { return c.uri !== uri; })) out.push({ uri: uri, kind: kind }); };
+    var add = function (uri, kind) {
+      if (PL.isWeb && !/^https:/i.test(uri)) return;
+      if (out.every(function (c) { return c.uri !== uri; })) out.push({ uri: uri, kind: kind });
+    };
     conns.filter(function (c) { return c.local && !c.relay; }).forEach(function (c) {
-      if (!resource.httpsRequired) add('http://' + c.address + ':' + c.port, 'lan-http');
+      if (!resource.httpsRequired && !PL.isWeb) add('http://' + c.address + ':' + c.port, 'lan-http');
       add(c.uri, 'lan');
     });
     conns.filter(function (c) { return !c.local && !c.relay; }).forEach(function (c) { add(c.uri, 'remote'); });
@@ -150,7 +190,11 @@
   plex.connect = function (resource) {
     var cands = plex.candidates(resource);
     var token = resource.accessToken || plex.token;
-    if (!cands.length) return Promise.reject(new Error('This server has no addresses'));
+    if (!cands.length) {
+      return Promise.reject(new Error(PL.isWeb && (resource.connections || []).length
+        ? resource.name + ' has no secure address, which a browser needs: in Plex, Settings, Network, set Secure connections to Preferred'
+        : 'This server has no addresses'));
+    }
     return new Promise(function (resolve, reject) {
       var state = cands.map(function () { return 'pending'; });
       var settled = false;
@@ -186,7 +230,7 @@
   plex.normalizeUri = function (raw) {
     var s = String(raw || '').trim();
     if (!s) return '';
-    if (!/^https?:\/\//i.test(s)) s = 'http://' + s;
+    if (!/^https?:\/\//i.test(s)) s = (PL.isWeb ? 'https://' : 'http://') + s;
     var m = /^(https?):\/\/([A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(?::(\d{1,5}))?(?:[\/?#].*)?$/i.exec(s);
     if (!m) throw new Error('That doesn\'t look like a server address');
     var scheme = m[1].toLowerCase();
@@ -201,6 +245,9 @@
   plex.connectUri = function (uri, kind) {
     if (kind === 'manual-remote' && !/^https:/i.test(uri)) {
       return Promise.reject(new Error('A remote address must start with https://'));
+    }
+    if (PL.isWeb && !/^https:/i.test(uri)) {
+      return Promise.reject(new Error('In a browser the address must start with https:// (the page is secure)'));
     }
     return PL.http('GET', uri + '/identity', { timeout: 5000 }).then(function (res) {
       var id = res && res.MediaContainer && res.MediaContainer.machineIdentifier;

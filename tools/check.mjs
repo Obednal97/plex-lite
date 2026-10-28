@@ -40,10 +40,13 @@ const BAD_CSS = [
   [/\bfit-content\b/, 'fit-content'],
 ];
 
+// web/vendor holds third-party code shipped only in the web build (hls.js, see
+// THIRD-PARTY-NOTICES.md): it isn't ours to rewrite for Chrome 53, and the TV never loads it.
 function files(dir, ext) {
   let out = [];
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
+    if (relative(APP, p) === join('web', 'vendor')) continue;
     if (statSync(p).isDirectory()) out = out.concat(files(p, ext));
     else if (p.endsWith(ext) && !name.startsWith('dev-config')) out.push(p);
   }
@@ -53,7 +56,9 @@ function files(dir, ext) {
 let problems = 0;
 const report = (file, line, msg) => { problems++; console.log(`${relative(APP, file)}:${line}  ${msg}`); };
 
-for (const file of [...files(join(APP, 'js'), '.js'), ...files(join(APP, 'plugins'), '.js'), ...files(join(APP, 'catalog'), '.js'), ...files(join(APP, 'examples'), '.js')]) {
+for (const file of [...files(join(APP, 'js'), '.js'), ...files(join(APP, 'plugins'), '.js'), ...files(join(APP, 'catalog'), '.js'), ...files(join(APP, 'examples'), '.js'),
+  // the web build's own modules stay ES2015 too, so one set of rules covers all our code
+  ...files(join(APP, 'web'), '.js')]) {
   const src = readFileSync(file, 'utf8');
   let ast;
   try {
@@ -77,7 +82,7 @@ for (const file of [...files(join(APP, 'js'), '.js'), ...files(join(APP, 'plugin
   if (!/^\s*(\/\/.*\n)*\s*'use strict';/m.test(src)) report(file, 1, "missing 'use strict'");
 }
 
-for (const file of [...files(join(APP, 'css'), '.css'), ...files(join(APP, 'plugins'), '.css')]) {
+for (const file of [...files(join(APP, 'css'), '.css'), ...files(join(APP, 'plugins'), '.css'), ...files(join(APP, 'web'), '.css')]) {
   // blank out comments but keep line numbers
   const text = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '));
   text.split('\n').forEach((code, i) => {

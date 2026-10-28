@@ -104,7 +104,7 @@
   function textWidth(node) {
     var r = document.createRange();
     r.selectNodeContents(node);
-    return Math.min(node.clientWidth || 1100, Math.ceil(r.getBoundingClientRect().width));
+    return Math.min(node.clientWidth || 1100, Math.ceil(r.getBoundingClientRect().width / PL.stageScale));
   }
 
   function indexOfKey(list, ratingKey) {
@@ -360,8 +360,8 @@
       hints.appendChild(h);
       return t;
     };
-    hint('OK', 'Jump here');
-    this.hintBack = hint('Back', 'Return');
+    hint(PL.keyLabel('OK'), 'Jump here');
+    this.hintBack = hint(PL.keyLabel('Back'), 'Return');
     osd.appendChild(hints);
 
     this.tabRow = PL.el('div', 'osd-tabs');
@@ -435,6 +435,25 @@
       }
     });
     on('seeked', function () { self.onSeeked(); });
+    // The web build: Plex's playlist covers the whole file and starts at the offset
+    // (#EXT-X-START), and browsers report that absolute time, where the TV's player counts from the
+    // start of the stream. Once the video says so, positions stop adding the offset.
+    if (PL.isWeb) {
+      on('canplay', function () {
+        // once per stream: a later canplay (after a stall) must not move the base again
+        if (self.rebased || self.mode !== 'transcode' || self.live || !(self.base > 3)) return;
+        self.rebased = true;
+        if (Math.abs(v.currentTime - self.base) > 5) return;
+        PL.log('stream time is the file\'s time (offset ' + self.base + 's)');
+        self.base = 0;
+        // cues timed against the old base are dropped and fetched again
+        if (self.subs.kind === 'embedded') {
+          self.subs.cues = [];
+          self.subs.segs = {};
+          self.subs.timing = null;
+        }
+      });
+    }
     on('playing', function () {
       var was = self.state;
       self.setStatus(null);
@@ -1544,6 +1563,17 @@
     var burn = kind === 'image';
     if (kind === 'embedded') transcode = true;
     if (!this.live && hasAlternateAudio(this.full, this.mediaIndex)) transcode = true;
+    // the web build: direct play only what this browser decodes (web/web-media.js), at a quality
+    // that suits the route to the server
+    var web = PL.webMedia || null;
+    var media = !this.live && this.full && this.full.Media && this.full.Media[this.mediaIndex];
+    var q = web ? web.quality(PL.plex.server) : null;
+    if (web && !this.live && !transcode) {
+      var problem = web.directPlayProblem(media);
+      if (!problem && q.maxDirectKbps && media && media.bitrate > q.maxDirectKbps) problem = 'bitrate over the relay';
+      if (problem) transcode = true;
+      this.webReason = problem;
+    }
     var p = {
       path: this.live ? this.liveKey : '/library/metadata/' + this.full.ratingKey,
       mediaIndex: this.live ? 0 : this.mediaIndex,
@@ -1554,9 +1584,9 @@
       directStream: 1,
       directStreamAudio: 1,
       videoQuality: 100,
-      videoResolution: '3840x2160',
-      maxVideoBitrate: 200000,
-      location: 'lan',
+      videoResolution: q ? q.videoResolution : '3840x2160',
+      maxVideoBitrate: q ? q.maxVideoBitrate : 200000,
+      location: q ? q.location : 'lan',
       subtitleSize: 100,
       audioBoost: 100,
       // 'none' keeps a selected text subtitle away from the server (it would burn it in);
@@ -1566,7 +1596,7 @@
       session: this.session,
       'X-Plex-Session-Identifier': this.session,
       'X-Plex-Client-Profile-Name': 'Generic',
-      'X-Plex-Client-Profile-Extra': kind === 'embedded' ? PROFILE_EXTRA_VTT : PROFILE_EXTRA,
+      'X-Plex-Client-Profile-Extra': web ? web.profileExtra(kind === 'embedded') : kind === 'embedded' ? PROFILE_EXTRA_VTT : PROFILE_EXTRA,
     };
     if (offsetSec > 0) p.offset = Math.floor(offsetSec);
     return p;
@@ -1576,6 +1606,12 @@
   Player.prototype.start = function (offsetMs) {
     var self = this;
     if (this.state === 'stopped') return;
+    // The web build: a restart (seek, track change) gets a new session id, so the old one is
+    // reported stopped where it was (Plex would list it as playing for minutes).
+    if (PL.isWeb && !this.live && this.session && this.full && this.lastReported && this.lastReported !== 'stopped') {
+      this.report(true, 'stopped', this.position());
+    }
+    this.rebased = false;
     this.teardownVideo();
     this.stopTranscode();
     var gen = ++this.gen;
@@ -1601,11 +1637,11 @@
         self.mode = 'direct';
         self.base = 0;
         self.directStartSec = offsetSec;
-        self.video.src = PL.plex.url(part.key);
+        self.setSource(PL.plex.url(part.key), false);
       } else {
         self.mode = 'transcode';
         self.base = self.live || !(offsetSec > 0) ? 0 : Math.floor(offsetSec);
-        self.video.src = PL.plex.url('/video/:/transcode/universal/start.m3u8', params);
+        self.setSource(PL.plex.url('/video/:/transcode/universal/start.m3u8', params), true);
       }
       self.convertReason = self.mode === 'transcode' && !self.live ? self.reasonFor(part) : null;
       PL.log('play', self.mode, self.live ? 'live' : self.full.ratingKey, 'at', Math.round(offsetSec) + 's');
@@ -1622,7 +1658,13 @@
     if (kind === 'image') return 'picture subtitles are burned in';
     if (kind === 'embedded') return 'subtitles';
     if (hasAlternateAudio(this.full, this.mediaIndex)) return 'another audio track';
-    if (this.retried) return 'the TV could not play the file';
+    if (this.webReason) {
+      // 'audio eac3' -> "this browser doesn't play EAC3 audio"
+      var w = /^(video|audio|container) (.+)$/.exec(this.webReason);
+      return w ? 'this browser doesn\'t play ' + w[2].toUpperCase().replace('-BIT', '-bit') + ' ' + w[1]
+        : /relay/.test(this.webReason) ? 'the Plex relay is too slow for the original' : 'this browser can\'t play the file as it is';
+    }
+    if (this.retried) return PL.isWeb ? 'the browser could not play the file' : 'the TV could not play the file';
     var streams = (part && part.Stream) || [];
     var v = streams.filter(function (s) { return s.streamType === 1; })[0];
     var a = streams.filter(function (s) { return s.streamType === 2; })[0];
@@ -2482,16 +2524,19 @@
     this.begin();
   };
 
-  Player.prototype.onVideoError = function () {
+  // why: the web build's stream error (hls.js), when the <video> element itself has none
+  Player.prototype.onVideoError = function (why) {
     if (!this.video.getAttribute('src') || this.state === 'stopped' || this.state === 'error' || this.state === 'ended') return;
+    // the web build: hls.js recovers media errors itself and calls back with `why` when it can't
+    if (!why && this.video.plHls) return;
     var err = this.video.error;
-    PL.warn('video error', err && err.code, this.mode);
+    PL.warn('video error', err && err.code, this.mode, typeof why === 'string' ? why : '');
     if (this.mode === 'direct' && !this.retried) {
       this.retried = true;
       this.start(this.intendedPosition() * 1000);
       return;
     }
-    this.fail(new Error('This video could not be played on the TV' + (err ? ' (code ' + err.code + ')' : '')));
+    this.fail(new Error('This video could not be played ' + (PL.isWeb ? 'in this browser' : 'on the TV') + (err ? ' (code ' + err.code + ')' : '')));
   };
 
   Player.prototype.fail = function (err) {
@@ -2503,14 +2548,32 @@
     clearInterval(this.timelineTimer);
     this.teardownVideo();
     this.stopTranscode();
-    this.setStatus(PL.errorMessage(err) + (this.live ? '  ·  Choose another channel, or press Back' : '  ·  Press Back to return'), false);
+    this.setStatus(PL.errorMessage(err) + (this.live ? '  ·  Choose another channel, or press ' + PL.keyLabel('Back') : '  ·  Press ' + PL.keyLabel('Back') + ' to return'), false);
     if (!this.live) PL.toast(PL.errorMessage(err)); // live: the banner stays up and says so
   };
 
   // ---- Stopping --------------------------------------------------------------------------------
 
+  // The TV plays files and HLS with video.src; the web build attaches HLS through hls.js where the
+  // browser can't play it itself (web/web-media.js).
+  Player.prototype.setSource = function (url, isHls) {
+    var self = this;
+    var gen = this.gen;
+    if (!PL.webMedia) {
+      this.video.src = url;
+      return;
+    }
+    PL.webMedia.attach(this.video, url, isHls, function (why) {
+      if (gen !== self.gen) return;
+      // nothing attached (no way to play HLS here): fail at once rather than wait on "Loading…"
+      if (!self.video.getAttribute('src')) self.fail(new Error(why));
+      else self.onVideoError(why);
+    });
+  };
+
   Player.prototype.teardownVideo = function () {
     var v = this.video;
+    if (PL.webMedia) PL.webMedia.detach(v);
     if (!v.getAttribute('src')) return;
     v.pause();
     v.removeAttribute('src');
@@ -2567,6 +2630,8 @@
   Player.prototype.onHidden = function () {
     if (!this.exited) this.exit();
   };
+  // The web build: the tab is closing or navigating away (web/web.js sends these with keepalive).
+  Player.prototype.onPageHide = function () { this.stop(); };
   // Parked under another full screen: pause, and resume on show if it was playing.
   Player.prototype.hide = function () {
     this.resumeOnShow = this.state === 'playing' && !this.video.paused;

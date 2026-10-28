@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plex Lite plugin</title>
+</head>
+<body>
+<!-- A plugin's sandboxed frame in the web build (js/plugin-host.js). It is loaded without
+     allow-same-origin, so it has an opaque origin: no access to the app's storage, cookies or DOM.
+     Its own Content-Security-Policy (vercel.json) allows inline scripts and nothing else: no
+     network, images, styles or frames. The app sends the plugin's document once; it is written into
+     this frame, and the plugin talks to the app only through postMessage (js/plugin-sdk.js). -->
+<script>
+'use strict';
+(function () {
+  if (window.parent === window) return; // opened on its own, not as the app's plugin frame
+  var boot = function (e) {
+    if (e.source !== window.parent || !e.data || typeof e.data.plFrameDoc !== 'string') return;
+    window.removeEventListener('message', boot);
+    document.open();
+    document.write(e.data.plFrameDoc);
+    document.close();
+  };
+  window.addEventListener('message', boot);
+  window.parent.postMessage({ plFrameReady: 1 }, '*');
+})();
+</script>
+</body>
+</html>

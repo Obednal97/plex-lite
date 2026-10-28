@@ -1,0 +1,212 @@
+# Plex Lite on the web
+
+Plex Lite also runs in a desktop browser: **https://plexlite.vercel.app**. Sign in with Plex and
+it shows the libraries, Live TV and everything else from your own Plex Media Server, as on the TV.
+It is the same code as the TV app with a thin web layer on top, built by `tools/build-web.mjs` and
+hosted on Vercel.
+
+## How it works
+
+**One codebase, two targets.** The web build loads `web/env.js` first, which sets
+`window.PL_PLATFORM = 'web'`; `js/core.js` turns that into `PL.isWeb`. Every webOS-only path checks
+it and stays off on the web (luna calls and `PalmServiceBridge`, plugin services and their IPKs,
+leaving the app, the TV's "app hidden ends playback" rule). The TV build loads nothing from `web/`,
+and on the TV `PL.isWeb` is false, so it behaves exactly as before.
+
+| File | What it does |
+| --- | --- |
+| `web/env.js` | Marks the platform. |
+| `web/web.js` | Who we are to Plex (browser and OS), the 1920x1080 stage scaled to the window, keyboard and mouse for the remote's buttons, the browser's Back button, Chrome's local-network permission, Settings rows, ending sessions when the page goes away. |
+| `web/web-signin.js` | The sign-in screen (Plex's own sign-in page, or a plex.tv/link code). |
+| `web/web-media.js` | What this browser can decode, the client profile for the Plex transcoder, HLS through hls.js or the browser. |
+| `web/plugin-frame.html` | The sandboxed frame external plugins run in (see [Plugins](#plugins)). |
+| `web/signed-in.html` | Where Plex's sign-in popup lands; it closes itself. |
+| `web/vendor/hls.js/` | hls.js 1.7.3 (light build, Apache-2.0), unmodified. |
+| `tools/build-web.mjs` | Copies the app and `web/` to `dist/web/`, rewrites `index.html` (no inline scripts, web scripts added, cache-busting `?v=` hashes) and fails if the page would break the Content-Security-Policy. |
+| `vercel.json` | Build command, output directory and the security headers. |
+| `tools/serve-web.mjs` | Serves `dist/web` locally with the `vercel.json` headers. |
+
+Shared code stays ES2015 for the TV's Chrome 53, and `node tools/check.mjs` checks `web/*.js` by the
+same rules (only `web/vendor/` is skipped).
+
+## Signing in
+
+**Sign in with Plex** asks plex.tv for a PIN and opens Plex's own sign-in page
+(`app.plex.tv/auth`, with the PIN's code, this browser's client identifier and "Plex Lite" as the
+product) in a popup. Plex Lite polls the PIN every 2 seconds until Plex hands over the sign-in, then
+closes the popup. If the browser blocks the popup, the same page opens in the tab and Plex sends the
+browser back to Plex Lite afterwards, which finishes the sign-in (the PIN waits in
+`sessionStorage`). **Use a link code** shows the TV's four-character code for plex.tv/link, for
+signing in from another device.
+
+- Each browser is its own Plex device: a random client identifier in `localStorage`, shown in Plex as
+  "Plex Lite (Chrome on macOS)" (product Plex Lite, platform the browser, device the OS).
+- Plex Home profiles switch under Settings → Profile, as on the TV (not PIN-protected ones yet).
+- The Plex token is kept in this browser's `localStorage` and sent only to plex.tv and to your Plex
+  servers, in the query string as Plex's own web app does. It never reaches Vercel or any other server.
+- **Sign out** removes everything Plex Lite stored in the browser (sign-in, server, settings,
+  favourites, the search index, plugins) and starts again as a new device. The device stays listed
+  under plex.tv → Authorized Devices until you remove it there.
+
+## Connecting to your server
+
+A page served over https can only talk to https addresses (the browser blocks plain http as mixed
+content), so the web build uses the server's https `*.plex.direct` addresses from plex.tv and never
+the TV's plain-http LAN address. The order is the TV's: local first, then Plex Remote Access, then the
+Plex relay. Away from home the local address fails and Remote Access (or the relay) is used. A
+server address typed in under Settings must start with `https://`.
+
+**What the server allows.** Measured against Plex Media Server 1.43.5 with an `Origin` of a
+non-Plex web site:
+
+- The server reflects the page's origin in `Access-Control-Allow-Origin` (with `Vary: Origin`) on
+  every address (local, remote and relay), and answers preflights with
+  `Access-Control-Allow-Methods: POST, GET, OPTIONS, DELETE, PUT, HEAD` and the requested headers.
+  So library browsing, images, HLS playlists and segments, subtitles, timeline reports, track
+  changes (PUT) and Live TV tuner release (DELETE) all work from the browser. Plex Lite sends its
+  `X-Plex-*` values in the query string, so most requests are simple and need no preflight at all.
+- It does not answer the old Private Network Access preflight (`Access-Control-Allow-Private-Network`).
+  Chrome no longer uses it; see below.
+- plex.tv sends `Access-Control-Allow-Origin: *` for its API (PINs, resources, users, Home).
+
+**Local network access (Chrome 142 and later).** A public web site that reaches a device on your
+home network needs your permission: the first time Plex Lite tries the server's local address, Chrome
+asks to let the site "look for and connect to any device on your local network". Allow it to stream
+straight from the server at home. Until then, or if you block it, Plex Lite uses Remote Access or the
+relay. When you allow it later, Plex Lite moves to the local address by itself. Settings → Local
+network access shows the state and how to change it (site settings, the icon left of the address).
+Firefox and Safari don't ask in the same way.
+
+## Playback
+
+The browser direct plays a file only when it can decode all of it; everything else goes through the
+Plex universal transcoder as HLS. `web/web-media.js` asks the browser (`canPlayType`) what it plays:
+
+| | Chrome | Firefox | Safari |
+| --- | --- | --- | --- |
+| Containers it direct plays | MP4/MOV, WebM, MKV | MP4/MOV, WebM, MKV | MP4/MOV, WebM |
+| Video | H.264, VP9, AV1 (HEVC where the OS decodes it) | H.264, HEVC (macOS/Windows), VP9, AV1 | H.264, HEVC, VP9, AV1 |
+| Audio | AAC, MP3, Opus, FLAC | AAC, MP3, Opus, FLAC | AAC, MP3, FLAC, AC3, E-AC3 |
+| HLS | hls.js | hls.js | built in |
+
+(As measured on macOS; the build checks at run time, so other systems report their own.)
+
+- The decision call carries a client profile built from that list: direct play only for those
+  containers and codecs, otherwise HLS with H.264 video (copied when the source is 8-bit H.264,
+  converted otherwise) and stereo AAC. HEVC that the browser can't direct play is converted to H.264,
+  which costs the server more than the TV did; DTS, E-AC3 and TrueHD audio are converted to AAC.
+- On the Plex relay the stream is limited to 720p at 2 Mbit/s; on the LAN and Remote Access it is
+  the original quality.
+- Resume, timeline reporting (Plex's dashboard, Continue Watching), watched state, audio and
+  subtitle choice, chapters, Skip Intro and Skip Credits, the end card and the next episode work as
+  on the TV. Text subtitles are drawn by Plex Lite (external files are fetched, embedded ones arrive
+  as WebVTT next to the stream); picture subtitles (PGS, VobSub) are burned in by the server.
+- Plex's HLS playlist covers the whole file and starts at the resume point, and browsers count in
+  the file's time, where the TV counts from the start of the stream; the player adjusts once the video
+  says which.
+- **Live TV** tunes, plays and changes channel as on the TV, through hls.js (Safari: built in), with
+  the guide, Browse, banner, mini guide and favourites. Pausing plays on from the stream's buffer and
+  the banner shows how far behind live you are.
+- **Leaving.** Closing the tab, reloading or going to another site reports the playback stopped and
+  stops the transcode session (requests sent with `fetch` keepalive on `pagehide`); a Live TV tuner is
+  released. A background tab keeps playing (the TV ends playback when the app is hidden; a browser
+  doesn't). Seeking restarts the stream, as on the TV, and the old session is reported stopped.
+
+## Keyboard, mouse and window
+
+The app is laid out at 1920x1080 and scaled to fit the window, centred, with black bars where the
+window's shape differs (`transform: scale` on the page, so text is redrawn at the final size).
+
+| Key | Remote button |
+| --- | --- |
+| Arrows | Arrows |
+| Enter | OK (hold it for quick actions) |
+| Esc, Backspace (not while typing), the browser's Back button | Back |
+| Shift+Enter, the context-menu key, right-click, a long press | Hold OK (quick actions) |
+| Space | Play / pause |
+| `,` and `.` | Rewind / fast-forward |
+| Page Up / Page Down | Channel up / down, page through grids |
+| R, G, Y, B | Red, Green, Yellow, Blue |
+| I | Info |
+| F | Full screen (also Settings → Full screen) |
+| 0–9 | Number keys |
+
+On the Search screen letters and Space type instead. The mouse works like the Magic Remote: hover
+focuses, click selects, the wheel moves between rows (a trackpad needs a short swipe per step). The
+key hints on screen use these names (Enter, Esc, Y, right-click). The browser's Back button goes back
+inside the app; at the top level with the tab bar focused, Back leaves the site as usual.
+
+**Phones and tablets.** Not designed for yet. In portrait the whole TV layout shrinks to the
+screen's width, so it is usable (tap is click, a long press is hold OK, pinch to zoom) but small. A
+proper mobile layout would need: a layout that reflows below ~900 px (one-column details page,
+a smaller hero, two or three posters across, a bottom tab bar instead of the top pill), touch scrolling
+of rows and grids instead of focus-driven translation, a touch player (tap to show controls, drag the
+bar, double-tap to skip), larger hit targets, no hover-only focus, and testing on iOS Safari (native
+HLS only, no Media Source) and Android Chrome.
+
+## Plugins
+
+- **External web plugins** (Settings → Browse plugins, e.g. Hello Shelf) work. The page's
+  Content-Security-Policy forbids inline scripts, and a `srcdoc` frame would inherit it, so on the web
+  each plugin runs in `web/plugin-frame.html`: a sandboxed frame without `allow-same-origin` (an opaque
+  origin with no access to the app's storage or page) and its own policy allowing inline script but
+  no network, images, styles or frames. The app sends it the plugin's document by `postMessage`.
+  A plugin's network permission is subject to that server's CORS like any web page.
+- **Service plugins** (catalogue entries of kind "service") need a webOS background service; the web
+  build shows them as "TV app only".
+- **Overseerr / Seerr** signs in through its webOS service, so on the web it is shown as "TV app only"
+  under Settings with the reason. A Seerr server doesn't send CORS headers (measured: no
+  `Access-Control-Allow-Origin`, `OPTIONS` answered with 405) and keeps its sign-in in a `SameSite=Lax`
+  cookie, so a web page on another site can neither read its API nor hold its session.
+
+  Ways to make it work, none built yet:
+
+  1. **Same site as Seerr (recommended).** Serve the web build on a subdomain of the domain Seerr is on
+     (a custom domain on Vercel) and have Seerr's reverse proxy add CORS for that one origin with
+     credentials. Seerr's cookie is then first-party, so every browser sends it; the Plex token goes
+     only to your own Seerr, as on the TV. Needs a DNS record and a few proxy lines; no new server.
+  2. **CORS on Seerr's proxy for plexlite.vercel.app**, with the cookie rewritten to
+     `SameSite=None; Secure`. Works in Chrome only: Safari and Firefox block third-party cookies.
+  3. **A proxy on Vercel** (a serverless function that signs in to Seerr for you). Works everywhere,
+     but your Plex token and Seerr session pass through Vercel and this project's code, and the proxy
+     must be locked to your Seerr address so it isn't an open relay. Not built: it needs the owner's
+     approval.
+  4. **The home-server helper** (the planned report-a-problem helper) could offer a small CORS-enabled
+     API for Plex Lite, keeping keys at home.
+
+## Security
+
+- **Content-Security-Policy** (`vercel.json`): `default-src 'self'; script-src 'self'; style-src
+  'self'`, no inline script or eval anywhere; images and media from `https:` (Plex servers have
+  per-server `*.plex.direct` names and you may type your own https address), `blob:` for hls.js's
+  media source and worker; `connect-src 'self' https:` for the same reason; `frame-src 'self'` (the
+  plugin frame); `object-src 'none'`, `base-uri 'none'`, `form-action 'none'`,
+  `frame-ancestors 'none'`, `upgrade-insecure-requests`.
+- Also: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`
+  (Plex URLs carry the token, so no page address leaks either), HSTS,
+  `Cross-Origin-Opener-Policy: same-origin-allow-popups` (keeps the sign-in popup working),
+  `Cross-Origin-Resource-Policy: same-origin` and a `Permissions-Policy` that turns off camera,
+  microphone, location, payment and device APIs.
+- The site has no server code and no environment variables or secrets. Logs redact the token.
+
+## Limits
+
+- Overseerr / Seerr and service plugins: TV app only (see above).
+- Formats the browser can't decode are converted by the server (more load than the TV, which direct
+  plays HEVC 10-bit and E-AC3). Audio is stereo.
+- Text subtitles are drawn by Plex Lite, as on the TV (no styling from ASS/SSA).
+- PIN-protected Plex Home profiles aren't supported (same as the TV).
+- The server's local address needs Chrome's local-network permission; without it streams go through
+  Remote Access or the relay.
+- No Chromecast/AirPlay, no picture-in-picture button, no offline downloads.
+- Phones: usable but not designed for (see above).
+
+## Building and deploying
+
+```sh
+node tools/build-web.mjs        # writes dist/web/
+node tools/serve-web.mjs        # http://127.0.0.1:8940 with the vercel.json headers
+```
+
+Vercel builds every push: `main` goes to production (https://plexlite.vercel.app) and other
+branches get preview deployments (behind Vercel's login). The project needs no environment variables.

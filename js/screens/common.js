@@ -179,7 +179,7 @@
     var input = PL.el('input', { className: 'text-input', attrs: { type: 'url', spellcheck: 'false', autocomplete: 'off', placeholder: placeholder || '' } });
     input.value = initial || '';
     el.appendChild(input);
-    el.appendChild(PL.el('div', 'text-hint', 'Press OK to save · Back to cancel'));
+    el.appendChild(PL.el('div', 'text-hint', 'Press ' + PL.keyLabel('OK') + ' to save · ' + PL.keyLabel('Back') + ' to cancel'));
     var submit = function () {
       if (onDone(input.value) !== false) {
         input.blur();

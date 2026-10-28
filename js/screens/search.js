@@ -52,6 +52,7 @@
 
   function SearchScreen() {
     this.longPress = true;
+    this.typesLetters = true; // a keyboard's letters type here (the web build maps them elsewhere)
     this.root = true;
     this.alive = true;
     this.el = PL.el('div', 'search-screen');

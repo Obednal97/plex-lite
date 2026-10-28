@@ -10,7 +10,9 @@ a webOS 4.5 TV (Chrome 53, a 1.1 GHz CPU and a weak GPU), not on a desktop.
   `padStart`, `Array.prototype.flat`, `Promise.finally`, CSS grid, flex `gap`, `position: sticky`,
   `clamp()`/`min()`/`max()` or `backdrop-filter`. Every JS file starts with `'use strict';`.
 - **No build step, no dependencies.** The app is plain files loaded by `index.html`. Don't add
-  frameworks or npm packages to the app. Small, focused code is the point.
+  frameworks or npm packages to the app. Small, focused code is the point. The web build
+  (`tools/build-web.mjs`, [docs/WEB.md](docs/WEB.md)) only copies files and adds `web/`; anything
+  webOS-only must check `PL.isWeb`, and anything web-only goes in `web/` (still ES2015).
 - **Cheap to draw.** Animate only `transform` and `opacity`. Keep the DOM small, and remove what
   is off screen. Ask the Plex server for images at the size they're shown. See
   [docs/DESIGN.md](docs/DESIGN.md) and [docs/MOTION.md](docs/MOTION.md).
@@ -24,6 +26,7 @@ a webOS 4.5 TV (Chrome 53, a 1.1 GHz CPU and a weak GPU), not on a desktop.
 node tools/check.mjs          # Chrome 53 compatibility and version check (needs acorn, see the file)
 node test/fuzzy.test.mjs      # search tests
 python3 tools/build-ipk.py /tmp/plexlite.ipk   # still packages
+node tools/build-web.mjs      # the web build still builds
 ```
 
 If you can, try the change on a TV (`tools/deploy.sh`) and say in the PR which TV and webOS

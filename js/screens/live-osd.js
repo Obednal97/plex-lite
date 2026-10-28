@@ -57,6 +57,8 @@
     this.entry = null;
     this.behind = 0;          // seconds behind live (from the video's range, or counted while paused)
     this.pausedAt = 0;
+    this.lead = 0;            // the web build: the stream's head start at the tune (see buffer())
+    this.moved = false;       // paused, skipped or started over since the tune
     this.gIndex = 0;          // mini guide focus (index into the channel list)
     this.gRows = {};
     this.painted = {};
@@ -68,7 +70,7 @@
       if (self.view === 'guide') self.renderGuide(true);
     });
     var v = player.video;
-    v.addEventListener('pause', function () { if (!self.pausedAt) self.pausedAt = Date.now(); self.paintBanner(); });
+    v.addEventListener('pause', function () { self.moved = true; if (!self.pausedAt) self.pausedAt = Date.now(); self.paintBanner(); });
     v.addEventListener('playing', function () {
       if (self.pausedAt) self.behind += (Date.now() - self.pausedAt) / 1000;
       self.pausedAt = 0;
@@ -120,7 +122,7 @@
     var hints = PL.el('div', 'osd-hints live-hints');
     hint(hints, '▲▼', 'Channels');
     hint(hints, '0–9', 'Channel number');
-    this.hintOk = hint(hints, 'OK', 'Pause');
+    this.hintOk = hint(hints, PL.keyLabel('OK'), 'Pause');
     b.appendChild(hints);
     root.appendChild(b);
 
@@ -138,10 +140,10 @@
     clip.appendChild(this.guideTrack);
     g.appendChild(clip);
     var gh = PL.el('div', 'osd-hints live-guide-hints');
-    hint(gh, 'OK', 'Watch');
+    hint(gh, PL.keyLabel('OK'), 'Watch');
     hint(gh, 'CH ±', 'Page');
     hint(gh, '●', 'Browse').firstChild.classList.add('key-blue');
-    hint(gh, 'Back', 'Close');
+    hint(gh, PL.keyLabel('Back'), 'Close');
     g.appendChild(gh);
     root.appendChild(g);
 
@@ -177,11 +179,20 @@
     if (!this.playing() || !s || !s.length) return null;
     // a live stream has no end; a file (the demo server's stand-in) is not a buffer
     if (isFinite(v.duration)) return null;
+    var b;
     try {
-      return L.buffer(s.start(0), s.end(s.length - 1), v.currentTime || 0);
+      b = L.buffer(s.start(0), s.end(s.length - 1), v.currentTime || 0);
     } catch (e) {
       return null;
     }
+    // The web build: right after a tune the server sends the tuner's buffer in a burst, so the
+    // stream's end runs ahead of what is on air. Until the viewer pauses or skips, that gap is
+    // the head start, not delay, and "behind live" counts from it.
+    if (b && PL.isWeb) {
+      if (!this.moved && !v.paused) this.lead = Math.max(this.lead, b.behind);
+      b.behind = Math.max(0, b.behind - this.lead);
+    }
+    return b;
   };
 
   // Seconds behind live: the video's range when it has one, else counted from pauses.
@@ -379,6 +390,7 @@
     var to = PL.clamp((v.currentTime || 0) + sec, buf.start + 1, buf.end - 2);
     v.currentTime = to;
     this.behind = 0;
+    this.moved = true;
     this.showBanner();
   };
 
@@ -386,6 +398,8 @@
     var buf = this.buffer();
     this.behind = 0;
     this.pausedAt = 0;
+    this.lead = 0;
+    this.moved = false;
     if (buf) {
       this.p.video.currentTime = buf.end - 2;
       if (this.p.video.paused) this.p.togglePause(true);
@@ -404,6 +418,7 @@
     var a = this.airings().now;
     if (!buf || !a) return;
     this.p.video.currentTime = Math.max(buf.start + 1, this.streamTimeOf(a.b, buf));
+    this.moved = true;
     if (this.p.video.paused) this.p.togglePause(true);
     this.zone = 'bar';
     this.showBanner();
@@ -413,6 +428,8 @@
   LiveOsd.prototype.onTune = function () {
     this.behind = 0;
     this.pausedAt = 0;
+    this.lead = 0;
+    this.moved = false;
     this.painted = {};
     this.iconSig = null;
     if (this.view !== 'guide') {
