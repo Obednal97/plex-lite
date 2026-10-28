@@ -1,0 +1,338 @@
+/* The phone and tablet layer (web/touch/, docs/WEB.md "Phones and tablets"): the shell, tab bar,
+   buttons, cards, shelves, grid, sheets and toasts. Web build only: modern CSS is fine here
+   (tools/check.mjs keeps the Chrome 53 rules for everything else). Nothing applies until
+   html.pl-touch is set, so the TV stage and the laptop layout are untouched. */
+
+#touch { display: none; }
+
+html.pl-touch {
+  --t-ground: #2b2b2e;
+  --t-raised: #35353a;
+  --t-sheet: #2e2f34;
+  --t-text: #f7fafc;
+  --t-text-2: #b8bfcc;
+  --t-text-3: #9499a3;
+  --t-accent: #5ad6e2;
+  --t-glass: rgba(30, 30, 34, 0.62);
+  --t-fill: rgba(255, 255, 255, 0.12);
+  --t-fill-hi: rgba(255, 255, 255, 0.2);
+  --t-rim: rgba(255, 255, 255, 0.14);
+  --t-rim-top: rgba(255, 255, 255, 0.22);
+  --t-danger: #ff7a7a;
+  --t-safe-t: env(safe-area-inset-top, 0px);
+  --t-safe-b: env(safe-area-inset-bottom, 0px);
+  --t-safe-l: env(safe-area-inset-left, 0px);
+  --t-safe-r: env(safe-area-inset-right, 0px);
+  --t-g: max(24px, calc(var(--t-safe-l) + 12px));
+  --t-gr: max(24px, calc(var(--t-safe-r) + 12px));
+  --t-tabbar-h: 56px;
+  --t-bottom: calc(var(--t-tabbar-h) + var(--t-safe-b));
+  --t-poster-w: max(96px, calc((100vw - var(--t-g)) / 3.3 - 10px));
+  --t-wide-w: max(200px, calc((100vw - var(--t-g)) / 1.55 - 12px));
+  --t-grid-min: 100px;
+  --t-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  width: auto; height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto;
+  background: var(--t-ground); color-scheme: dark;
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+}
+html.pl-touch.t-tablet {
+  --t-g: max(32px, calc(var(--t-safe-l) + 16px));
+  --t-gr: max(32px, calc(var(--t-safe-r) + 16px));
+  --t-poster-w: clamp(118px, calc((100vw - var(--t-g)) / 5.4 - 12px), 168px);
+  --t-wide-w: clamp(240px, calc((100vw - var(--t-g)) / 2.6 - 14px), 340px);
+  --t-grid-min: 132px;
+}
+html.pl-touch.t-short { --t-tabbar-h: 50px; --t-poster-w: 104px; --t-wide-w: 220px; }
+
+html.pl-touch body {
+  position: static; width: auto; height: auto; min-height: 100%; overflow: visible; margin: 0;
+  transform: none !important; background: var(--t-ground); color: var(--t-text);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-feature-settings: "cv11", "ss01"; font-size: 16px; line-height: 1.35;
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+}
+html.pl-touch #app { display: none; }
+html.pl-touch #touch { display: block; }
+html.pl-touch .perf { display: none !important; }
+html.pl-touch.t-sheet-open, html.pl-touch.t-sheet-open body { overflow: hidden; }
+
+.t-root { position: relative; min-height: 100vh; min-height: 100dvh; }
+/* the status bar stays legible over whatever scrolls under it */
+.t-root::before {
+  content: ""; position: fixed; z-index: 40; left: 0; right: 0; top: 0; height: var(--t-safe-t);
+  background: rgba(24, 24, 27, 0.9); pointer-events: none;
+}
+
+/* the reset is :where()d so any component class beats it */
+:where(.t-root) button { appearance: none; -webkit-appearance: none; margin: 0; border: 0; padding: 0; background: none; font: inherit; color: inherit; text-align: inherit; cursor: pointer; }
+:where(.t-root) button:focus { outline: none; }
+.t-root button:focus-visible, .t-root input:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 2px; }
+:where(.t-root) :where(h1, h2, h3, p) { margin: 0; }
+.t-root img { -webkit-user-drag: none; }
+
+/* ---- Pages ---------------------------------------------------------------------------------- */
+
+.t-page { position: relative; min-height: 100vh; min-height: 100dvh; padding-bottom: calc(var(--t-bottom) + 28px); box-sizing: border-box; }
+.t-page[hidden] { display: none; }
+.t-enter-push { animation: t-push 260ms var(--t-ease); }
+.t-enter-pop { animation: t-pop 200ms var(--t-ease); }
+@keyframes t-push { from { opacity: 0; transform: translate3d(32px, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes t-pop { from { opacity: 0.4; transform: translate3d(-16px, 0, 0); } to { opacity: 1; transform: none; } }
+.t-stagepage { display: flex; align-items: center; justify-content: center; }
+.t-flow { padding-top: var(--t-safe-t); }
+
+/* ---- Tab bar ---------------------------------------------------------------------------------- */
+
+.t-tabbar {
+  position: fixed; z-index: 50; left: 0; right: 0; bottom: 0; height: var(--t-bottom);
+  display: flex; justify-content: center; padding: 0 var(--t-gr) var(--t-safe-b) var(--t-g); box-sizing: border-box;
+  background: linear-gradient(180deg, rgba(30, 30, 33, 0.94), rgba(22, 22, 25, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.t-tab {
+  flex: 1 1 0; max-width: 140px; min-width: 0; height: var(--t-tabbar-h); display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: var(--t-text-3); transition: color 120ms linear;
+}
+.t-tab .t-icon { width: 26px; height: 26px; stroke-width: 1.8; }
+.t-tab-label { margin-top: 3px; font-size: 11px; font-weight: 500; letter-spacing: 0.1px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-tab.on { color: var(--t-text); }
+.t-tab.on .t-icon { stroke-width: 2.1; }
+.t-tab.on .t-tab-label { font-weight: 700; }
+.t-tab:active .t-icon { transform: scale(0.9); }
+.t-short .t-tab { flex-direction: row; }
+.t-short .t-tab .t-icon { width: 22px; height: 22px; }
+.t-short .t-tab-label { margin: 0 0 0 8px; font-size: 13px; }
+
+/* ---- Icons, images ------------------------------------------------------------------------------ */
+
+.t-icon { display: block; flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.t-icon .fill { fill: currentColor; stroke: none; }
+.t-img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 220ms linear; }
+.t-img.t-in { opacity: 1; }
+.t-img-none { visibility: hidden; }
+
+.t-spinner {
+  width: 30px; height: 30px; margin: 32px auto; border-radius: 50%; box-sizing: border-box;
+  border: 3px solid rgba(255, 255, 255, 0.16); border-top-color: var(--t-text); animation: t-spin 800ms linear infinite;
+}
+@keyframes t-spin { to { transform: rotate(360deg); } }
+.t-empty { padding: 40px var(--t-g); text-align: center; color: var(--t-text-2); font-size: 15px; }
+.t-empty + .t-btn { display: flex; margin: 0 auto; }
+
+/* ---- Buttons ---------------------------------------------------------------------------------- */
+
+.t-btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none;
+  height: 44px; padding: 0 20px; border-radius: 22px; font-size: 15px; font-weight: 600; line-height: 1; white-space: nowrap;
+  color: var(--t-text); background: var(--t-fill); box-shadow: inset 0 0 0 1px var(--t-rim), inset 0 1px 0 var(--t-rim-top);
+  transition: transform 120ms var(--t-ease), background-color 120ms linear;
+  user-select: none; -webkit-user-select: none;
+}
+.t-btn .t-icon + .t-btn-label { margin-left: 8px; }
+.t-btn:active { transform: scale(0.96); }
+.t-btn-primary { height: 50px; padding: 0 26px; border-radius: 25px; font-size: 16px; color: #08080a; background: #f7fafc; box-shadow: 0 14px 32px rgba(0, 0, 0, 0.4); }
+.t-btn-primary .t-icon { width: 18px; height: 18px; }
+.t-btn-round { width: 44px; padding: 0; background: var(--t-glass); }
+.t-btn-text { background: transparent; box-shadow: none; color: var(--t-text-2); padding: 0 12px; }
+.t-btn-action { flex-direction: column; height: auto; min-width: 64px; padding: 0; background: none; box-shadow: none; border-radius: 0; }
+.t-btn-action .t-btn-disc {
+  width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--t-glass); box-shadow: inset 0 0 0 1px var(--t-rim);
+}
+.t-btn-action .t-btn-label { margin: 8px 0 0; font-size: 12.5px; font-weight: 500; color: var(--t-text-2); }
+.t-btn-action.on .t-btn-disc { background: var(--t-text); color: #08080a; }
+@media (hover: hover) and (pointer: fine) {
+  .t-btn:hover { background-color: var(--t-fill-hi); }
+  .t-btn-primary:hover { background-color: #fff; }
+  .t-btn-action:hover { background: none; }
+  .t-btn-action:hover .t-btn-disc { background: var(--t-fill-hi); }
+}
+
+/* ---- Chips (a 36 px pill with a 44 px hit area) ------------------------------------------------------ */
+
+.t-chips {
+  display: flex; overflow-x: auto; padding: 4px var(--t-gr) 4px var(--t-g); scrollbar-width: none; scroll-padding-left: var(--t-g);
+}
+.t-chips::-webkit-scrollbar { display: none; }
+.t-chip {
+  position: relative; flex: none; display: inline-flex; align-items: center; height: 36px; padding: 0 15px; margin-right: 8px; border-radius: 18px;
+  font-size: 14px; font-weight: 600; white-space: nowrap; color: #d4d9e2; background: rgba(16, 16, 18, 0.45);
+  box-shadow: inset 0 0 0 1px var(--t-rim), inset 0 1px 0 var(--t-rim-top);
+}
+.t-chip::after { content: ""; position: absolute; left: 0; right: 0; top: -4px; bottom: -4px; }
+.t-chip .t-icon { width: 16px; height: 16px; margin-right: 6px; stroke-width: 2.2; }
+.t-chip.on { color: var(--t-text); background: rgba(16, 16, 18, 0.82); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45); }
+.t-chip-value { margin-left: 6px; color: var(--t-text-3); font-weight: 500; }
+.t-chip.on .t-chip-value { color: var(--t-accent); }
+.t-chip:active { transform: scale(0.96); }
+
+/* ---- Top bar (tabs) and Back bar (pushed pages) ------------------------------------------------------ */
+
+.t-top {
+  position: relative; z-index: 5; display: flex; align-items: center; justify-content: space-between;
+  height: 60px; padding: var(--t-safe-t) var(--t-gr) 0 var(--t-g); box-sizing: content-box;
+}
+.t-top-over { position: absolute; left: 0; right: 0; top: 0; }
+.t-top-title { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; }
+.t-top-right { display: flex; align-items: center; }
+.t-top-right > * + * { margin-left: 10px; }
+.t-logo { display: flex; align-items: center; }
+.t-logo-mark { width: 30px; height: 30px; display: block; }
+.t-logo-name { margin-left: 9px; font-size: 19px; font-weight: 700; letter-spacing: -0.4px; line-height: 1; white-space: nowrap; }
+.t-logo-name span { color: var(--t-accent); }
+.t-avatar {
+  position: relative; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; flex: none;
+  display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700;
+  background: linear-gradient(140deg, #1b7fa8 0%, #3fc0d6 100%); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+.t-avatar::after { content: ""; position: absolute; left: -4px; right: -4px; top: -4px; bottom: -4px; }
+.t-root .t-avatar { overflow: visible; }
+.t-avatar .t-img { border-radius: 50%; }
+
+.t-backbar {
+  position: fixed; z-index: 30; left: 0; right: 0; top: calc(var(--t-safe-t) + 8px); display: flex; align-items: center;
+  padding: 0 var(--t-gr) 0 var(--t-g); pointer-events: none;
+}
+.t-backbar > * { pointer-events: auto; }
+.t-backbar > .t-btn:last-child:not(:first-child) { margin-left: auto; }
+.t-backbar-title {
+  flex: 1; min-width: 0; margin: 0 12px; font-size: 16px; font-weight: 700; text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0; transition: opacity 160ms linear;
+}
+.t-backbar.t-solid { background: rgba(24, 24, 27, 0.92); top: 0; padding-top: calc(var(--t-safe-t) + 8px); padding-bottom: 8px; box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06); }
+.t-backbar.t-solid .t-backbar-title { opacity: 1; }
+.t-backbar.t-solid .t-btn-round { background: transparent; box-shadow: none; }
+
+/* ---- Cards -------------------------------------------------------------------------------------- */
+
+.t-card { position: relative; display: block; flex: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.t-card-frame {
+  position: relative; display: block; overflow: hidden; border-radius: 10px; background: #3a3a3f;
+  transition: transform 140ms var(--t-ease);
+}
+.t-card-frame::after { content: ""; position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); pointer-events: none; }
+.t-card:active .t-card-frame { transform: scale(0.97); }
+.t-poster { width: var(--t-poster-w); }
+.t-poster .t-card-frame { aspect-ratio: 2 / 3; }
+.t-wide { width: var(--t-wide-w); }
+.t-wide .t-card-frame { aspect-ratio: 16 / 9; }
+.t-card-alt {
+  position: absolute; left: 8px; right: 8px; top: 50%; transform: translateY(-50%); text-align: center;
+  font-size: 13px; font-weight: 700; line-height: 1.25; color: var(--t-text-2);
+}
+.t-card-shade { position: absolute; left: 0; right: 0; bottom: 0; height: 64%; background: linear-gradient(180deg, rgba(5, 5, 8, 0), rgba(5, 5, 8, 0.86)); }
+.t-card-text { position: absolute; left: 11px; right: 11px; bottom: 16px; }
+.t-card .t-card-title { display: block; font-size: 14px; font-weight: 700; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-card .t-card-sub { display: block; margin-top: 1px; font-size: 12px; color: var(--t-text-2); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-poster > .t-card-title { margin-top: 7px; font-size: 13px; font-weight: 600; }
+.t-poster > .t-card-sub { font-size: 12px; color: var(--t-text-3); }
+.t-progress { position: absolute; left: 8px; right: 8px; bottom: 7px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.25); overflow: hidden; }
+.t-wide .t-progress { left: 11px; right: 11px; }
+.t-progress-fill { display: block; height: 100%; border-radius: 2px; background: var(--t-accent); }
+.t-watched {
+  position: absolute; right: 6px; top: 6px; width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: rgba(20, 20, 22, 0.78); color: var(--t-text);
+}
+.t-watched .t-icon { width: 14px; height: 14px; stroke-width: 2.6; }
+.t-personcard { width: 92px; text-align: center; }
+.t-person-photo {
+  display: flex; align-items: center; justify-content: center; width: 80px; height: 80px; margin: 0 auto; border-radius: 50%; overflow: hidden;
+  background: #3a3a3f; font-size: 22px; font-weight: 700; color: var(--t-text-2);
+}
+.t-personcard .t-card-title { margin-top: 8px; font-size: 13px; font-weight: 600; }
+.t-personcard .t-card-sub { color: var(--t-text-3); }
+@media (hover: hover) and (pointer: fine) {
+  .t-card:hover .t-card-frame { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
+}
+
+/* ---- Shelves: rows that scroll sideways, the next card peeking in --------------------------------- */
+
+.t-shelf { margin-top: 26px; }
+.t-shelf-head { display: flex; align-items: baseline; justify-content: space-between; padding: 0 var(--t-gr) 0 var(--t-g); margin-bottom: 11px; }
+.t-shelf-title { font-size: 19px; font-weight: 700; letter-spacing: -0.2px; line-height: 1.25; }
+.t-shelf-more {
+  position: relative; display: inline-flex; align-items: center; flex: none; margin-left: 12px; padding: 0;
+  font-size: 14px; font-weight: 600; color: var(--t-text-3);
+}
+.t-shelf-more::after { content: ""; position: absolute; left: -10px; right: -10px; top: -12px; bottom: -12px; }
+.t-shelf-more .t-icon { width: 14px; height: 14px; stroke-width: 2.4; margin-left: 2px; }
+.t-row {
+  display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 0 0 4px var(--t-g);
+  scroll-snap-type: x mandatory; scroll-padding-left: var(--t-g); scrollbar-width: none; overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.t-row::-webkit-scrollbar { display: none; }
+.t-row::after { content: ""; flex: 0 0 calc(var(--t-gr) - 10px); }
+.t-row > .t-card { scroll-snap-align: start; }
+.t-shelf-wide .t-row { gap: 12px; }
+.t-shelf-person .t-row { gap: 8px; }
+
+/* ---- Grid ---------------------------------------------------------------------------------------- */
+
+.t-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--t-grid-min), 1fr)); gap: 16px 10px;
+  padding: 0 var(--t-gr) 0 var(--t-g);
+}
+.t-grid .t-poster { width: auto; }
+.t-grid-foot { min-height: 1px; }
+
+/* ---- Sheets ----------------------------------------------------------------------------------------- */
+
+.t-layer { position: relative; z-index: 100; }
+.t-sheet-host { position: fixed; z-index: 100; left: 0; right: 0; top: 0; bottom: 0; }
+.t-scrim { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); opacity: 0; transition: opacity 220ms linear; }
+.t-sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; max-height: 88vh; max-height: 88dvh; display: flex; flex-direction: column;
+  padding: 0 0 calc(var(--t-safe-b) + 10px); box-sizing: border-box; border-radius: 20px 20px 0 0;
+  background: var(--t-sheet); box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transform: translate3d(0, 100%, 0); transition: transform 280ms var(--t-ease);
+}
+.t-sheet.t-dragging { transition: none; }
+.t-sheet-host.t-in .t-scrim { opacity: 1; }
+.t-sheet-host.t-in .t-sheet { transform: none; }
+.t-sheet-host.t-out .t-sheet { transition-duration: 200ms; }
+.t-sheet-grab { flex: none; height: 22px; display: flex; align-items: center; justify-content: center; touch-action: none; }
+.t-sheet-grab span { width: 38px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.28); }
+.t-sheet-head { flex: none; padding: 2px var(--t-gr) 12px var(--t-g); touch-action: none; }
+.t-sheet-title { font-size: 19px; font-weight: 700; line-height: 1.25; }
+.t-sheet-sub { margin-top: 3px; font-size: 14px; color: var(--t-text-2); }
+.t-sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.t-sheet-heading { padding: 16px var(--t-gr) 6px var(--t-g); font-size: 12px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--t-text-3); }
+.t-sheet-row {
+  display: flex; align-items: center; width: 100%; min-height: 52px; padding: 8px var(--t-gr) 8px var(--t-g); box-sizing: border-box;
+  font-size: 16px; text-align: left;
+}
+.t-sheet-row + .t-sheet-row { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+.t-sheet-row:active { background: rgba(255, 255, 255, 0.06); }
+.t-sheet-icon { width: 22px; height: 22px; margin-right: 14px; color: var(--t-text-2); }
+.t-sheet-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.t-sheet-label { font-weight: 500; }
+.t-sheet-rowsub { margin-top: 2px; font-size: 13px; color: var(--t-text-3); }
+.t-sheet-value { margin-left: 12px; font-size: 15px; color: var(--t-text-3); white-space: nowrap; max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
+.t-sheet-tick { margin-left: 12px; color: var(--t-accent); stroke-width: 2.6; }
+.t-sheet-next { margin-left: 8px; width: 16px; height: 16px; color: var(--t-text-3); }
+.t-sheet-row.on .t-sheet-label { font-weight: 700; }
+.t-danger .t-sheet-label, .t-danger .t-sheet-icon { color: var(--t-danger); }
+@media (hover: hover) and (pointer: fine) { .t-sheet-row:hover { background: rgba(255, 255, 255, 0.05); } }
+
+/* tablets: a centred card */
+.t-tablet .t-sheet {
+  left: 50%; right: auto; bottom: auto; top: 50%; width: 460px; max-height: 80vh; max-height: 80dvh; padding-bottom: 10px; border-radius: 20px;
+  transform: translate3d(-50%, -46%, 0) scale(0.96); opacity: 0; transition: transform 220ms var(--t-ease), opacity 160ms linear;
+}
+.t-tablet .t-sheet-host.t-in .t-sheet { transform: translate3d(-50%, -50%, 0); opacity: 1; }
+.t-tablet .t-sheet-grab { height: 14px; }
+.t-tablet .t-sheet-grab span { display: none; }
+
+/* ---- Toasts (the app's PL.toast), above the tab bar ------------------------------------------------- */
+
+html.pl-touch .toast {
+  position: fixed; left: 50%; bottom: calc(var(--t-bottom) + 14px); z-index: 120; max-width: calc(100vw - 32px); height: auto;
+  box-sizing: border-box; padding: 12px 18px; border-radius: 22px; font-size: 14px; font-weight: 500;
+  white-space: normal; text-align: center; line-height: 1.35;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-enter-push, .t-enter-pop { animation: none; }
+  .t-sheet, .t-scrim, .t-img { transition: none; }
+}

@@ -1,0 +1,69 @@
+/* Phone and tablet layer: the library tab (board P1: hero, chips, shelves) and the Live TV list.
+   Web build only (web/touch/), modern CSS. */
+
+/* ---- Library tab: top bar and chips over the hero on Recommended, in the flow elsewhere ---------- */
+
+.t-lib { padding-top: calc(var(--t-safe-t) + 60px); }
+.t-lib-chips { position: relative; z-index: 6; margin-top: -4px; }
+.t-lib.t-mode-rec.t-has-hero { padding-top: 0; }
+.t-lib.t-mode-rec.t-has-hero .t-lib-chips { position: absolute; left: 0; right: 0; top: calc(var(--t-safe-t) + 46px); }
+.t-lib:not(.t-mode-rec) .t-lib-modes { padding-top: 14px; }
+.t-rec-status:empty { display: none; }
+
+/* ---- Hero -------------------------------------------------------------------------------------- */
+
+.t-hero { position: relative; height: clamp(440px, 62vh, 560px); height: clamp(440px, 62svh, 560px); overflow: hidden; }
+.t-hero-art { position: absolute; left: 0; right: 0; top: 0; height: 100%; }
+.t-hero-art .t-img { object-position: 60% 30%; }
+.t-hero-shade {
+  position: absolute; left: 0; right: 0; top: 0; bottom: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(12, 12, 15, 0.78) 0%, rgba(12, 12, 15, 0.45) 16%, rgba(43, 43, 46, 0) 32%,
+    rgba(43, 43, 46, 0) 46%, rgba(43, 43, 46, 0.88) 78%, var(--t-ground) 97%);
+}
+.t-hero-body { position: absolute; left: var(--t-g); right: var(--t-gr); bottom: 6px; }
+.t-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 1.4px; color: var(--t-text-2); text-transform: uppercase; margin-bottom: 10px; }
+.t-titleart { position: relative; }
+.t-titletext { font-size: 34px; font-weight: 800; letter-spacing: -0.6px; line-height: 1.05; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35); }
+.t-titlelogo { display: block; max-width: min(78%, 360px); max-height: 92px; width: auto; height: auto; object-fit: contain; object-position: left bottom; }
+.t-titleart.t-has-logo .t-titletext { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.t-titleart:not(.t-has-logo) .t-titlelogo { display: none; }
+.t-hero-meta { margin-top: 12px; font-size: 14px; font-weight: 500; color: var(--t-text-2); }
+.t-hi { color: var(--t-text); }
+.t-hero-actions { display: flex; align-items: center; margin-top: 16px; }
+.t-hero-actions .t-btn-primary { flex: 1 1 auto; max-width: 260px; }
+.t-hero-actions .t-btn + .t-btn { margin-left: 10px; }
+.t-hero-progress { position: relative; height: 3px; margin-top: 12px; width: min(100%, 260px); }
+.t-hero-progress .t-progress { left: 0; right: 0; bottom: 0; }
+.t-hero + .t-shelves .t-shelf:first-child, .t-hero-host:not(:empty) + .t-rec-status + .t-shelves .t-shelf:first-child { margin-top: 18px; }
+.t-short .t-hero { height: 330px; }
+.t-short .t-titlelogo { max-height: 64px; }
+.t-tablet .t-hero { height: clamp(460px, 58vh, 640px); }
+.t-tablet .t-hero-body { right: auto; width: min(560px, 64vw); bottom: 18px; }
+.t-tablet .t-titletext { font-size: 44px; }
+.t-tablet .t-titlelogo { max-height: 120px; }
+
+/* ---- Live TV (for now): what's on, a tap to watch ------------------------------------------------- */
+
+.t-live-intro { display: flex; padding: 4px var(--t-gr) 8px var(--t-g); }
+.t-ch-list { padding: 0 var(--t-gr) 0 var(--t-g); }
+.t-ch {
+  display: flex; align-items: center; width: 100%; min-height: 72px; padding: 10px 0; box-sizing: border-box; text-align: left;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+}
+.t-ch:active { background: rgba(255, 255, 255, 0.04); }
+.t-ch-badge {
+  flex: none; display: flex; align-items: center; justify-content: center; width: 64px; height: 40px; border-radius: 8px; overflow: hidden;
+  background: #ececef; color: #202024;
+}
+.t-ch-logo { object-fit: contain; padding: 4px; box-sizing: border-box; }
+.t-ch-name { padding: 0 4px; font-size: 10px; font-weight: 800; text-transform: uppercase; text-align: center; line-height: 1.1; overflow: hidden; max-height: 34px; }
+.t-ch-text { position: relative; flex: 1; min-width: 0; margin: 0 12px 0 14px; padding-bottom: 8px; display: flex; flex-direction: column; }
+.t-ch-head { display: flex; align-items: center; min-width: 0; }
+.t-ch-num { flex: none; font-size: 13px; font-weight: 600; color: var(--t-text-3); margin-right: 8px; }
+.t-ch-fav { width: 14px; height: 14px; margin-right: 6px; color: var(--t-accent); fill: currentColor; }
+.t-ch-title { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-ch-sub { margin-top: 2px; font-size: 13px; color: var(--t-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-ch-text .t-progress { left: 0; right: 0; bottom: 0; }
+.t-ch-play { flex: none; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--t-fill); }
+.t-ch-play .t-icon { width: 16px; height: 16px; }
+.t-tablet .t-ch-list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; }

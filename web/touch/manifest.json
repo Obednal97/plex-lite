@@ -1,0 +1,23 @@
+{
+  "styles": [
+    "touch.css",
+    "screens.css",
+    "browse.css",
+    "details.css",
+    "search.css",
+    "settings.css"
+  ],
+  "scripts": [
+    "logic.js",
+    "kit.js",
+    "shell.js",
+    "sheets.js",
+    "screens/library.js",
+    "screens/browse.js",
+    "screens/details.js",
+    "screens/person.js",
+    "screens/search.js",
+    "screens/live.js",
+    "screens/settings.js"
+  ]
+}
