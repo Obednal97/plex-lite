@@ -1,5 +1,5 @@
 // Live TV Browse: the pure rules behind the Browse rail, its chips and the On now wall
-// (docs/LIVETV-browse-design.md). Sky-style categories from guide genres (with a channel-name
+// (docs/LIVETV-browse-design.md). Satellite-style categories from guide genres (with a channel-name
 // fallback), channel families from shared leading words in channel names, and the filter that the
 // guide, the mini guide and CH+/CH- share. No DOM; tested in node (test/livetv-browse.test.mjs).
 'use strict';
@@ -141,7 +141,7 @@
   var STOP = { CHANNEL: 1, TV: 1, THE: 1, NETWORK: 1 };
 
   // A title's words: [{w: normalised (upper case), o: as written}], with the group prefix and the
-  // variant words dropped and glued numbers split off ("ITV1" -> ITV 1).
+  // variant words dropped and glued numbers split off ("NLT1" -> NLT 1).
   function words(title) {
     var t = String(title || '').trim();
     var m = GROUP.exec(t);
@@ -164,8 +164,8 @@
 
   function isNumber(w) { return /^\d+$/.test(w); }
 
-  // Display casing for an all-capitals word: acronyms stay in capitals (BBC, ITV, ESPN, HBO), other
-  // words get a capital first letter (SKY -> Sky, SPORTS -> Sports).
+  // Display casing for an all-capitals word: acronyms stay in capitals (NLT, ZBC, QPNX), other
+  // words get a capital first letter (ORBIT -> Orbit, SPORTS -> Sports).
   B.caseWord = function (w) {
     if (/[a-z]/.test(w) || !/[A-Z]/.test(w)) return w;
     if (w.length <= 2) return w;
@@ -198,7 +198,7 @@
     return best.split(' ').map(B.caseWord).join(' ');
   }
 
-  // The number of leading words every member shares (numbers don't count: ITV 1 / ITV 2 share ITV).
+  // The number of leading words every member shares (numbers don't count: NLT 1 / NLT 2 share NLT).
   function sharedWords(members) {
     var n = 0;
     for (;;) {
@@ -382,7 +382,7 @@
     return null;
   }
 
-  // A choice's name: "Favourites", "All channels", "On now", "Sport", "Sky Sports".
+  // A choice's name: "Favourites", "All channels", "On now", "Sport", "Orbit Sports".
   B.label = function (key, ctx) {
     if (!key || key === 'all') return 'All channels';
     if (key === 'fav') return 'Favourites';
@@ -392,7 +392,7 @@
     return f ? f.label : key.slice(2);
   };
 
-  // "Movies › Sky Cinema"
+  // "Movies › Orbit Cinema"
   B.selLabel = function (sel, ctx) {
     if (!sel) return 'All channels';
     return B.label(sel.base, ctx) + (sel.refine ? ' › ' + B.label(sel.refine, ctx) : '');
@@ -474,7 +474,7 @@
     return out;
   };
 
-  // The "no refinement" chip: "All" (next to "All channels") / "All favourites" / "All sport" / "All Sky".
+  // The "no refinement" chip: "All" (next to "All channels") / "All favourites" / "All sport" / "All Orbit".
   B.allLabel = function (base, ctx) {
     if (!base || base === 'all') return 'All';
     if (base === 'fav') return 'All favourites';

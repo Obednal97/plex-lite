@@ -13,7 +13,7 @@ The v2 guide is good for "what's on now" and poor at everything around it:
 - **Five fixed filters** (All, Favourites, Movies, Sports, News) for a few hundred channels. Nothing for
   documentaries, kids, music or shopping, and "Movies" meant "Plex calls it a movie", which on an
   XMLTV guide is any programme without an episode number.
-- **No channel families.** People think in brands ("the Sky Sports channels", "the BBC ones"), and
+- **No channel families.** People think in brands (one broadcaster's sports channels, its film channels), and
   IPTV lineups are full of them, but there is no way to see one brand's channels together.
 - **Surfing doesn't narrow.** CH+/CH− and the mini guide already follow the guide's filter, but with
   five coarse filters that rarely helps.

@@ -546,7 +546,7 @@
     live.index = i >= 0 ? i : 0;
   };
 
-  // "MOVIES › SKY CINEMA  13 channels" (upper case by CSS)
+  // "MOVIES › ORBIT CINEMA  13 channels" (upper case by CSS)
   LiveOsd.prototype.paintGuideHead = function () {
     var label = this.live().label || 'Channels';
     var n = (this.live().channels || []).length;

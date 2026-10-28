@@ -102,7 +102,7 @@ test('label casing: acronyms stay, words get a capital', () => {
   assert.equal(B.caseWord('ORBIT'), 'Orbit');
   assert.equal(B.caseWord('NLT'), 'NLT');
   assert.equal(B.caseWord('ZBC'), 'ZBC');
-  assert.equal(B.caseWord('SKY'.replace('S', 'R')), 'Rky');
+  assert.equal(B.caseWord('RKY'), 'Rky');
   assert.equal(B.caseWord('QPNX'), 'QPNX');
   assert.equal(B.caseWord('Velvet'), 'Velvet');
   assert.equal(B.caseWord('4'), '4');
