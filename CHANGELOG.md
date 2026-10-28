@@ -16,6 +16,13 @@ releases are fixes only.
   keypad (2 = A, again = B ...). Uses Plex's `firstCharacter` counts with the active filters, so a
   jump loads only the titles around the target. Z–A sorts flip it; other sorts hide it.
 - The demo server answers `firstCharacter`.
+- Search finds Live TV: a Channels row (by name, ignoring IPTV group prefixes like "UK - " and
+  quality tags, or by number; logo, number, what's on now and its progress) and an On TV row
+  (programmes on now or later in the loaded guide, matched by title). OK watches a channel or a
+  programme on now, and opens the guide on a later programme's slot; hold OK for Watch, Show in
+  guide and Favourites. Matched on the TV with the library search's scorer, from an index rebuilt
+  when the guide changes, so typing doesn't wait. Without guide data, channel names still match.
+- The demo server's `PLEXLITE_DEMO_CHANNELS=600` pads the lineup with invented IPTV-style channels.
 
 ### Changed
 

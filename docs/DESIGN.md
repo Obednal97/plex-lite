@@ -71,6 +71,11 @@ Transform and opacity only.
 - **Details:** full-bleed art; ratings and badges as 1 px keylines; dark capsule actions with Phosphor
   icons; borderless season tabs; episodes with titles on the art.
 - **Search:** the query is the headline (48 px with an underline), not a boxed field; flat keys.
+  With Live TV, two rows follow Movies & Shows (local, so they never move when the server's People
+  and Episodes arrive): **Channels**, 360×202 quiet tiles with the guide's light logo plate, the
+  number top right (teal ★ for favourites), the name and what's on now over a teal progress line;
+  **On TV**, landscape programme cards with the title on the art, a red LIVE pill (or the start
+  time) top left and a small logo plate top right (`css/search-tv.css`).
 - **Settings:** quiet rows on the ground (hairline separators), white plate on focus.
 - **Live TV** (spec and remote tables in [LIVETV-v2-design.md](LIVETV-v2-design.md)): a two-hour time
   grid on the plain ground, six channels down. The focused programme's details sit above it like a small

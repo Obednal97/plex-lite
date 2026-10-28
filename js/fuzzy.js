@@ -183,6 +183,13 @@
     };
   }
 
+  // The scorer, for other indexes (Search's Live TV channels and programmes, js/livetv-search.js):
+  // prepName(name) once per name, prepQuery(text) once per keystroke, score(prepped, query) > 0 on a match.
+  fuzzy.prepName = prepName;
+  fuzzy.prepQuery = prepQuery;
+  fuzzy.score = scoreName;
+  fuzzy.base = base;
+
   // Best matches for `text`, most relevant first. Returns plain items (ratingKey, type, title, ...).
   fuzzy.query = function (text, limit) {
     var q = prepQuery(text);

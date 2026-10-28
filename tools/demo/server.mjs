@@ -16,7 +16,8 @@
 //
 // Settings (environment): PORT (8930), PLEXLITE_DEMO_MEDIA (artwork cache, default
 // ~/.cache/plexlite/demo-media), PLEXLITE_DEMO_LIVETV=0 to hide Live TV, PLEXLITE_DEMO_TUNE_DELAY
-// (ms before a tune answers, 600; 0 for none).
+// (ms before a tune answers, 600; 0 for none), PLEXLITE_DEMO_CHANNELS (pad the lineup to this many
+// IPTV-style channels, e.g. 600).
 // Content and licences: tools/demo/library.json and docs/screenshots/CREDITS.md.
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -262,6 +263,39 @@ function playQueue(q, items, selected) {
 // ---- Live TV ---------------------------------------------------------------------------------------
 // Channels come from library.json "channels" (n = index there, channelID = n + 1, identifier and
 // number = vcn). A channel with no items has no guide data: it is in the lineup but not the grid.
+
+// PLEXLITE_DEMO_CHANNELS=600 makes an IPTV-sized lineup for testing (Search's channel matching, the
+// guide with hundreds of rows): the demo channels get a group prefix ("DM - Open Movie Channel") as
+// IPTV feeds do, and invented channels fill up to the count, two in three with guide data.
+const PAD_TO = Number(process.env.PLEXLITE_DEMO_CHANNELS || 0);
+if (LIVETV && PAD_TO > (lib.channels || []).length) padChannels(lib, PAD_TO);
+
+function padChannels(l, count) {
+  const groups = ['DM', 'WX', 'ZY', 'QV'];
+  const names = ['Harbour', 'Granite', 'Velvet', 'Comet', 'Orchard', 'Lantern', 'Meadow', 'Summit', 'Copper', 'Willow',
+    'Juniper', 'Beacon', 'Marble', 'Cascade', 'Ember', 'Falcon', 'Glacier', 'Hazel', 'Indigo', 'Kestrel'];
+  const kinds = [
+    { kind: 'News', genre: 'News', shows: ['Morning Briefing', 'The Daily Desk', 'World Tonight', 'Market Watch', 'Headline Hour'] },
+    { kind: 'Movies', genre: 'Drama', shows: ['The Long Road Home', 'Midnight Express Lane', 'A Quiet Harbour', 'The Glass Orchard', 'Paper Lanterns'] },
+    { kind: 'Sport', genre: 'Sport', shows: ['Matchday Live', 'Racing Roundup', 'Golf Weekly', 'The Boxing Hour', 'Tennis Tonight'] },
+    { kind: 'Kids', genre: 'Children', shows: ['Robot Rangers', 'The Puddle Club', 'Space Pups', 'Dino Detectives', 'Busy Bakers'] },
+    { kind: 'Music', genre: 'Music', shows: ['Chart Countdown', 'Live Sessions', 'Unplugged Nights', 'Classic Hits', 'Dance Floor'] },
+    { kind: 'Drama', genre: 'Drama', shows: ['Harbour Lights', 'The Inspector', 'Hospital Shift', 'Family Ties Street', 'The Crown Court'] },
+    { kind: 'Comedy', genre: 'Comedy', shows: ['Flatmates', 'The Office Party', 'Stand-up Shuffle', 'Quiz Night', 'Sketch Pad'] },
+    { kind: 'Docs', genre: 'Documentary', shows: ['Wild Coastlines', 'Engines of History', 'Deep Ocean', 'Mountain Rescue', 'The Food Trail'] },
+  ];
+  const tags = ['', ' HD', '', ' FHD', '', ' 2', ' One', ''];
+  for (const ch of l.channels) ch.title = `DM - ${ch.title}`;
+  for (let i = 0; l.channels.length < count; i++) {
+    const k = kinds[i % kinds.length];
+    const title = `${groups[i % groups.length]} - ${names[Math.floor(i / kinds.length) % names.length]} ${k.kind}${tags[i % tags.length]}`;
+    const items = i % 3 === 2 ? [] : k.shows.map((show, j) => ({
+      title: show, episode: `Episode ${1 + ((i + j) % 9)}`, minutes: [30, 60, 30, 45, 90][(i + j) % 5], genre: k.genre,
+      summary: `${show}: an invented programme on an invented demo channel.`,
+    }));
+    l.channels.push({ vcn: 201 + i, title, short: title.split(' - ')[1].slice(0, 8).toUpperCase(), items, offsetMin: (i * 7) % 30 });
+  }
+}
 
 const CHANNELS = LIVETV ? lib.channels || [] : [];
 const TUNE_DELAY_MS = Number(process.env.PLEXLITE_DEMO_TUNE_DELAY ?? 600);
