@@ -11,6 +11,12 @@ releases are fixes only.
 
 ### Added
 
+- **Phones and tablets** (docs/WEB.md, "Phones and tablets"): the web build has its own layout under
+  1100 px wide and on touch tablets: bottom tabs (Movies, TV Shows, Live TV, Search), Settings under
+  the profile picture, a full-bleed hero and rows that scroll sideways, Library with sort, filters and
+  an A–Z rail, Collections, Surprise Me, title and person pages, Search with the system keyboard,
+  Settings and plugins as sheets, long-press or "…" for quick actions, Back chevrons and safe areas.
+  Every play opens the touch player. The TV app and the laptop layout are unchanged.
 - **Live TV on phones and tablets** (docs/WEB.md, "Live TV on phones and tablets"): the Live TV tab
   of the phone and tablet layer is a touch guide instead of a channel list. A time grid that scrolls
   both ways with a sticky time ruler, channel column (logo plates) and now line; chips for Favourites,

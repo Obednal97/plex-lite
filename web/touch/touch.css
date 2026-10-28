@@ -332,9 +332,11 @@ html.pl-touch .toast {
   position: fixed; left: 50%; bottom: calc(var(--t-bottom) + 14px); z-index: 120; max-width: calc(100vw - 32px); height: auto;
   box-sizing: border-box; padding: 12px 18px; border-radius: 22px; font-size: 14px; font-weight: 500;
   white-space: normal; text-align: center; line-height: 1.35;
-  /* it stays in the page once faded out: it must never take the taps meant for what is under it */
-  pointer-events: none;
 }
+/* a toast never takes a tap (faded or not, it can sit over a row or a sheet's buttons), and while a
+   sheet is open it goes to the top, clear of the sheet's buttons */
+html.pl-touch .toast { pointer-events: none; }
+html.pl-touch.t-sheet-open .toast { bottom: auto; top: calc(var(--t-safe-t) + 12px); }
 
 @media (prefers-reduced-motion: reduce) {
   .t-enter-push, .t-enter-pop { animation: none; }

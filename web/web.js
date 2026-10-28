@@ -394,13 +394,16 @@
       lines.push(['This browser doesn\'t ask', 'It reaches your server at home directly when it can']);
     }
     lines.push(['Away from home', 'Plex Lite uses Plex Remote Access, else the Plex relay (slower, limited quality)']);
-    sheet('Local network access', lines);
+    web.info('Local network access', lines);
   }
 
+  // The explanations go through web.info, so the phone and tablet layer (web/touch/) can show them
+  // as its own sheets.
   web.info = sheet;
+  web.explainLna = explainLna;
 
   web.explainPlugin = function (p) {
-    sheet(p.name + ' works in the TV app only', [
+    web.info(p.name + ' works in the TV app only', [
       ['It runs a background service on the TV', 'A browser can\'t run one'],
       ['Use it on the TV', 'It works there as before'],
     ]);

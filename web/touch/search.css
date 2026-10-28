@@ -1,1 +1,140 @@
-/* Phone and tablet layer: search (web/touch/screens/search.js). */
+/* Phone and tablet layer: the Search tab (web/touch/screens/search.js, board P5). Web build only
+   (web/touch/), modern CSS. */
+
+/* ---- The field: stays at the top while the results scroll under it ------------------------------- */
+
+.t-search { padding-top: 0; }
+.t-search-head {
+  position: sticky; top: 0; z-index: 20; padding: calc(var(--t-safe-t) + 8px) var(--t-gr) 8px var(--t-g);
+  background: var(--t-ground); box-shadow: 0 1px 0 rgba(255, 255, 255, 0);
+}
+.t-search-bar { display: flex; align-items: center; max-width: 640px; }
+.t-tablet .t-search-bar { margin: 0 auto; }
+.t-search-field {
+  position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: center; height: 44px; padding: 0 0 0 14px;
+  box-sizing: border-box; border-radius: 22px; background: rgba(255, 255, 255, 0.1); box-shadow: inset 0 0 0 1px var(--t-rim);
+  cursor: text; transition: box-shadow 120ms linear;
+}
+.t-search-field:focus-within { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32); }
+.t-search-mag { width: 18px; height: 18px; color: var(--t-text-2); stroke-width: 2.2; }
+/* 17 px: Safari zooms the page into a field under 16 px when it takes the focus */
+.t-root .t-search-input {
+  flex: 1 1 auto; min-width: 0; height: 100%; margin: 0 0 0 9px; padding: 0; border: 0; outline: none; background: none;
+  font: inherit; font-size: 17px; font-weight: 500; color: var(--t-text); caret-color: var(--t-accent);
+  -webkit-appearance: none; appearance: none;
+}
+.t-root .t-search-input:focus-visible { outline: none; }
+.t-search-input::placeholder { color: var(--t-text-3); font-weight: 400; opacity: 1; }
+.t-search-input::-webkit-search-cancel-button, .t-search-input::-webkit-search-decoration { -webkit-appearance: none; appearance: none; display: none; }
+/* the clear button: a 20 px grey disc in a 44 px target */
+.t-search-clear { flex: none; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; }
+.t-search-clear[hidden] { display: none; }
+.t-search-clear > span { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: rgba(255, 255, 255, 0.3); }
+.t-search-clear .t-icon { width: 12px; height: 12px; stroke-width: 3; color: var(--t-ground); }
+.t-search-field:not(:has(.t-search-clear:not([hidden]))) { padding-right: 14px; }
+.t-search-cancel { flex: none; height: 44px; margin-left: 4px; padding: 0 2px 0 10px; font-size: 16px; font-weight: 600; color: var(--t-text); }
+.t-search-cancel[hidden] { display: none; }
+
+/* ---- Chips, status ------------------------------------------------------------------------------- */
+
+.t-search-chips[hidden] { display: none; }
+.t-search-chiprow { padding-top: 2px; padding-bottom: 2px; }
+.t-tablet .t-search-chiprow { justify-content: center; }
+.t-search-chiprow .t-chip { height: 34px; padding: 0 14px; font-size: 13.5px; background: rgba(255, 255, 255, 0.08); color: var(--t-text); }
+.t-search-chiprow .t-chip.on { background: rgba(255, 255, 255, 0.24); box-shadow: inset 0 0 0 1px var(--t-rim), inset 0 1px 0 var(--t-rim-top); }
+.t-search-chiprow .t-chip.on .t-chip-value { color: var(--t-text); }
+
+.t-search-status { padding: 28px var(--t-gr) 0 var(--t-g); text-align: center; }
+.t-search-status[hidden] { display: none; }
+.t-search-status .t-spinner { margin: 16px auto; }
+.t-search-none { font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+.t-search-note { margin-top: 6px; font-size: 14px; color: var(--t-text-2); }
+.t-search-status .t-btn { margin-top: 16px; }
+
+/* ---- Results ------------------------------------------------------------------------------------- */
+
+.t-search-results > .t-shelf:first-child { margin-top: 12px; }
+.t-search-chips:not([hidden]) + .t-search-status[hidden] + .t-search-results > .t-shelf:first-child { margin-top: 10px; }
+.t-search-shelf { margin-top: 22px; }
+.t-search-cap {
+  display: -webkit-box; margin-top: 6px; font-size: 12px; color: var(--t-text-2); line-height: 1.3;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
+}
+
+/* Channels: a quiet tile (logo plate, number, name, what's on, a teal line) */
+.t-search-chan {
+  width: max(160px, calc((100vw - var(--t-g)) / 2.25 - 10px)); height: 96px; padding: 10px; box-sizing: border-box; text-align: left;
+  border-radius: 10px; background: rgba(255, 255, 255, 0.07); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  transition: transform 140ms var(--t-ease);
+}
+.t-tablet .t-search-chan { width: clamp(200px, calc((100vw - var(--t-g)) / 3.6 - 12px), 260px); }
+.t-short .t-search-chan { width: 200px; }
+.t-search-chan:active { transform: scale(0.97); }
+.t-search-plate {
+  display: flex; align-items: center; justify-content: center; width: 52px; height: 28px; border-radius: 6px; overflow: hidden;
+  background: #e9edf2; color: #202024;
+}
+.t-search-logo { object-fit: contain; padding: 3px 4px; box-sizing: border-box; }
+.t-search-plate-name { padding: 0 3px; font-size: 8.5px; font-weight: 800; line-height: 1.05; text-transform: uppercase; text-align: center; overflow: hidden; max-height: 26px; }
+.t-search-chan-num { position: absolute; right: 10px; top: 10px; display: flex; align-items: center; font-size: 12px; font-weight: 600; color: var(--t-text-3); }
+.t-search-fav { width: 12px; height: 12px; margin-right: 3px; color: var(--t-accent); fill: currentColor; stroke-width: 1.5; }
+.t-search-chan .t-card-title { margin-top: 8px; font-size: 13px; }
+.t-search-chan .t-card-sub { margin-top: 0; }
+.t-search-chan .t-progress { left: 10px; right: 10px; bottom: 7px; background: rgba(255, 255, 255, 0.18); }
+
+/* On TV: the programme's art, LIVE or the start time, the channel's logo; the text under it */
+.t-search-air > .t-card-title { margin-top: 7px; font-size: 13px; font-weight: 600; }
+.t-search-air > .t-card-sub { color: var(--t-text-3); }
+.t-search-pill {
+  position: absolute; left: 8px; top: 8px; padding: 3px 7px; border-radius: 5px; font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+  background: rgba(20, 20, 22, 0.78); color: var(--t-text);
+}
+.t-search-pill.t-live { background: var(--t-accent); color: #08080a; }
+.t-search-plate-sm { position: absolute; right: 8px; top: 8px; width: 44px; height: 24px; border-radius: 5px; }
+.t-search-air .t-img-none + .t-search-plate-sm { right: auto; left: 50%; top: 50%; width: 72px; height: 38px; transform: translate(-50%, -50%); }
+
+/* One kind picked with a chip: its rows wrap into a grid instead of scrolling sideways */
+.t-search-grid .t-row {
+  display: grid; overflow: visible; padding: 0 var(--t-gr) 0 var(--t-g); gap: 16px 10px; scroll-snap-type: none;
+  grid-template-columns: repeat(auto-fill, minmax(var(--t-grid-min), 1fr));
+}
+.t-search-grid .t-row::after { display: none; }
+.t-search-grid .t-card { width: auto; }
+.t-search-grid .t-search-wide .t-row, .t-search-grid .t-search-airing .t-row { grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 16px 12px; }
+.t-search-grid .t-search-channel .t-row { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.t-search-grid .t-search-person .t-row { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+
+/* ---- Before typing: recent searches, Continue Watching ---------------------------------------------- */
+
+.t-search-idle[hidden], .t-search-idle > [hidden] { display: none; }
+.t-search-idle { padding: 0 var(--t-gr) 0 var(--t-g); }
+.t-tablet .t-search-idle { max-width: 900px; margin: 0 auto; }
+.t-search-idle > section { margin-top: 18px; }
+.t-search-idle-head { display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
+.t-search-textbtn { height: 44px; padding: 0 0 0 16px; font-size: 15px; font-weight: 600; color: var(--t-accent); }
+.t-search-recent-row {
+  display: flex; align-items: center; width: 100%; min-height: 46px; padding: 0; box-sizing: border-box; text-align: left;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+}
+.t-search-recent-row:active { background: rgba(255, 255, 255, 0.04); }
+.t-search-recent-icon { width: 18px; height: 18px; color: var(--t-text-3); }
+.t-search-recent-text { flex: 1; min-width: 0; margin: 0 12px; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-search-recent-go { width: 16px; height: 16px; color: var(--t-text-3); }
+.t-tablet .t-search-recent-list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; }
+
+.t-search-sugg-list { display: grid; gap: 4px; }
+.t-tablet .t-search-sugg-list { grid-template-columns: 1fr 1fr; column-gap: 28px; }
+.t-search-sugg-row { display: flex; align-items: center; min-width: 0; }
+.t-search-sugg-main { flex: 1; min-width: 0; display: flex; align-items: center; padding: 6px 0; text-align: left; }
+.t-search-sugg-main:active .t-search-sugg-thumb { transform: scale(0.97); }
+.t-search-sugg-thumb {
+  position: relative; flex: none; width: 128px; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #3a3a3f;
+  transition: transform 140ms var(--t-ease);
+}
+.t-search-sugg-thumb .t-progress { left: 6px; right: 6px; bottom: 5px; }
+.t-search-sugg-text { flex: 1; min-width: 0; display: flex; flex-direction: column; margin: 0 12px; }
+.t-search-sugg-title { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-search-sugg-sub { margin-top: 2px; font-size: 13px; color: var(--t-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-search-sugg-row .t-btn-round { background: var(--t-fill); }
+.t-search-sugg-row .t-btn-round .t-icon { width: 18px; height: 18px; }
+.t-search-hint { margin-top: 40px; text-align: center; font-size: 15px; color: var(--t-text-2); }
