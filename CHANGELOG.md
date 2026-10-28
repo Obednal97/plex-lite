@@ -11,6 +11,16 @@ releases are fixes only.
 
 ### Added
 
+- **Touch player on phones and tablets** (docs/WEB.md, "The touch player"): the web build's phone and
+  tablet layer plays in its own player instead of the TV's scaled one. Tap shows or hides the controls,
+  double-tap left / right seeks back 10 s / ahead 30 s (more taps add more, with a ripple), drag the
+  chapter-segmented bar with a time label, pull down to close, pinch to fill. Top bar with Subtitles and
+  Audio sheets, AirPlay, picture in picture, full screen (the Fullscreen API with landscape lock, or
+  iPhone's native player) and Lock; Chapters, Cast, Info and Episodes under the picture in portrait or
+  over it in landscape. Skip Intro / Credits, Up Next and Live TV (Go live, pause buffer, channel up /
+  down, channel list) as on the TV. The screen stays awake while playing. Built on the TV player's
+  code, which is unchanged on the TV.
+
 - **New first run** (docs/FIRSTRUN.md), on the TV and the web: a poster-wall welcome screen (free-licence
   posters, credited), Plex's sign-in page in a popup with a clear "blocked" path, a plex.tv/link code
   with a QR code that fills the code in, Who's watching? for Plex Home accounts with PIN entry (PIN
@@ -123,6 +133,10 @@ releases are fixes only.
 
 ### Fixed
 
+- **Web, Safari**: a resumed server stream could keep counting from the resume point twice (Safari
+  starts at the segment before it, after saying `canplay` at 0), which put the reported position,
+  resume point and subtitles off; embedded subtitles were shown twice (Safari's own rendition too) and
+  the drawn ones ran about 4 s early. Safari's own subtitle track is now the source, kept hidden.
 - Changing live channel tells Plex the old channel's session stopped (it was listed as playing for minutes).
 - Focus in the player and the live controls no longer makes labels jump. On the TV's Chrome 53 a
   focused tab, card or button that scaled was drawn one way while it moved and another at rest, so
