@@ -494,7 +494,12 @@
     var fav = {};
     G.favourites().forEach(function (id) { fav[id] = true; });
     var onNow = {};
-    G.channels.forEach(function (c) { if (L.indexAt(G.list(c.identifier), t) >= 0) onNow[c.identifier] = true; });
+    G.channels.forEach(function (c) {
+      var list = G.list(c.identifier);
+      var i = L.indexAt(list, t);
+      // guide filler ("..programmes start at 7.00pm") is not something on now
+      if (i >= 0 && !L.isFiller(list[i].title)) onNow[c.identifier] = true;
+    });
     var f = families();
     ctxCache = { version: G.version, minute: minute, channels: G.channels, fav: fav, cat: G.cats, fam: f.of, families: f.list, onNow: onNow };
     return ctxCache;

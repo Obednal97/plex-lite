@@ -204,3 +204,10 @@ test('live remote map', () => {
   assert.equal(k({ view: 'guide' }, 'left'), 'guide-close');
   assert.equal(k({ view: 'guide' }, 'right'), null);
 });
+
+test('guide filler is not a programme', () => {
+  assert.equal(L.isFiller('..programmes start at 7.00pm'), true);
+  assert.equal(L.isFiller('…programmes coming soon'), true);
+  assert.equal(L.isFiller('Breakfast'), false);
+  assert.equal(L.isFiller(undefined), false);
+});
