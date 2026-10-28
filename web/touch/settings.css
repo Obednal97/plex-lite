@@ -76,12 +76,6 @@
 .t-tablet .ts-sheet .t-sheet { width: 500px; max-width: calc(100vw - 48px); }
 .t-tablet .ts-sheet.ts-nested .t-sheet { width: 480px; }
 
-/* the app's toast sits over the bottom of a sheet (where Allow / Save are): it must not take the tap.
-   (A shell-wide rule; belongs in touch.css.) */
-html.pl-touch .toast { pointer-events: none; }
-/* while a sheet is open the toast goes to the top: at the bottom it covers the sheet's buttons, and
-   the on-screen keyboard covers it (also shell-wide, belongs in touch.css) */
-html.pl-touch.t-sheet-open .toast { bottom: auto; top: calc(var(--t-safe-t) + 12px); }
 
 /* a text sheet lifted above the on-screen keyboard (settings.js keyboardFit) */
 .t-sheet.ts-kb { padding-bottom: 10px; }
