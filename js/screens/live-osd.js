@@ -41,20 +41,10 @@
     return h;
   }
 
+  // The channel's logo on its plate: dark for white logos (js/logos.js), the name when there is none.
   function logoPlate(cls, thumb, name, w, h) {
     var plate = PL.el('div', cls);
-    var src = thumb ? PL.plex.image(thumb, w, h, { format: 'png' }) : null;
-    if (src) {
-      var img = PL.el('img');
-      img.width = w;
-      img.height = h;
-      img.onload = function () { plate.classList.add('loaded'); };
-      img.onerror = function () { img.style.visibility = 'hidden'; };
-      img.src = src;
-      plate.appendChild(img);
-    } else {
-      plate.appendChild(PL.el('span', 'live-logo-text', (name || '').slice(0, 10)));
-    }
+    PL.logos.fill(plate, { thumb: thumb, name: name || '' }, { w: w, h: h, textClass: 'live-logo-text', label: (name || '').slice(0, 10) });
     return plate;
   }
 

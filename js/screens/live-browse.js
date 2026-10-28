@@ -322,18 +322,7 @@
       if (word) inner.appendChild(PL.el('div', 'lw-genre', word.trim()));
     }
     var logo = PL.el('div', 'lw-logo');
-    var src = c.thumb ? PL.plex.image(c.thumb, 84, 44, { format: 'png' }) : null;
-    if (src) {
-      var li = PL.el('img');
-      li.width = 84;
-      li.height = 44;
-      li.onload = function () { logo.classList.add('loaded'); };
-      li.onerror = function () { li.style.visibility = 'hidden'; };
-      li.src = src;
-      logo.appendChild(li);
-    } else {
-      logo.appendChild(PL.el('span', 'lw-logo-text', c.name.slice(0, 8)));
-    }
+    PL.logos.fill(logo, c, { w: 84, h: 44, textClass: 'lw-logo-text', label: c.name.slice(0, 8) });
     inner.appendChild(logo);
     var bar = PL.el('div', 'card-progress');
     var fill = PL.el('div', 'card-progress-fill');
