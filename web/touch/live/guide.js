@@ -300,7 +300,7 @@
     let minute = 0;
     function tick() {
       // (nothing to do while the player has the screen: onShow catches up)
-      if (!T.visible || !shown) return;
+      if (!T.visible || T.covered || !shown) return;
       grid.paintNow();
       const m = Math.floor(Date.now() / 60000);
       if (m === minute) return;
@@ -356,7 +356,7 @@
     };
 
     // (not while the player has the screen: onShow catches up)
-    const unlisten = G.listen(() => { if (alive && loaded && shown && T.visible) onData(); });
+    const unlisten = G.listen(() => { if (alive && loaded && shown && T.visible && !T.covered) onData(); });
     paintChips();
     paintStatus();
     load();

@@ -192,7 +192,8 @@
 
     render() {
       const sc = this.scroller;
-      if (!sc || !this.geo || this.hidden) return;
+      // (nor under the touch player: the shell shows the page again, onShow, when it closes)
+      if (!sc || !this.geo || this.hidden || T.covered) return;
       // nothing has a size while the stage covers the layer (a size of 0 would stick), or for a
       // moment while the page animates in: try again next frame, unless the stage has the screen
       if (!sc.clientHeight) {
