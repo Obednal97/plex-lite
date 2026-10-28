@@ -354,14 +354,14 @@
     var hints = PL.el('div', 'osd-hints');
     var hint = function (key, label) {
       var h = PL.el('div', 'osd-hint');
-      h.appendChild(PL.el('span', 'keycap', key));
+      h.appendChild(PL.keycap(key));
       var t = PL.el('span', '', label);
       h.appendChild(t);
       hints.appendChild(h);
       return t;
     };
-    hint(PL.keyLabel('OK'), 'Jump here');
-    this.hintBack = hint(PL.keyLabel('Back'), 'Return');
+    hint('OK', 'Jump here');
+    this.hintBack = hint('Back', 'Return');
     osd.appendChild(hints);
 
     this.tabRow = PL.el('div', 'osd-tabs');

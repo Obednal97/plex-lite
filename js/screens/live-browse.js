@@ -25,7 +25,7 @@
 
   function hint(parent, key, label, cls) {
     var h = PL.el('div', 'lb-hint');
-    h.appendChild(PL.el('span', 'keycap' + (cls ? ' ' + cls : ''), key));
+    h.appendChild(PL.keycap(key, cls));
     h.appendChild(PL.el('span', '', label));
     parent.appendChild(h);
     return h;
@@ -100,8 +100,8 @@
     this.lastY = null;
 
     var hints = PL.el('div', 'lb-hints');
-    hint(hints, PL.keyLabel('OK'), 'Show');
-    hint(hints, PL.keyLabel('Back'), 'Close');
+    hint(hints, 'OK', 'Show');
+    hint(hints, 'Back', 'Close');
     panel.appendChild(hints);
     this.el.appendChild(panel);
     this.paint(true);

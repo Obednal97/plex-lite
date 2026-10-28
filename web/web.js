@@ -32,12 +32,7 @@
     deviceName: 'Plex Lite (' + web.browser.name + ' on ' + web.browser.os + ')',
   };
 
-  // ---- On-screen key names -------------------------------------------------------------------
-
-  PL.keyLabels = {
-    OK: 'Enter', Back: 'Esc', Red: 'R', Green: 'G', Yellow: 'Y', Blue: 'B',
-    'Hold OK on': 'Right-click', 'hold OK on': 'right-click',
-  };
+  // On-screen key names follow the input mode: web/web-input.js sets PL.keyLabels.
 
   // ---- The stage: 1920x1080, scaled to fit the window (letterboxed) ----------------------------
 
@@ -272,6 +267,7 @@
   web.settingsRows = function (rebuild) {
     var full = !!(document.fullscreenElement || document.webkitFullscreenElement);
     return [
+      PL.input.settingsRow(rebuild),
       { label: 'Local network access', value: web.lnaLabel(), action: explainLna },
       { label: 'Full screen', value: full ? 'On' : 'Off', action: function () {
         web.toggleFullscreen();
