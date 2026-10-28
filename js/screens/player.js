@@ -439,11 +439,14 @@
     // (#EXT-X-START), and browsers report that absolute time, where the TV's player counts from the
     // start of the stream. Once the video says so, positions stop adding the offset.
     if (PL.isWeb) {
-      on('canplay', function () {
+      var rebase = function () {
         // once per stream: a later canplay (after a stall) must not move the base again
         if (self.rebased || self.mode !== 'transcode' || self.live || !(self.base > 3)) return;
+        // Safari's own HLS says canplay before it has moved to the playlist's start point
+        // (currentTime still 0): decide on the first event that has a position
+        if (!(v.currentTime > 0.5)) return;
         self.rebased = true;
-        if (Math.abs(v.currentTime - self.base) > 5) return;
+        if (!L.countsFileTime(v.currentTime, self.base)) return;
         PL.log('stream time is the file\'s time (offset ' + self.base + 's)');
         self.base = 0;
         // cues timed against the old base are dropped and fetched again
@@ -452,7 +455,33 @@
           self.subs.segs = {};
           self.subs.timing = null;
         }
-      });
+      };
+      on('canplay', rebase);
+      on('playing', rebase);
+      on('timeupdate', rebase);
+      // Safari's own HLS shows the stream's WebVTT rendition by itself. Text tracks the player
+      // didn't add (plOwn) stay off, except that rendition while embedded subtitles are on: Safari
+      // times its cues against the picture, which polling the segments can't match (seen 4 s
+      // early), so the player draws its cues (the track stays hidden) instead of its own.
+      var tracks = v.textTracks;
+      if (tracks && tracks.addEventListener) {
+        this.syncTextTracks = function () {
+          var sub = self.subs;
+          var want = sub.kind === 'embedded' && PL.webMedia && PL.webMedia.hls === 'native';
+          for (var i = 0; i < tracks.length; i++) {
+            var tr = tracks[i];
+            if (tr.plOwn) continue;
+            if (want && !sub.inband && (tr.kind === 'subtitles' || tr.kind === 'captions')) self.adoptInband(tr);
+            if (tr === sub.inband) {
+              if (tr.mode === 'disabled') tr.mode = 'hidden';
+            } else if (tr.mode !== 'disabled') {
+              tr.mode = 'disabled';
+            }
+          }
+        };
+        tracks.addEventListener('addtrack', this.syncTextTracks);
+        tracks.addEventListener('change', this.syncTextTracks);
+      }
     }
     on('playing', function () {
       var was = self.state;
@@ -1728,6 +1757,8 @@
     }
     sub.kind = want.kind;
     sub.id = id;
+    sub.inband = null; // a new stream brings its own tracks (the web build, Safari)
+    if (this.syncTextTracks) this.syncTextTracks();
     if (want.kind === 'external') this.loadExternalSubs(want.stream);
     else if (want.kind === 'embedded' && this.mode === 'transcode') this.pollHlsSubs();
   };
@@ -1806,6 +1837,7 @@
   };
 
   Player.prototype.renderSubs = function () {
+    if (this.subs.inband) return; // drawn from the stream's own track (adoptInband)
     var cues = this.subs.cues;
     if (this.subs.kind === 'none' || this.subs.kind === 'image' || !cues.length) {
       if (this.subs.shown) this.showSubText('');
@@ -1831,6 +1863,22 @@
     this.subs.shown = text;
     this.subEl.textContent = text;
     this.subEl.style.display = text ? 'block' : 'none';
+  };
+
+  // The web build in Safari: the stream's own subtitle track becomes the source of the drawn text.
+  Player.prototype.adoptInband = function (tr) {
+    var self = this;
+    var sub = this.subs;
+    sub.inband = tr;
+    tr.mode = 'hidden';
+    PL.log('subtitles from the stream\'s own track');
+    tr.oncuechange = function () {
+      if (self.subs.inband !== tr) return;
+      var lines = [];
+      var cues = tr.activeCues || [];
+      for (var i = 0; i < cues.length; i++) lines.push(cleanCueText(cues[i].text || ''));
+      self.showSubText(lines.join('\n').split('\n').slice(0, 3).join('\n'));
+    };
   };
 
   // After the track sheet: switch text subtitles in place; restart only when the stream must change.

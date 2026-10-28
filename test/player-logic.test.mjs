@@ -226,3 +226,16 @@ test('cast: people without ids de-duplicate by name, and the list is capped', ()
   const many = { type: 'movie', Role: Array.from({ length: 60 }, (_, i) => role(i, 'N' + i, '')) };
   assert.equal(L.castList(many).length, 40);
 });
+
+test('web streams: which clock a resumed HLS stream counts in', () => {
+  // Safari's own HLS starts at the segment boundary before the offset (seen: 30.0 for 37)
+  assert.equal(L.countsFileTime(30, 37), true);
+  assert.equal(L.countsFileTime(37.2, 37), true);
+  assert.equal(L.countsFileTime(1300, 1310), true);
+  // counted from the stream's start
+  assert.equal(L.countsFileTime(0.8, 37), false);
+  assert.equal(L.countsFileTime(6, 1310), false);
+  // a small offset
+  assert.equal(L.countsFileTime(11, 12), true);
+  assert.equal(L.countsFileTime(1, 12), false);
+});

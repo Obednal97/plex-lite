@@ -949,12 +949,19 @@
     const t = this.t;
     const v = this.video;
     const sub = this.subs;
+    // Safari's own subtitle track (the TV player draws from it): the native player shows it as it is
+    if (sub.inband) {
+      sub.inband.mode = t.nativeFull ? 'showing' : 'hidden';
+      if (t.track) t.track.mode = 'disabled';
+      return;
+    }
     const text = sub.kind === 'external' || sub.kind === 'embedded';
     const want = t.nativeFull && text && sub.cues.length > 0;
     if (!t.track && !want) return;
     if (!t.track) {
       try {
         t.track = v.addTextTrack('subtitles', 'Subtitles', '');
+        t.track.plOwn = true; // the TV player keeps other tracks off (Safari's in-stream rendition)
       } catch (e) { return; }
       t.trackKeys = new Set();
     }
