@@ -3,10 +3,13 @@
 
 /* ---- Library tab: top bar and chips over the hero on Recommended, in the flow elsewhere ---------- */
 
-.t-lib { padding-top: calc(var(--t-safe-t) + 60px); }
+/* the chips sit 13 px under the header row (board P1: avatar bottom 91, chips 104), below the
+   safe area like the header itself: the header is 60 px under the inset, the row's own 4 px padding
+   is taken back by its -4 px margin */
+.t-lib { --t-chips-top: calc(var(--t-safe-t) + 61px); padding-top: var(--t-chips-top); }
 .t-lib-chips { position: relative; z-index: 6; margin-top: -4px; }
 .t-lib.t-mode-rec.t-has-hero { padding-top: 0; }
-.t-lib.t-mode-rec.t-has-hero .t-lib-chips { position: absolute; left: 0; right: 0; top: calc(var(--t-safe-t) + 46px); }
+.t-lib.t-mode-rec.t-has-hero .t-lib-chips { position: absolute; left: 0; right: 0; top: var(--t-chips-top); margin-top: -4px; }
 .t-lib:not(.t-mode-rec) .t-lib-modes { padding-top: 14px; }
 .t-rec-status:empty { display: none; }
 
