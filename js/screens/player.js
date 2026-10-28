@@ -2794,4 +2794,14 @@
   };
 
   screens.player = function (item, opts) { return new Player(item, opts); };
+
+  // The web build's touch player (web/touch/player.js, docs/WEB.md "The touch player") is this
+  // player with a phone's controls: it keeps everything here (stream decisions, timeline, resume,
+  // subtitles, markers, the end card's timing, Live TV tuning) and only draws its own. The TV never
+  // loads it.
+  PL.Player = Player;
+  Player.util = {
+    streamsOf: streamsOf, selectedSubtitle: selectedSubtitle, episodeCode: episodeCode, endsAt: endsAt,
+    initialsOf: initialsOf, showMeta: showMeta,
+  };
 })();

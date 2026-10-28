@@ -5,13 +5,16 @@
     "browse.css",
     "details.css",
     "search.css",
-    "settings.css"
+    "settings.css",
+    "player.css"
   ],
   "scripts": [
     "logic.js",
     "kit.js",
     "shell.js",
     "sheets.js",
+    "player-logic.js",
+    "player.js",
     "screens/library.js",
     "screens/browse.js",
     "screens/details.js",
