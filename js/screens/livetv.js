@@ -993,6 +993,11 @@
     this.paintFocus();
   };
 
+  // The web build's window changed height (web/web-desktop.js): as many rows as now fit.
+  LiveTVScreen.prototype.onStageResize = function () {
+    if (this.alive && this.list.length) this.render();
+  };
+
   LiveTVScreen.prototype.destroy = function () {
     this.alive = false;
     this.visible = false;

@@ -434,7 +434,17 @@
     P.buildIcons = function () {
       // the player keeps the focus on an icon it rebuilds, but doesn't know this one
       if (this.web) this.web.restoreFs = !!this.icons[this.iconIndex] && this.icons[this.iconIndex].id === 'fullscreen';
+      // the player compares the icons it wants with this.icons: leave ours out of that, so an
+      // unchanged row isn't rebuilt (the full screen icon is put back after)
+      var fs = this.web ? this.icon('fullscreen') : -1;
+      var held = fs >= 0 ? this.icons.splice(fs, 1)[0] : null;
       var out = buildIcons.apply(this, arguments);
+      if (held && held.node.parentNode === this.iconRow) {
+        // not rebuilt: our icon is still in the row
+        this.icons.push(held);
+      } else if (held && this.web.fsIcon === held) {
+        this.web.fsIcon = null;
+      }
       if (this.web) syncFullIcon(this);
       return out;
     };
@@ -458,6 +468,8 @@
       if (this.web && PL.isBack(code) && pointerMode() && this.state !== 'stopped') {
         var fromButton = !e || !e.type;
         var live = this.liveOsd;
+        // a channel number being typed: Esc cancels it (live-osd.js)
+        if (live && live.entry && !fromButton) return key.apply(this, arguments);
         if (fromButton) {
           this.exit();
           return true;
@@ -588,6 +600,13 @@
       }
     };
     document.addEventListener('mouseover', w.onOver, true);
+    // the mouse leaving the window (over the controls, say) no longer holds them up
+    w.onOut = function (e) {
+      if (e.relatedTarget || !w.hot) return;
+      w.onOver({ target: document.body });
+    };
+    document.addEventListener('mouseout', w.onOut, true);
+    window.addEventListener('blur', w.onOut);
 
     // with the mouse, hovering a tab only lights it; a click opens it (the TV's pointer opens on
     // hover, which slides the whole block up under a passing mouse)
@@ -605,18 +624,27 @@
       if (!pointerMode() || hasClassUp(e.target, el, CONTROLS)) return;
       clearTimeout(w.clickTimer);
       if (e.detail > 1 || p.live) return;
+      w.clickToggled = null; // a new click: only its own pause may be undone by a double-click
       w.clickTimer = setTimeout(function () {
         if (p.state === 'stopped' || app.top() !== p) return;
         if (p.menu) p.closeMenu();
         else if (p.tabOpen() && !p.osdHidden) p.closeTab();
         else if (p.scrubState) p.scrubCancel();
-        else if (p.state === 'playing' || p.state === 'paused') p.togglePause();
+        else if (p.state === 'playing' || p.state === 'paused') {
+          // a slow double-click (the system's double-click time is often longer than the wait)
+          // puts this back when it arrives
+          w.clickToggled = { at: Date.now(), wasPlaying: p.state === 'playing' };
+          p.togglePause();
+        }
       }, CLICK_MS);
     });
     el.addEventListener('dblclick', function (e) {
       if (!pointerMode() || hasClassUp(e.target, el, CONTROLS)) return;
       clearTimeout(w.clickTimer);
       e.preventDefault();
+      var t = w.clickToggled;
+      w.clickToggled = null;
+      if (t && Date.now() - t.at < 700 && (p.state === 'playing' || p.state === 'paused')) p.togglePause(t.wasPlaying);
       web.toggleFullscreen();
     });
 
@@ -661,6 +689,8 @@
     if (w.dragging && w.endDrag) w.endDrag();
     PL.input.off(w.onInput);
     document.removeEventListener('mouseover', w.onOver, true);
+    document.removeEventListener('mouseout', w.onOut, true);
+    window.removeEventListener('blur', w.onOut);
     document.removeEventListener('fullscreenchange', w.onFull);
     document.removeEventListener('webkitfullscreenchange', w.onFull);
     if (w.tipNode) web.tip.hide();

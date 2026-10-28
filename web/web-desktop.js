@@ -45,6 +45,9 @@
 
   web.tip = function (node, text, key, place) {
     node.setAttribute('data-tip', text);
+    // what a screen reader says for a control that only has an icon
+    if (!node.getAttribute('role')) node.setAttribute('role', 'button');
+    node.setAttribute('aria-label', text);
     if (key) node.setAttribute('data-tip-key', key);
     else node.removeAttribute('data-tip-key');
     if (place) node.setAttribute('data-tip-at', place);
@@ -92,7 +95,7 @@
     var node = tipTarget(e.target);
     if (node === tip.node) return;
     web.tip.hide();
-    if (!node || PL.input.nav() !== 'pointer') return;
+    if (!node || PL.input.mode() !== 'pointer' || PL.input.nav() !== 'pointer') return;
     tip.node = node;
     tip.timer = setTimeout(function () { if (tip.node === node && node.offsetParent) showTip(node); }, 450);
   }, true);
@@ -104,6 +107,8 @@
   // A screen can hide it while it has nothing on screen (the player while its controls are away:
   // screen.hideBack() -> true) or leave it out altogether (screen.noBack).
   var back = PL.el('div', 'web-back');
+  back.setAttribute('role', 'button');
+  back.setAttribute('aria-label', 'Back');
   back.appendChild(web.glyph(G.back, 30, 2.2));
   back.appendChild(PL.el('span', 'web-back-label', 'Back'));
   back.appendChild(PL.keycap('Back', 'web-back-key'));
@@ -132,6 +137,13 @@
   document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('app').appendChild(back);
     web.updateBack();
+  });
+
+  // ---- The window changed height (web/web.js): screens that lay out by it re-measure -------------
+
+  document.addEventListener('pl-stageresize', function () {
+    web.tip.hide();
+    app.stack.forEach(function (s) { if (s.onStageResize) s.onStageResize(); });
   });
 
   // ---- Keys: / Search, M mute, N next episode, ? the shortcuts ---------------------------------
@@ -175,7 +187,7 @@
     var k = keyName(e);
     var act = null;
     if (k === '?') act = function () { web.shortcuts(); };
-    else if (k === '/' && !screenTypes()) act = goSearch;
+    else if (k === '/') act = screenTypes() ? function () {} : goSearch; // on Search: nothing (not the browser's find)
     else if ((k === 'm' || k === 'M') && !screenTypes() && player()) act = function () { web.playerKey(player(), 'mute'); };
     else if ((k === 'n' || k === 'N') && !screenTypes() && player()) act = function () { web.playerKey(player(), 'next'); };
     if (!act) return;

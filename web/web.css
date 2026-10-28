@@ -12,11 +12,13 @@ body, #app, .backdrop, .backdrop-shade, .screens, .screen, .grid, .sheet-scrim, 
 .backdrop-ambient .backdrop-img, .backdrop-detail .backdrop-img { height: var(--stage-h); object-fit: cover; }
 .player { background: #000; }
 /* what fills down to the bottom from a fixed top */
-.lg-grid { height: calc(var(--stage-h) - 506px); }
+.lg-grid, .lg-chans, .lg-progs, .lg-now { height: calc(var(--stage-h) - 506px); }
 .lw-clip { height: calc(var(--stage-h) - 214px); }
 .osdl-view { height: calc(var(--stage-h) - 290px); }
 .live-guide-clip { height: calc(var(--stage-h) - 248px); }
 .sheet { max-height: calc(var(--stage-h) - 224px); }
+/* Search's results clip (js/screens/search.js sets its size inline, from the height at the time) */
+.search-clip { height: var(--stage-h) !important; }
 /* the home hero sits on the shelves below it, which are placed from the top */
 .hero { bottom: calc(500px + var(--stage-h) - 1080px); }
 /* centred on the screen */

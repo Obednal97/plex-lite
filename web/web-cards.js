@@ -101,6 +101,8 @@
     if (!inner) return;
     var acts = PL.el('div', 'web-acts');
     var play = PL.el('div', 'web-card-play');
+    play.setAttribute('role', 'button');
+    play.setAttribute('aria-label', 'Play');
     play.appendChild(web.glyph(G.play, 30));
     play.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -265,6 +267,8 @@
         fade.style.top = (top - 24) + 'px';
         fade.style.height = (h + 48) + 'px';
         var btn = PL.el('div', 'web-row-arrow web-row-arrow-' + dir);
+        btn.setAttribute('role', 'button');
+        btn.setAttribute('aria-label', dir === 'next' ? 'Next page' : 'Previous page');
         btn.appendChild(web.glyph(dir === 'next' ? G.next : G.prev, 32, 2.4));
         btn.style.top = Math.round(top + h / 2 - 32) + 'px';
         if (dir === 'prev') {
