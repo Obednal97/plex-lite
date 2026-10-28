@@ -51,23 +51,30 @@
 
   // ---- Logo plates (js/logos.js): a light plate, dark for white logos, else the channel's name -------
 
-  // One plate per channel and size, made once: the guide's rows come and go as it scrolls.
-  const plates = new Map();
+  // A plate. The image comes from the browser's cache after the first time, and its tone from
+  // js/logos.js's (each logo is looked at once).
   LV.plate = (c, w, hgt, cls) => {
-    const key = c.identifier + '|' + w + 'x' + hgt + '|' + (c.thumb || '');
-    let p = plates.get(key);
-    if (p) return p;
-    p = h('span.t-lv-plate' + (cls ? '.' + cls : ''));
+    const p = h('span.t-lv-plate' + (cls ? '.' + cls : ''));
     p.style.width = w + 'px';
     p.style.height = hgt + 'px';
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     // the image is asked for at the screen's density; CSS draws it at the plate's size
     PL.logos.fill(p, c, { w: Math.round((w - 8) * dpr), h: Math.round((hgt - 6) * dpr), textClass: 't-lv-plate-text', label: c.name });
+    return p;
+  };
+
+  // The guide's channel column: one plate per channel, kept, since its rows come and go as it
+  // scrolls. (A node can be in one place only: everything else makes its own with LV.plate.)
+  const plates = new Map();
+  LV.columnPlate = (c, w, hgt) => {
+    const key = c.identifier + '|' + w + 'x' + hgt + '|' + (c.thumb || '');
+    let p = plates.get(key);
+    if (p) return p;
+    p = LV.plate(c, w, hgt);
     if (plates.size > 1500) plates.clear();
     plates.set(key, p);
     return p;
   };
-  LV.forgetPlates = () => plates.clear();
 
   // ---- Watching ---------------------------------------------------------------------------------------
 
@@ -124,11 +131,14 @@
     const art = a && a.art && a.art !== c.thumb ? a.art : null;
     if (art) {
       const frame = h('div.t-lv-det-art');
-      frame.appendChild(ui.img(ui.imageUrl(art, 420, 236), null, true));
+      const img = ui.img(ui.imageUrl(art, 420, 236), null, true);
+      // no art after all: no empty box
+      img.addEventListener('error', () => frame.remove(), { once: true });
+      frame.appendChild(img);
       box.appendChild(frame);
     }
     const chan = h('div.t-lv-det-chan');
-    chan.appendChild(LV.plate(c, 58, 32, 't-lv-plate-sm').cloneNode(true));
+    chan.appendChild(LV.plate(c, 58, 32, 't-lv-plate-sm'));
     chan.appendChild(h('span', { text: [c.vcn, c.name].filter(Boolean).join('  ') }));
     if (G.isFavourite(c.identifier)) chan.appendChild(LV.icon('starfill', 't-lv-fav'));
     box.appendChild(chan);
@@ -248,7 +258,7 @@
         return;
       }
       const nn = G.nowNext(target.identifier);
-      match.appendChild(LV.plate(target, 58, 32, 't-lv-plate-sm').cloneNode(true));
+      match.appendChild(LV.plate(target, 58, 32, 't-lv-plate-sm'));
       const text = h('div.t-lv-pad-text');
       text.appendChild(h('div.t-lv-pad-name', { text: (m.exact || m.prefix ? '' : 'Nearest: ') + target.vcn + '  ' + target.name }));
       text.appendChild(h('div.t-lv-pad-now', { text: nn.now ? nn.now.title + ' · ' + X.left(nn.now, now()) : 'No guide information' }));

@@ -98,7 +98,8 @@
       n._fill = () => {
         const art = a.art && a.art !== c.thumb ? a.art : null;
         if (art) {
-          const img = ui.img(ui.imageUrl(art, 260, 146));
+          // (eager: the card is near the screen already, and lazy images in nested scrollers wait in WebKit)
+          const img = ui.img(ui.imageUrl(art, 260, 146), null, true);
           img.addEventListener('error', () => tint(), { once: true });
           frame.insertBefore(img, pr);
         } else {

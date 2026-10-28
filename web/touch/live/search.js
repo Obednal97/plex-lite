@@ -18,7 +18,7 @@
   // A channel or programme as a row: the logo plate, two lines, a play glyph when it's on now.
   function row(c, line1, line2, on, tap, hold) {
     const n = h('button.t-lv-res', { type: 'button' });
-    n.appendChild(LV.plate(c, 58, 32, 't-lv-plate-sm').cloneNode(true));
+    n.appendChild(LV.plate(c, 58, 32, 't-lv-plate-sm'));
     const text = h('span.t-lv-res-text');
     text.appendChild(h('span.t-lv-res-1', { text: line1 }));
     if (line2) text.appendChild(h('span.t-lv-res-2', { text: line2 }));

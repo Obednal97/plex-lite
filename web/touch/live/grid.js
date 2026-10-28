@@ -249,7 +249,7 @@
       const ch = h('div.t-lv-ch', { role: 'button', 'aria-label': 'Watch ' + c.vcn + ' ' + c.name });
       ch._i = i;
       ch.style.top = top + 'px';
-      ch.appendChild(LV.plate(c, g.plateW, g.plateH));
+      ch.appendChild(LV.columnPlate(c, g.plateW, g.plateH));
       if (G.isFavourite(c.identifier)) ch.appendChild(LV.icon('starfill', 't-lv-ch-fav'));
       ch.appendChild(h('span.t-lv-num', { text: c.vcn || '' }));
       this.chans.appendChild(ch);
