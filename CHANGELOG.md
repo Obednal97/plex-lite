@@ -11,6 +11,13 @@ releases are fixes only.
 
 ### Added
 
+- **Overseerr on the web** (docs/OVERSEERR.md, "On the web"): in the web build the Overseerr plugin
+  calls your Overseerr straight from the browser (`plugins/overseerr/seerr-web.js`, the same methods
+  and messages as the TV's service, per-profile sign-in over the browser's one cookie, changes checked
+  against `/auth/me` first). It needs Plex Lite served from the same site as Overseerr and CORS with
+  credentials on Overseerr's proxy (Nginx / Nginx Proxy Manager and Cloudflare Worker examples); when
+  either is missing, or Overseerr's CSRF protection is on, the plugin explains which in a sheet. Plugins
+  can declare `web: true` to run on the web without their services. The TV app is unchanged.
 - **Plex Lite on the web** (https://plexlite.vercel.app, docs/WEB.md): the same app in a desktop
   browser, built by `tools/build-web.mjs` and deployed on Vercel. Sign in with Plex (Plex's sign-in
   page in a popup, or a plex.tv/link code), https `*.plex.direct` connections only (local, Remote

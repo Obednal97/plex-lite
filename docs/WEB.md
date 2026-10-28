@@ -153,35 +153,47 @@ HLS only, no Media Source) and Android Chrome.
   no network, images, styles or frames. The app sends it the plugin's document by `postMessage`.
   A plugin's network permission is subject to that server's CORS like any web page.
 - **Service plugins** (catalogue entries of kind "service") need a webOS background service; the web
-  build shows them as "TV app only".
-- **Overseerr / Seerr** signs in through its webOS service, so on the web it is shown as "TV app only"
-  under Settings with the reason. A Seerr server doesn't send CORS headers (measured: no
-  `Access-Control-Allow-Origin`, `OPTIONS` answered with 405) and keeps its sign-in in a `SameSite=Lax`
-  cookie, so a web page on another site can neither read its API nor hold its session.
+  build shows them as "TV app only". A bundled plugin that has its own browser path says so with
+  `web: true` in its definition (docs/PLUGINS.md) and runs on the web without its services.
+- **Overseerr / Seerr** works on the web when Overseerr is set up for it: on the TV it goes through
+  its webOS service, in the browser `plugins/overseerr/seerr-web.js` calls your Overseerr straight from
+  the page (the build adds it after `seerr.js`; the TV never loads it). A browser allows that only if
 
-  Ways to make it work, none built yet:
+  1. **Plex Lite is on the same site as Overseerr**: a subdomain of the same domain
+     (`plexlite.example.com` next to `overseerr.example.com`), because Overseerr keeps its sign-in in
+     a `SameSite=Lax` cookie that browsers send only to pages on the same site; and
+  2. **Overseerr's reverse proxy allows that origin with credentials and answers preflights**
+     (Overseerr itself sends no CORS headers and answers `OPTIONS` with 405), and Overseerr's CSRF
+     protection is off (the default).
 
-  1. **Same site as Seerr (recommended).** Serve the web build on a subdomain of the domain Seerr is on
-     (a custom domain on Vercel) and have Seerr's reverse proxy add CORS for that one origin with
-     credentials. Seerr's cookie is then first-party, so every browser sends it; the Plex token goes
-     only to your own Seerr, as on the TV. Needs a DNS record and a few proxy lines; no new server.
-  2. **CORS on Seerr's proxy for plexlite.vercel.app**, with the cookie rewritten to
-     `SameSite=None; Secure`. Works in Chrome only: Safari and Firefox block third-party cookies.
-  3. **A proxy on Vercel** (a serverless function that signs in to Seerr for you). Works everywhere,
-     but your Plex token and Seerr session pass through Vercel and this project's code, and the proxy
-     must be locked to your Seerr address so it isn't an open relay. Not built: it needs the owner's
-     approval.
-  4. **The home-server helper** (the planned report-a-problem helper) could offer a small CORS-enabled
-     API for Plex Lite, keeping keys at home.
+  So it can't work on https://plexlite.vercel.app (no one's Overseerr is on that site); deploy your
+  own copy on your own subdomain. Setup, proxy examples (Nginx / Nginx Proxy Manager, Cloudflare
+  Worker), Overseerr's settings and what Plex Lite shows when something is missing:
+  [OVERSEERR.md, "On the web"](OVERSEERR.md#on-the-web). Other ways considered and not built: CORS
+  for a foreign site with the cookie rewritten to `SameSite=None` (Chrome only; Safari and Firefox
+  block third-party cookies), or a proxy on Vercel that signs in for you (your Plex token and
+  Overseerr session would pass through it).
 
 ## Security
 
 - **Content-Security-Policy** (`vercel.json`): `default-src 'self'; script-src 'self'; style-src
   'self'`, no inline script or eval anywhere; images and media from `https:` (Plex servers have
   per-server `*.plex.direct` names and you may type your own https address), `blob:` for hls.js's
-  media source and worker; `connect-src 'self' https:` for the same reason; `frame-src 'self'` (the
-  plugin frame); `object-src 'none'`, `base-uri 'none'`, `form-action 'none'`,
-  `frame-ancestors 'none'`, `upgrade-insecure-requests`.
+  media source and worker; `connect-src 'self' https:` (below); `frame-src 'self'` (the plugin
+  frame); `object-src 'none'`, `base-uri 'none'`, `form-action 'none'`, `frame-ancestors 'none'`,
+  `upgrade-insecure-requests`.
+- **Why `connect-src 'self' https:`.** The page calls addresses that differ for every user: each Plex
+  server has its own `*.plex.direct` name, a server address can be typed in, and the Overseerr
+  plugin calls the Overseerr address the user types in. A policy is one static header for every
+  visitor (and every domain the deployment is served on), so it can't list them, and CSP has no
+  "same site as this page" source. `https:` is the narrowest rule that still works: plain `http:`,
+  `ws:` and other schemes stay blocked (a page served over https couldn't use them anyway), and what
+  the page can *read* from another server is still decided by that server's CORS, which is what keeps
+  Overseerr closed to sites it doesn't allow. The defence against injected code is `script-src
+  'self'` with no inline script, not `connect-src`. If you deploy your own copy for one household you
+  can tighten it in `vercel.json` to your addresses, for example `connect-src 'self' https://plex.tv
+  https://*.plex.tv https://*.plex.direct https://overseerr.example.com
+  https://raw.githubusercontent.com` (the last one is the plugin catalogue).
 - Also: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`
   (Plex URLs carry the token, so no page address leaks either), HSTS,
   `Cross-Origin-Opener-Policy: same-origin-allow-popups` (keeps the sign-in popup working),
@@ -191,7 +203,8 @@ HLS only, no Media Source) and Android Chrome.
 
 ## Limits
 
-- Overseerr / Seerr and service plugins: TV app only (see above).
+- Service plugins: TV app only. Overseerr / Seerr: only where Plex Lite is on the same site as
+  Overseerr and Overseerr's proxy allows it (see above); not on plexlite.vercel.app.
 - Formats the browser can't decode are converted by the server (more load than the TV, which direct
   plays HEVC 10-bit and E-AC3). Audio is stereo.
 - Text subtitles are drawn by Plex Lite, as on the TV (no styling from ASS/SSA).
