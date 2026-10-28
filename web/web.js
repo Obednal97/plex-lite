@@ -316,11 +316,11 @@
       lines.push(['This browser doesn\'t ask', 'It reaches your server at home directly when it can']);
     }
     lines.push(['Away from home', 'Plex Lite uses Plex Remote Access, else the Plex relay (slower, limited quality)']);
-    sheet('Local network access', lines);
+    web.info('Local network access', lines);
   }
 
   function explainKeys() {
-    sheet('Keyboard and mouse', [
+    web.info('Keyboard and mouse', [
       ['Arrows, Enter', 'Move, OK'], ['Esc or Backspace', 'Back (the browser\'s Back button too)'],
       ['Hold Enter, Shift+Enter, right-click or a long press', 'Hold OK (quick actions)'],
       ['Space', 'Play / pause'], [', and .', 'Rewind / fast-forward'], ['Page Up / Page Down', 'Channel up / down, page'],
@@ -329,10 +329,14 @@
     ]);
   }
 
+  // The explanations go through web.info, so the phone and tablet layer (web/touch/) can show them
+  // as its own sheets.
   web.info = sheet;
+  web.explainLna = explainLna;
+  web.explainKeys = explainKeys;
 
   web.explainPlugin = function (p) {
-    sheet(p.name + ' works in the TV app only', [
+    web.info(p.name + ' works in the TV app only', [
       ['It runs a background service on the TV', 'A browser can\'t run one'],
       ['Use it on the TV', 'It works there as before'],
     ]);
