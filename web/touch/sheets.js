@@ -174,7 +174,9 @@
       if (shown) return;
       // plugins (Overseerr: Request, Report a problem) add theirs before Details
       const plug = (extra || []).filter((a) => a && a.label && a.run).map((a) => ({ label: a.label, icon: 'sparkle', action: a.run }));
-      const all = opts.onDetails ? list.concat(plug) : list.slice(0, -1).concat(plug, list.slice(-1));
+      // plugin actions go before the title's pages (Details / Go to episode, Go to show), as on the TV
+      const at = rows.findIndex((r) => r.id === 'details' || r.id === 'show');
+      const all = at < 0 ? list.concat(plug) : list.slice(0, at).concat(plug, list.slice(at));
       shown = sheet({ title, sub, rows: all, cls: 't-menu' });
     };
     const extra = PL.plugins && PL.plugins.actions ? PL.plugins.actions(item) : null;

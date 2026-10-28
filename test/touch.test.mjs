@@ -100,10 +100,12 @@ test('touch: quick actions follow the TV\'s menu', () => {
   assert.deepEqual(ids({ type: 'movie', viewOffset: 5000 }), ['resume', 'restart', 'watched', 'unwatched', 'details']);
   assert.equal(L.menuRows({ type: 'movie', viewOffset: 5000 }, { clock })[0].label, 'Resume from 5');
   assert.deepEqual(ids({ type: 'movie', viewCount: 1 }), ['play', 'unwatched', 'details']);
-  assert.deepEqual(ids({ type: 'episode', grandparentRatingKey: '9' }), ['play', 'watched', 'show', 'details']);
+  assert.deepEqual(ids({ type: 'episode', grandparentRatingKey: '9' }), ['play', 'watched', 'details', 'show']);
+  assert.equal(L.menuRows({ type: 'episode', grandparentRatingKey: '9' }, { clock })[2].label, 'Go to episode');
+  assert.equal(L.menuRows({ type: 'movie' }, { clock })[2].label, 'Details');
   assert.deepEqual(ids({ type: 'show', leafCount: 4, viewedLeafCount: 4 }), ['unwatched', 'details']);
   assert.deepEqual(ids({ type: 'show', leafCount: 4, viewedLeafCount: 1 }), ['watched', 'unwatched', 'details']);
-  assert.deepEqual(ids({ type: 'season', parentRatingKey: '3', leafCount: 2 }), ['watched', 'show', 'details']);
+  assert.deepEqual(ids({ type: 'season', parentRatingKey: '3', leafCount: 2 }), ['watched', 'details', 'show']);
   // already on the title's page: no Details row
   assert.deepEqual(ids({ type: 'movie' }, { onDetails: true }), ['play', 'watched']);
   assert.deepEqual(ids({ type: 'person' }), []);

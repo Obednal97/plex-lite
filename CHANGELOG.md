@@ -9,6 +9,13 @@ releases are fixes only.
 
 ## [Unreleased]
 
+### Changed
+
+- **Continue Watching plays at once**, on the TV, laptops and phones: choosing an episode in Continue
+  Watching or Recently Released Episodes, or a film in Continue Watching, starts it (resuming where it
+  was left) instead of opening its page. Hold OK, right-click, "…" or a long press still offer the
+  page: an episode's menu now has Go to episode and Go to show. Other rows open the page as before.
+
 ### Added
 
 - **Phones and tablets** (docs/WEB.md, "Phones and tablets"): the web build has its own layout under

@@ -48,6 +48,23 @@
     return PL.clamp(item.viewOffset / item.duration, 0, 1);
   };
 
+  // Shelves where choosing a card plays it instead of opening its page (the owner's choice, on every
+  // device): an episode in Continue Watching (or On Deck) or Recently Released Episodes, and a film
+  // in Continue Watching. The page stays one step away: hold OK, right-click, long-press or "…"
+  // (Go to episode, Go to show). hub: {hubIdentifier, title}; Plex's identifiers end in a section
+  // number (tv.inprogress.2), the titles are the fallback.
+  ui.playsOnSelect = function (hub, item) {
+    if (!hub || !item) return false;
+    var id = String(hub.hubIdentifier || '');
+    var title = String(hub.title || '');
+    var watching = /inprogress|continue/i.test(id) || /^continue watching\b/i.test(title);
+    var deck = /ondeck/i.test(id) || /^on deck\b/i.test(title);
+    var released = /recentlyaired|recentlyreleased/i.test(id) || /^recently released episodes\b/i.test(title);
+    if (item.type === 'episode') return watching || deck || released;
+    if (item.type === 'movie') return watching;
+    return false;
+  };
+
   ui.isWatched = function (item) {
     if (item.type === 'show' || item.type === 'season') return item.leafCount > 0 && item.viewedLeafCount === item.leafCount;
     return item.viewCount > 0 && !item.viewOffset;
