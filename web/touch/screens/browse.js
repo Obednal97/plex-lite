@@ -221,8 +221,8 @@
   const isShown = (node) => T.visible && node.isConnected && node.offsetParent !== null;
 
   // A poster with its title and year under it (the kit's caption shows a show's seasons instead).
-  function posterCard(item, onChange) {
-    const n = ui.poster(item, { w: POSTER_W, onChange });
+  function posterCard(item, onChange, onSelect) {
+    const n = ui.poster(item, { w: POSTER_W, onChange, onSelect: onSelect || null });
     n.appendChild(h('span.t-card-title', { text: P.itemTitle(item) || '' }));
     const sub = item.type === 'collection' ? B.countLabel(item.childCount, item.subtype || 'movie') : item.year ? String(item.year) : '';
     n.appendChild(h('span.t-card-sub', { text: sub }));
@@ -881,7 +881,9 @@
       return B.hubResult(hub, start, size, items);
     });
     const onChange = () => refreshKitGrid(grid, fetch, card);
-    const card = wide ? (it) => ui.wide(it, { w: 320, onChange }) : (it) => posterCard(it, onChange);
+    // Continue Watching and Recently Released Episodes play at once, as on their shelf (PL.ui.playsOnSelect)
+    const plays = (it) => (PL.ui.playsOnSelect(hub, it) ? T.playItem : null);
+    const card = wide ? (it) => ui.wide(it, { w: 320, onChange, onSelect: plays(it) }) : (it) => posterCard(it, onChange, plays(it));
     const grid = ui.grid({ fetch, card, page: 40, empty: 'Nothing here yet', cls: wide ? 't-bw-wides' : 't-bw-grid' });
     page.el.appendChild(grid);
     const solid = solidOnScroll(bar, title);

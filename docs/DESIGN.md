@@ -21,6 +21,10 @@ ideas, not the code:
 - **Focus is a "lit glass" edge** (thin bright rim, brighter crown on the top edge, a soft sheen) plus
   a gentle scale and one soft shadow. No thick coloured rings.
 - **Landscape cards carry their title on the art** over a short bottom scrim.
+- **Choosing a card opens its page, except where you came to watch:** an episode in Continue
+  Watching (or On Deck) or Recently Released Episodes, and a film in Continue Watching, play at once
+  (resuming where they were left). The page is one step away on every device: hold OK, right-click or
+  "…", long-press, with Go to episode and Go to show (`PL.ui.playsOnSelect`).
 - **Text never goes below 24 px** for product content (couch distance); type is a small fixed scale.
 - **Chrome is quiet:** text tabs, one white plate for focus, glass only for floating things.
 

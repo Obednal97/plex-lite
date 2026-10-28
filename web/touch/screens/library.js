@@ -91,9 +91,11 @@
           total: hub.more ? hub.size + 100 : hub.size,
           loadMore: hub.more ? (start) => PL.plex.hubPage(hub, start, 20) : null,
           onMore: more ? seeAll(hub) : null,
-          card: shelfKind(hub) === 'wide'
-            ? (item) => ui.wide(item, { onChange: () => load(true) })
-            : (item) => ui.poster(item, { onChange: () => load(true) }),
+          card: (item) => (shelfKind(hub) === 'wide' ? ui.wide : ui.poster)(item, {
+            onChange: () => load(true),
+            // Continue Watching and Recently Released Episodes play at once (PL.ui.playsOnSelect)
+            onSelect: P.playsOnSelect(hub, item) ? T.playItem : null,
+          }),
         }));
       });
       addPluginShelves();
