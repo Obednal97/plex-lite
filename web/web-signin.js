@@ -76,7 +76,6 @@
     var p = pin;
     popup = openWindow(p);
     if (!popup) { opened = p; return 'blocked'; }
-    try { popup.opener = null; } catch (e) { /* not ours to change */ }
     opened = p;
     pin = null;
     w.stop();
