@@ -1820,6 +1820,9 @@
     var playing = this.pendingFrom || this.live.channel;
     this.pendingFrom = null;
     if (this.liveTuned && playing && playing.identifier !== channel.identifier) this.lastChannel = playing;
+    // the old channel's play session ends here: without "stopped" Plex lists it as playing for
+    // minutes after its stream is gone
+    if (this.liveMeta && this.lastReported && this.lastReported !== 'stopped') this.report(true, 'stopped');
     this.teardownVideo();
     this.stopTranscode();
     // one tuner: the old session goes first, and a tune still in flight must have answered
