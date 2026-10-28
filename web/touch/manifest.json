@@ -6,6 +6,7 @@
     "details.css",
     "search.css",
     "settings.css",
+    "player.css",
     "live/live.css"
   ],
   "scripts": [
@@ -13,6 +14,8 @@
     "kit.js",
     "shell.js",
     "sheets.js",
+    "player-logic.js",
+    "player.js",
     "screens/library.js",
     "screens/browse.js",
     "screens/details.js",

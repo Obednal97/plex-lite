@@ -439,11 +439,14 @@
     // (#EXT-X-START), and browsers report that absolute time, where the TV's player counts from the
     // start of the stream. Once the video says so, positions stop adding the offset.
     if (PL.isWeb) {
-      on('canplay', function () {
+      var rebase = function () {
         // once per stream: a later canplay (after a stall) must not move the base again
         if (self.rebased || self.mode !== 'transcode' || self.live || !(self.base > 3)) return;
+        // Safari's own HLS says canplay before it has moved to the playlist's start point
+        // (currentTime still 0): decide on the first event that has a position
+        if (!(v.currentTime > 0.5)) return;
         self.rebased = true;
-        if (Math.abs(v.currentTime - self.base) > 5) return;
+        if (!L.countsFileTime(v.currentTime, self.base)) return;
         PL.log('stream time is the file\'s time (offset ' + self.base + 's)');
         self.base = 0;
         // cues timed against the old base are dropped and fetched again
@@ -452,7 +455,42 @@
           self.subs.segs = {};
           self.subs.timing = null;
         }
-      });
+      };
+      on('canplay', rebase);
+      on('playing', rebase);
+      on('timeupdate', rebase);
+      // Safari's own HLS shows the stream's WebVTT rendition by itself, under the text subtitles
+      // the player draws. While it draws some (and only then, so captions in a channel's stream
+      // stay the viewer's), the stream's subtitle tracks are kept off, except the one for the
+      // chosen language: Safari times its cues against the picture, which polling the segments
+      // can't match (seen 4 s early), so the player draws that track's cues (hidden) instead.
+      var tracks = v.textTracks;
+      if (tracks && tracks.addEventListener && PL.webMedia && PL.webMedia.hls === 'native') {
+        this.syncTextTracks = function () {
+          var sub = self.subs;
+          if (sub.kind !== 'embedded' && sub.kind !== 'external') return;
+          var i;
+          var tr;
+          if (sub.kind === 'embedded' && !sub.inband) {
+            var lang = (selectedSubtitle(self.full, self.mediaIndex) || {}).languageCode || '';
+            var pick = null;
+            for (i = 0; i < tracks.length; i++) {
+              tr = tracks[i];
+              if (tr.plOwn || tr.kind !== 'subtitles') continue;
+              if (!pick || (lang && String(tr.language || '').indexOf(lang.slice(0, 2)) === 0)) pick = tr;
+            }
+            if (pick) self.adoptInband(pick);
+          }
+          for (i = 0; i < tracks.length; i++) {
+            tr = tracks[i];
+            if (tr.plOwn || tr.kind !== 'subtitles') continue;
+            var mode = tr === sub.inband ? (sub.inbandShowing ? 'showing' : 'hidden') : 'disabled';
+            if (tr.mode !== mode) tr.mode = mode;
+          }
+        };
+        tracks.addEventListener('addtrack', this.syncTextTracks);
+        tracks.addEventListener('change', this.syncTextTracks);
+      }
     }
     on('playing', function () {
       var was = self.state;
@@ -1728,6 +1766,9 @@
     }
     sub.kind = want.kind;
     sub.id = id;
+    sub.inband = null; // a new stream brings its own tracks (the web build, Safari)
+    sub.inbandShowing = false;
+    if (this.syncTextTracks) this.syncTextTracks();
     if (want.kind === 'external') this.loadExternalSubs(want.stream);
     else if (want.kind === 'embedded' && this.mode === 'transcode') this.pollHlsSubs();
   };
@@ -1752,6 +1793,7 @@
     var session = this.session;
     var tick = function () {
       if (self.session !== session || self.state === 'stopped') return;
+      if (self.subs.inband) return; // drawn from the stream's own track (the web build, Safari)
       var dir = '/video/:/transcode/universal/session/' + session + '/vtt-base/';
       PL.http('GET', PL.plex.url(dir + 'index.m3u8'), { text: true, timeout: 8000 }).then(function (m3u8) {
         if (self.session !== session) return;
@@ -1806,6 +1848,7 @@
   };
 
   Player.prototype.renderSubs = function () {
+    if (this.subs.inband) return; // drawn from the stream's own track (adoptInband)
     var cues = this.subs.cues;
     if (this.subs.kind === 'none' || this.subs.kind === 'image' || !cues.length) {
       if (this.subs.shown) this.showSubText('');
@@ -1831,6 +1874,22 @@
     this.subs.shown = text;
     this.subEl.textContent = text;
     this.subEl.style.display = text ? 'block' : 'none';
+  };
+
+  // The web build in Safari: the stream's own subtitle track becomes the source of the drawn text.
+  Player.prototype.adoptInband = function (tr) {
+    var self = this;
+    var sub = this.subs;
+    sub.inband = tr;
+    tr.mode = 'hidden';
+    PL.log('subtitles from the stream\'s own track');
+    tr.oncuechange = function () {
+      if (self.subs.inband !== tr) return;
+      var lines = [];
+      var cues = tr.activeCues || [];
+      for (var i = 0; i < cues.length; i++) lines.push(cleanCueText(cues[i].text || ''));
+      self.showSubText(lines.join('\n').split('\n').slice(0, 3).join('\n'));
+    };
   };
 
   // After the track sheet: switch text subtitles in place; restart only when the stream must change.
@@ -2794,4 +2853,14 @@
   };
 
   screens.player = function (item, opts) { return new Player(item, opts); };
+
+  // The web build's touch player (web/touch/player.js, docs/WEB.md "The touch player") is this
+  // player with a phone's controls: it keeps everything here (stream decisions, timeline, resume,
+  // subtitles, markers, the end card's timing, Live TV tuning) and only draws its own. The TV never
+  // loads it.
+  PL.Player = Player;
+  Player.util = {
+    streamsOf: streamsOf, selectedSubtitle: selectedSubtitle, episodeCode: episodeCode, endsAt: endsAt,
+    initialsOf: initialsOf, showMeta: showMeta,
+  };
 })();

@@ -86,6 +86,16 @@
     return idx;
   };
 
+  // ---- The web build: which clock a server stream counts in ----------------------------------------
+
+  // Plex's HLS playlist starts at the resume offset `base` (s). A browser that counts from the
+  // stream's own start shows a currentTime near 0; one that counts in the file's time shows the
+  // offset, or up to a segment before it (Safari starts at the segment's boundary). Decided from the
+  // first position the video reports (> 0.5 s).
+  L.countsFileTime = function (currentTime, base) {
+    return currentTime > Math.max(base / 2, base - 15);
+  };
+
   // ---- Labels -------------------------------------------------------------------------------------
 
   // Under the bar while paused or scrubbing: "Paused at 9:13 · jumping to Chapter 5".

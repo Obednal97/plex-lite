@@ -305,6 +305,8 @@ player) is open. Sign-in and the first-run screens stay as they are.
 | `web/touch/kit.js` | Building blocks (`PL.touch.ui`): icons, buttons, chips, poster and wide cards, shelves, the endless grid, top bar, Back bar. |
 | `web/touch/shell.js` | Taking over from the stage, the tabs, a stack of pages per tab, Back, the hand-off to the player and other stage screens. |
 | `web/touch/sheets.js` | Bottom sheets (a centred card on a tablet), a title's quick actions, toasts, confirmations. |
+| `web/touch/player.js`, `player.css` | The touch player (see [The touch player](#the-touch-player)). |
+| `web/touch/player-logic.js` | Its pure gesture decisions, tested in `test/touch-player.test.mjs`. |
 | `web/touch/screens/*.js` | The screens. A screen not built yet opens the TV's version on the stage. |
 | `web/touch/live/` | Live TV (see [Live TV on phones and tablets](#live-tv-on-phones-and-tablets)). |
 
@@ -318,16 +320,16 @@ closes; then the layer comes back and the page refreshes its progress. The brows
 Android's Back and Esc go through `web/web.js` to the stand-in: a sheet closes, then a page pops,
 then the top of another tab goes to the start tab, then the browser may leave the site.
 
-**For the touch player and the phone guide (phases 3 and 4).**
+**The player and the Live TV tab.**
 
 ```js
 PL.touch.play(item, opts)   // plays a title; opts as PL.screens.player ({offset})
-PL.touch.playLive(live)     // tunes a channel; live as js/screens/livetv.js playList builds it
+PL.touch.playLive(live)     // tunes a channel; live as PL.liveGuide.liveSpec(list, index, label) builds it
 PL.touch.screens.live()     // the Live TV tab's root page
 ```
 
-Today `play` and `playLive` push the TV player on the stage. Replace them (and the Live TV tab's
-page) and everything in the layer uses the new ones. A page is `{el, onShow({back}), onHide(),
+`play` and `playLive` open the touch player (below); the Live TV tab's page is the phone guide
+(below). A page is `{el, onShow({back}), onHide(),
 destroy(), onReselect()}`; `PL.touch.push(page)`, `PL.touch.back()`, `PL.touch.sheet({...})`,
 `PL.touch.menu(item)` and `PL.touch.toast(text)` are the rest of the shell.
 
@@ -383,6 +385,57 @@ only the screens are new.
   channel column are made once per channel. Measured with 600 channels on an emulated iPhone (headless Chromium with
   the CPU slowed 4x, and WebKit): a vertical fling holds 60 fps with under 1.5 ms of script per frame
   and never shows an unbuilt row; scrolling sideways at 9,000 px/s keeps about 95% of frames under 20 ms.
+
+### The touch player
+
+Phones and tablets play in their own player (boards P3, P3b and L1 of the web input mockups), opened
+by `PL.touch.play` and `PL.touch.playLive`. It is the TV player with a phone's controls:
+`web/touch/player.js` extends `PL.Player` (js/screens/player.js), so the stream decisions, timeline
+reports, resume, subtitles and audio, chapters, Skip Intro / Skip Credits, the end card's timing, Live
+TV tuning and the session stop on `pagehide` are the TV player's own code. It replaces only the drawing
+(the TV's controls are removed from its element) and reads fingers. It sits on the stage's stack, so
+Back, `pagehide` and "one player at a time" work as before, but draws over the touch layer: a screen
+marked `touchOverlay` leaves the layer in charge underneath (`html.t-covered`), its pages keep their
+place, and nothing of the stage shows.
+
+| Gesture | Does |
+| --- | --- |
+| Tap | Controls up or down; they hide after 4 s while playing, never while paused, scrubbing, with a sheet or (landscape) a tab open. Tap the centre button to pause. |
+| Double-tap the left / right third | Back 10 s / ahead 30 s (the remote's steps); each extra tap adds the same step, a ripple shows the total. A tap on a side waits 260 ms for a second one; the middle toggles at once. |
+| Drag along the bar | Scrub, with the time (and chapter) riding the finger; no preview frames. A tap on the bar jumps there. |
+| Drag sideways on the picture (controls up) | A finer scrub (a quarter of the bar's rate). |
+| Pull down | Close the player. |
+| Pinch | Fill the screen (cropped) or fit. |
+| Long-press Subtitles | Subtitle size. |
+
+- **Layout.** Portrait: the picture in a 16:9 band, the top bar (close, title, Subtitles, Audio,
+  AirPlay, full screen) and ⟲10 · play · 30⟳ over it, then the bar with one segment per chapter, the
+  times ("−11:19 · Ends 13:23"), and tabs whose rows stay under the picture (Episodes, Chapters, Cast,
+  Info). Landscape: the picture fills the screen, the tabs (Info, Cast, Chapters, Episodes) open over
+  it, and the top bar adds picture in picture and Lock (everything hides until the lock is tapped).
+  Subtitles and Audio are bottom sheets with the TV menu's choices.
+- **Full screen.** Where the element Fullscreen API exists (Android, iPad) the page goes full screen
+  and a phone locks to landscape. An iPhone has only the native player (`webkitEnterFullscreen`):
+  the full screen button hands over to it, without our controls. Its subtitles: the stream's own
+  WebVTT track where Safari has one (embedded subtitles), else a text track filled with the cues the
+  player already draws. Picture in picture and AirPlay show where the browser offers them.
+- **iPhone Safari** plays server streams with its own HLS (not hls.js), with the same transcoder
+  profile (H.264 in MPEG-TS, stereo AAC). Sound needs a tap: the player starts the empty video inside
+  the tap that opened it, which iOS then allows to play once the server has answered.
+- **Wake lock** keeps the screen on while playing (released when paused or closed).
+- **Live TV** uses the same player with the live controls' logic (js/screens/live-osd.js): the
+  programme's bar with the live edge, LIVE or "−4:12" behind live, Go live, ⟲10 / 30⟳ inside the
+  pause buffer, channel up / down with the neighbours' names, a channel list, favourites. Closing it
+  sets `PL.liveGuide.watching` as the TV player does.
+- **Keys** (a tablet's keyboard): Space plays or pauses, ← / → jump −10 / +30 s, Esc closes a sheet,
+  a landscape tab, then the player.
+
+**Safari's own HLS** (also the desktop Safari player): it reports `canplay` before moving to the
+playlist's start point and then starts at the segment boundary before it, so the player decides
+whether the stream counts in the file's time from the first position the video reports
+(`PL.playerLogic.countsFileTime`). It also shows the stream's WebVTT rendition by itself, and polling
+the subtitle segments runs about 4 s ahead of it; in Safari the player draws embedded subtitles from
+that track instead (kept hidden), and keeps every other track it didn't add off.
 
 ## Plugins
 
@@ -452,8 +505,10 @@ only the screens are new.
 - PIN-protected Plex Home profiles aren't supported (same as the TV).
 - The server's local address needs Chrome's local-network permission; without it streams go through
   Remote Access or the relay.
-- No Chromecast/AirPlay, no picture-in-picture button, no offline downloads.
-- Phones and tablets: the touch player is still the TV's, scaled to the screen (see above).
+- No Chromecast, no offline downloads. AirPlay and picture in picture: in the touch player only, where
+  the browser offers them.
+- iPhone: full screen is iOS's own player (no Skip Intro, end card or our controls there); the page
+  can't lock the orientation. Text subtitles in it depend on Safari showing script-added tracks.
 
 ## Building and deploying
 
