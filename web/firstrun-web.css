@@ -223,7 +223,7 @@ html.fr-on #app { display: none; }
 .fr-l-short .fr-lead { font-size: 15px; margin-top: 10px; }
 .fr-l-short .fr-status { margin-top: 14px; font-size: 14px; }
 .fr-l-short .fr-actions { margin-top: 18px; }
-.fr-l-short .fr-btn { height: 44px; padding: 0 22px; font-size: 15px; margin-right: 10px; }
+.fr-l-short .fr-btn { height: 44px; min-height: 44px; padding: 0 22px; font-size: 15px; margin-right: 10px; }
 .fr-l-short .fr-btn-icon { width: 17px; height: 17px; }
 .fr-l-short .fr-note { margin-top: 14px; font-size: 13px; }
 .fr-l-short .fr-steps { margin-top: 14px; }
@@ -246,7 +246,7 @@ html.fr-on #app { display: none; }
 .fr-l-short .fr-pnote { font-size: 12px; }
 .fr-l-short .fr-who-foot { margin-top: 18px; }
 .fr-l-short .fr-who-note { font-size: 13px; }
-.fr-l-short .fr-who-foot .fr-btn { height: 40px; font-size: 14px; }
+.fr-l-short .fr-who-foot .fr-btn { height: 44px; font-size: 14px; }
 .fr-l-short .fr-pin { padding: 20px 0; }
 .fr-l-short .fr-pin-side { width: 300px; margin-right: 48px; }
 .fr-l-short .fr-avatar-big { width: 64px; height: 64px; font-size: 27px; }
@@ -256,7 +256,7 @@ html.fr-on #app { display: none; }
 .fr-l-short .fr-dot { width: 14px; height: 14px; margin-right: 14px; }
 .fr-l-short .fr-pin-help { margin-top: 12px; font-size: 13px; min-height: 0; }
 .fr-l-short .fr-pin-other { margin-top: 12px; }
-.fr-l-short .fr-pin-other .fr-btn { height: 40px; font-size: 14px; }
+.fr-l-short .fr-pin-other .fr-btn { height: 44px; font-size: 14px; }
 .fr-l-short .fr-keypad { width: 204px; }
 .fr-l-short .fr-key { width: 60px; height: 60px; margin: 0 12px 12px 0; font-size: 22px; }
 .fr-l-short .fr-key:nth-child(3n) { margin-right: 0; }
@@ -276,3 +276,9 @@ html.fr-on #app { display: none; }
 /* the sheets take the whole height of a landscape phone: no wordmark over them */
 .fr-l-short.fr-v-lna .fr-brand, .fr-l-short.fr-v-connecting .fr-brand, .fr-l-short.fr-v-error .fr-brand,
 .fr-l-short.fr-v-blocked .fr-brand, .fr-l-short.fr-v-servers .fr-brand { display: none; }
+
+/* toasts (js/core.js) over the layer, sized for the window rather than the TV stage */
+html.fr-on .toast {
+  z-index: 110; bottom: max(24px, env(safe-area-inset-bottom)); max-width: calc(100vw - 32px); height: 48px; line-height: 46px;
+  padding: 0 22px; font-size: 16px; font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+}

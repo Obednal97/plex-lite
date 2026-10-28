@@ -83,6 +83,8 @@
 
 .fr-credit { position: absolute; left: 96px; bottom: 40px; width: auto; height: auto; top: auto; font-size: 13px; line-height: 1.45; color: #9499a3; z-index: 1; }
 .fr-credit-short { display: none; }
+/* the TV has no welcome screen: T1 carries the wall's credit, bottom right */
+.fr-credit-tv { left: auto; right: 96px; bottom: 60px; font-size: 18px; color: #7d828c; }
 
 /* spinner: a ring with a teal arc, turning */
 .fr-spin { display: block; flex: none; animation: frSpin 900ms linear infinite; }

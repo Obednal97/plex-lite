@@ -431,12 +431,22 @@
       }
       return list;
     }, function (err) {
-      // the server turned this profile away
-      if (err && (err.status === 401 || err.status === 403)) {
+      if (!err || (err.status !== 401 && err.status !== 403)) throw err;
+      // turned away: plex.tv decides whether the sign-in itself is gone (sign in again) or only this
+      // profile has no access to the server
+      return PL.plex.user().then(function () {
         err.code = 'NO_ACCESS';
         err.server = server.name;
-      }
-      throw err;
+        throw err;
+      }, function (e) {
+        if (e && e.status === 401) {
+          e.plexTv = true;
+          throw e;
+        }
+        err.code = 'NO_ACCESS';
+        err.server = server.name;
+        throw err;
+      });
     });
     return Promise.all([sections, dvrs, plugins]).then(function (res) {
       app.sections = res[0];

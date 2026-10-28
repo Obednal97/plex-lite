@@ -36,8 +36,10 @@ TV:                                  Code + QR ───────┤
   (and keeps it through Plex's own sign-in), so scanning needs only a tap on Link. On the TV, OK asks
   for a new code and Back exits. On a phone the QR is left out (the phone is the device in hand).
 - **Who's watching?** (A3, T2): only when the account has Plex Home profiles; remembered on each
-  browser or TV; Settings → Profile opens it again (Back returns to Settings unchanged). The owner
-  keeps the account's sign-in; other profiles switch (`plex.switchToken`).
+  browser or TV; Settings → Profile opens it again (Back returns to Settings unchanged). The profile
+  the sign-in already belongs to needs no switch; any other (the owner too, when another profile is
+  in use) switches on plex.tv (`plex.switchToken`). All or nothing: the previous token and server
+  come back if connecting fails or is cancelled.
 - **PIN** (A4): digits by keyboard, the remote's number keys or the keypad. The fourth digit submits;
   a wrong PIN shakes the dots (transform only), clears them and says so. Back returns to the picker.
 - **Local network** (A5, web): before the first request to the server's local address, when the
@@ -96,7 +98,7 @@ sheets use the desktop sizes at 1.25×. The wall is one layer drifting by `trans
 ## The wall and its credits
 
 `tools/make-wall.mjs` composes the wall from the demo library's posters (`tools/demo`, Blender open
-movies under CC BY / CC BY-SA and public-domain classics) with ImageMagick. The welcome screen
-credits them in a line and THIRD-PARTY-NOTICES.md lists each poster. Images: `wall.jpg` 442 KB,
+movies under CC BY / CC BY-SA and public-domain classics) with ImageMagick. The welcome screen (and
+on the TV, which has none, the code screen) credits them in a line and THIRD-PARTY-NOTICES.md lists each poster. Images: `wall.jpg` 442 KB,
 `wall-phone.jpg` 140 KB (phones), `wall-soft.jpg` 12 KB. Inter: 48 KB (Latin; Latin Extended 85 KB,
 fetched only for those characters).

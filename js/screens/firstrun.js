@@ -356,9 +356,13 @@
     if (this.s.view === 'lna') {
       // the request waiting for the explainer is dropped with it
       this.cseq++;
+      this.restore(this.attempt);
       if (this.lna) { this.lna.resolve('skip'); this.lna = null; }
     }
-    if (this.s.view === 'waiting' && PL.webSignin) PL.webSignin.closePopup();
+    if (this.s.view === 'waiting' && PL.webSignin) {
+      PL.webSignin.cancel();
+      this.returning = null;
+    }
     if (to === 'profiles' && this.users.length < 2) return false;
     this.dispatch({ type: 'BACK' });
     return true;
@@ -385,6 +389,7 @@
     var build = function () {
       self.building = false;
       PL.clear(self.viewEl);
+      v = self.s.view;
       // a full-size page per view: it fades and rises in, while what's inside keeps its own placing
       var node = el('div', 'fr-page fr-page-' + v);
       node.appendChild(self.build(v));
@@ -403,6 +408,7 @@
       old.classList.add('mode-out');
       this.timer('swap', build, 80);
     } else {
+      clearTimeout(this.timers.swap);
       build();
     }
   };
@@ -551,6 +557,8 @@
       ]));
     }
     wrap.appendChild(v);
+    // the TV has no welcome screen: the wall's credit sits here
+    if (tv) wrap.appendChild(el('div', 'fr-credit fr-credit-tv', COPY.creditShort));
     this.qrWrap = el('div', 'fr-qr-holder');
     this.qrWrap.appendChild(qr(L.linkUrl(this.code && this.code.code)));
     wrap.appendChild(sheet('fr-qr-card', [
@@ -769,13 +777,15 @@
         row.appendChild(val);
         rows.appendChild(row);
       });
-      var hint = secure ? '' : L.triedHint(e.routes);
+      var known = !!e.routes && !secure;
+      var hint = known ? L.triedHint(e.routes) : '';
       out = sheet('fr-err fr-err-wide', [
         badge('serverOff', true),
-        text('h2', 'fr-sheet-title', secure ? server + ' needs a secure address' : server + ' isn’t answering'),
+        text('h2', 'fr-sheet-title', secure ? server + ' needs a secure address' : known ? server + ' isn’t answering' : 'Couldn’t connect to ' + (e.server || 'your server')),
         text('p', 'fr-sheet-body', secure ? 'A browser can only use secure (https) connections. In Plex, open Settings › Network and set Secure connections to Preferred, then try again.'
-          : 'Plex Lite found your server but couldn’t reach it from here. Check that the computer running Plex Media Server is switched on and awake.'),
-        secure ? null : rows,
+          : known ? 'Plex Lite found your server but couldn’t reach it from here. Check that the computer running Plex Media Server is switched on and awake.'
+            : 'Something went wrong while connecting' + (e.detail ? ': ' + e.detail : '.') + ' Try again in a moment.'),
+        known ? rows : null,
         hint ? el('div', 'fr-tried-hint', hint) : null,
         actions([
           { label: 'Try again', kind: 'primary', icon: 'refresh', action: function () { self.retry(); } },
@@ -905,11 +915,13 @@
   };
 
   Flow.prototype.activate = function (node) {
-    if (node && node.plAction) node.plAction();
+    // the outgoing view's buttons do nothing while it fades out
+    if (this.building || !node || !this.viewEl.contains(node)) return;
+    if (node.plAction) node.plAction();
   };
 
   Flow.prototype.key = function (code) {
-    if (!this.alive) return true;
+    if (!this.alive) return false;
     var v = this.s.view;
     if (v === 'pin') {
       var d = L.digitFromKey(code);
@@ -947,7 +959,10 @@
       var p = this.returning || (PL.webSignin && PL.webSignin.current());
       if (p) this.poll(p, seq);
     }
-    if (v === 'code') this.newCode();
+    if (v === 'code') {
+      if (PL.webSignin) PL.webSignin.cancel(); // a popup left open from Waiting is no longer polled
+      this.newCode();
+    }
     // (back from the explainer, the connect that asked is still under way)
     if (v === 'connecting' && from !== 'connecting' && from !== 'lna' && !this.external) this.connect();
     if (v === 'pin') this.paintPin(null);
@@ -968,8 +983,13 @@
     if (r === 'opened') this.dispatch({ type: 'POPUP_OPENED' });
     else if (r === 'blocked') this.dispatch({ type: 'POPUP_BLOCKED' });
     else {
-      if (this.s.view !== 'welcome') this.dispatch({ type: 'SHOW', view: 'welcome' });
-      this.say('Getting ready… choose Sign in with Plex again in a moment.');
+      var msg = 'Getting ready… choose Sign in with Plex again in a moment.';
+      if (this.s.view !== 'welcome') {
+        this.notice = msg;
+        this.dispatch({ type: 'SHOW', view: 'welcome' });
+      } else {
+        this.say(msg);
+      }
     }
   };
 
@@ -983,16 +1003,18 @@
   };
 
   // Polls one PIN until plex.tv hands over the sign-in, the PIN expires or the view changes.
-  Flow.prototype.poll = function (p, seq) {
+  // gen: the link code's generation (a new code drops the old one's answers).
+  Flow.prototype.poll = function (p, seq, gen) {
     var self = this;
+    var current = function () { return seq === self.seq && self.alive && (gen == null || gen === self.codeGen); };
     this.timer('poll', function () {
-      if (seq !== self.seq) return;
+      if (!current()) return;
       PL.plex.checkPin(p.id).then(function (token) {
-        if (seq !== self.seq || !self.alive) return;
+        if (!current()) return;
         if (token) self.signedIn(token);
-        else self.poll(p, seq);
+        else self.poll(p, seq, gen);
       }, function (err) {
-        if (seq !== self.seq || !self.alive) return;
+        if (!current()) return;
         if (err && err.status === 404) {
           // the PIN expired
           if (self.s.view === 'code') { self.newCode(); return; }
@@ -1003,7 +1025,7 @@
           return;
         }
         if (self.statusEl) self.setStatus(err && err.status === 429 ? 'plex.tv is busy. Trying again in a moment…' : 'Can’t reach plex.tv. Trying again…', true);
-        self.timer('poll', function () { if (seq === self.seq) self.poll(p, seq); }, L.retryIn(err) - POLL_MS);
+        self.timer('poll', function () { if (current()) self.poll(p, seq, gen); }, L.retryIn(err) - POLL_MS);
       });
     }, POLL_MS);
   };
@@ -1020,11 +1042,12 @@
   Flow.prototype.newCode = function () {
     var self = this;
     var seq = this.seq;
+    var gen = this.codeGen = (this.codeGen || 0) + 1;
     clearTimeout(this.timers.poll);
     clearTimeout(this.timers.pin);
     if (this.tilesEl) this.tilesEl.classList.add('fr-tiles-wait');
     PL.plex.createPin(false).then(function (p) {
-      if (seq !== self.seq || !self.alive || self.s.view !== 'code') return;
+      if (seq !== self.seq || gen !== self.codeGen || !self.alive || self.s.view !== 'code') return;
       self.code = p;
       var tiles = codeTiles(p.code);
       tiles.classList.add('fr-tiles-new');
@@ -1037,9 +1060,9 @@
       self.setStatus(self.platform === 'tv' ? 'Waiting for you to sign in… A new code appears if this one runs out.'
         : 'Waiting for the code… A new one appears if this one runs out.', true);
       self.timer('pin', function () { if (self.s.view === 'code') self.newCode(); }, L.renewIn(p, 14 * 60 * 1000));
-      self.poll(p, seq);
+      self.poll(p, seq, gen);
     }, function (err) {
-      if (seq !== self.seq || !self.alive) return;
+      if (seq !== self.seq || gen !== self.codeGen || !self.alive) return;
       self.setStatus(err && err.status === 429 ? 'plex.tv is busy. Trying again in a moment…' : 'Can’t reach plex.tv. Trying again…', false);
       self.timer('pin', function () { self.newCode(); }, L.retryIn(err));
     });
@@ -1059,6 +1082,7 @@
       if (!self.alive) return;
       self.users = res[0] || [];
       self.account = (res[1] && (res[1].title || res[1].username)) || '';
+      self.currentUuid = (res[1] && res[1].uuid) || null;
       self.dispatch({ type: 'SIGNED_IN', users: self.users });
     });
   };
@@ -1090,56 +1114,81 @@
 
   // ---- Connecting
 
-  // The switch (when a profile was picked), then the server, then the app's own start.
+  // The switch (when a profile was picked), then the server, then the app's own start. The token
+  // and server in use before are put back if the attempt fails or is dropped: a profile's sign-in
+  // is only kept once its server has connected (all or nothing).
   Flow.prototype.connect = function () {
     var self = this;
-    var seq = ++this.cseq;
     var plex = PL.plex;
+    var seq = ++this.cseq;
     var chosen = this.chosen;
-    var prev = { token: plex.token, server: plex.server };
+    var attempt = this.attempt = { prev: { token: plex.token, server: plex.server }, chosen: chosen, seq: seq };
+    var current = function () { return seq === self.cseq && self.alive; };
     var onRoute = function (route, st, resource) {
-      if (seq !== self.cseq || !self.alive) return;
+      if (!current()) return;
       self.dispatch({ type: 'ROUTE', kind: route, status: st, server: resource && resource.name });
     };
     var switched = Promise.resolve(null);
-    if (chosen && L.needsSwitch(chosen.user)) {
-      switched = chosen.token ? Promise.resolve(chosen.token) : plex.switchToken(chosen.user);
+    if (chosen && L.needsSwitch(chosen.user, this.currentUuid)) {
+      switched = (chosen.token ? Promise.resolve(chosen.token) : plex.switchToken(chosen.user)).then(null, function (err) {
+        if (err) err.plexTv = true; // plex.tv refused or couldn't be reached: not the server
+        throw err;
+      });
     }
     var force = !!(chosen || this.s.firstRun || this.retried || this.prefer);
     var server = plex.server;
     if (server && !force) this.dispatch({ type: 'CONNECTING', server: server.name });
     switched.then(function (token) {
-      if (seq !== self.cseq || !self.alive) throw { cancelled: true };
+      if (!current()) throw { cancelled: true };
       if (token) plex.token = token;
-      return plex.ensureServer(force, { onRoute: onRoute, prefer: self.prefer });
+      return plex.ensureServer(force, {
+        onRoute: onRoute, prefer: self.prefer,
+        isCurrent: function () { return current() && (self.s.view === 'connecting' || self.s.view === 'lna'); },
+      });
     }).then(function (srv) {
-      if (seq !== self.cseq || !self.alive) throw { cancelled: true };
-      if (chosen) {
-        if (plex.token !== prev.token) plex.setToken(plex.token);
-        plex.keepProfile(chosen.user);
-      }
+      if (!current()) throw { cancelled: true };
       self.dispatch({ type: 'ROUTE', kind: plex.routeOf(srv.kind), status: 'ok', server: srv.name });
       return self.opts.onConnected ? self.opts.onConnected(srv) : null;
     }).then(function () {
-      if (seq !== self.cseq || !self.alive) return;
+      // (the app's start replaces this screen as it shows the first tab, so alive may be false here)
+      if (seq !== self.cseq) { self.restore(attempt); return; }
+      if (chosen) {
+        plex.setToken(plex.token);
+        plex.keepProfile(chosen.user);
+        self.currentUuid = chosen.user.uuid;
+      }
+      self.attempt = null;
       self.finished();
     }, function (err) {
+      self.restore(attempt);
       if (err && err.cancelled) return;
-      if (seq !== self.cseq || !self.alive) return;
-      if (chosen && self.opts.from === 'settings') {
-        plex.token = prev.token;
-        if (prev.server) plex.useServer(prev.server);
-      }
+      if (!current()) return;
       PL.warn('first run: connect failed', err && (err.code || err.message));
       // plex.tv no longer accepts the sign-in: sign in again
-      if (err && err.status === 401 && err.plexTv) {
+      if (err && err.status === 401 && err.plexTv && !chosen) {
         plex.signOut();
         self.dispatch({ type: 'SIGN_OUT' });
         return;
       }
       if (err && err.code === 'NO_SERVER') err.servers = 0;
-      self.dispatch({ type: 'FAILED', error: L.classify(err) });
+      var e = L.classify(err);
+      e.detail = PL.errorMessage(err);
+      self.dispatch({ type: 'FAILED', error: e });
     });
+  };
+
+  // Puts back the token and server from before an attempt that didn't finish.
+  Flow.prototype.restore = function (attempt) {
+    var plex = PL.plex;
+    if (!attempt || attempt.restored || !attempt.chosen) return;
+    attempt.restored = true;
+    plex.token = attempt.prev.token;
+    if (attempt.prev.server) {
+      plex.useServer(attempt.prev.server);
+    } else {
+      plex.server = null;
+      PL.storage.del('server');
+    }
   };
 
   Flow.prototype.finished = function () {
@@ -1156,6 +1205,7 @@
   Flow.prototype.cancelConnect = function () {
     var to = L.cancelTarget(this.s);
     this.cseq++;
+    this.restore(this.attempt);
     if (this.opts.from === 'settings' && !to) { this.close(); return; }
     if (!to) return;
     if (to !== 'profiles') { PL.plex.signOut(); this.users = []; }
@@ -1210,7 +1260,7 @@
     // the request waits for this: Continue lets it go (and Chrome asks); Skip leaves home alone
     this.s = L.next(this.s, { type: 'CONNECTING' });
     this.render('lna');
-    if (l) l.resolve(choice === 'allow' ? 'allow' : 'skip');
+    if (l) l.resolve(choice === 'allow' ? 'asked' : 'skip');
   };
 
   // ---- Entry points ------------------------------------------------------------------------------
@@ -1242,6 +1292,7 @@
     PL.app.setRoot(PL.screens.loading('Connecting to your Plex server…'));
     var seq = ++flow.cseq;
     PL.plex.ensureServer(false, {
+      isCurrent: function () { return flow.alive && seq === flow.cseq; },
       onRoute: function (route, st, resource) {
         if (flow.mounted) flow.dispatch({ type: 'ROUTE', kind: route, status: st, server: resource && resource.name });
         else flow.s = L.next(flow.s, { type: 'ROUTE', kind: route, status: st, server: resource && resource.name });
@@ -1260,27 +1311,42 @@
         fr.run(onConnected);
         return;
       }
-      flow.s = L.next(flow.s, { type: 'FAILED', error: L.classify(err) });
+      var e = L.classify(err);
+      e.detail = PL.errorMessage(err);
+      flow.s = L.next(flow.s, { type: 'FAILED', error: e });
       flow.render(null);
     });
     return flow;
   };
 
   // Settings › Profile: Who's watching again (with PINs). Back returns to Settings unchanged.
+  var picking = false;
   fr.pickProfile = function () {
-    return PL.plex.homeUsers().then(function (users) {
+    if (picking || (cur && cur.alive && cur.opts.from === 'settings')) return Promise.resolve();
+    picking = true;
+    var me = PL.plex.user().then(null, function () { return null; });
+    return Promise.all([PL.plex.homeUsers(), me]).then(function (res) {
+      picking = false;
+      var users = res[0];
       if (users.length < 2) { PL.toast('This Plex account has no other profiles'); return; }
-      if (cur) cur.destroy();
+      if (cur && cur.alive) cur.close();
       cur = new Flow({ from: 'settings', view: 'profiles', users: users, onConnected: null });
       cur.s.hasProfiles = true;
+      // whose sign-in is in use now: that profile needs no switch
+      cur.currentUuid = (res[1] && res[1].uuid) || null;
       cur.render(null);
-    }, function (err) { PL.toast(PL.errorMessage(err)); });
+    }, function (err) {
+      picking = false;
+      PL.toast(PL.errorMessage(err));
+    });
   };
 
   // plex.lanGate (js/plex.js) in the web build: the explainer before the first local request.
   // Shown in the open flow, or over the stage's loading screen on an ordinary launch.
   fr.askLna = function (opts) {
     if (opts && opts.quiet) return Promise.resolve('skip');
+    // the attempt that asked was dropped (Back, Cancel): nothing to explain
+    if (opts && opts.isCurrent && !opts.isCurrent()) return Promise.resolve('skip');
     var flow = cur;
     if (!flow || !flow.alive) return Promise.resolve('skip');
     if (!flow.mounted) flow.render(null);

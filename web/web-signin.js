@@ -76,6 +76,7 @@
     var p = pin;
     popup = openWindow(p);
     if (!popup) { opened = p; return 'blocked'; }
+    try { popup.opener = null; } catch (e) { /* not ours to change */ }
     opened = p;
     pin = null;
     w.stop();
@@ -108,6 +109,12 @@
     if (back && Date.now() - back.at < 30 * 60 * 1000) return back;
     store(null);
     return null;
+  };
+
+  // Cancel, or the code instead: the open sign-in is dropped (and one that took over this tab).
+  w.cancel = function () {
+    w.closePopup();
+    store(null);
   };
 
   w.closePopup = function () {

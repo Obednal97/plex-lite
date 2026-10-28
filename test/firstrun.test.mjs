@@ -112,6 +112,12 @@ test('PIN: digits fill the dots, the fourth submits, more are ignored; wrong cle
   assert.equal(run(wrong, { type: 'PIN_KEY', key: '4' }).pinError, false);
   assert.equal(run(s, 'PIN_FAILED').pinError, 'failed');
   assert.equal(run(s, 'PIN_OK').view, 'connecting');
+  // left while it was being checked: picking a PIN profile again starts afresh
+  const again = run(s, 'BACK', { type: 'PICK', user: HOME[1] }, { type: 'PIN_KEY', key: '7' });
+  assert.equal(again.pinBusy, false);
+  assert.equal(again.pin, '7');
+  assert.equal(run(s, 'CHOOSE_PROFILE').pinBusy, false);
+  assert.equal(run(s, 'SIGN_OUT').pinBusy, false);
 });
 
 test('pinStep and digit keys', () => {
@@ -175,9 +181,11 @@ test('who has the focus first, who needs a switch', () => {
   assert.equal(L.firstFocus(HOME, null), 0);
   assert.equal(L.firstFocus(HOME, 'u-kids'), 2);
   assert.equal(L.firstFocus([HOME[3], HOME[0]], 'gone'), 1, 'the owner when the remembered one is gone');
-  assert.equal(L.needsSwitch(HOME[0]), false, 'the owner keeps the account sign-in');
-  assert.equal(L.needsSwitch({ admin: true, protected: true }), true, 'unless the owner has a PIN');
-  assert.equal(L.needsSwitch(HOME[2]), true);
+  assert.equal(L.needsSwitch(HOME[0], 'u-alex'), false, 'the profile the sign-in already belongs to');
+  assert.equal(L.needsSwitch(HOME[0], 'u-kids'), true, 'the owner, while another profile is in use');
+  assert.equal(L.needsSwitch(HOME[0], null), true, 'not knowing whose sign-in it is');
+  assert.equal(L.needsSwitch({ uuid: 'u-alex', admin: true, protected: true }, 'u-alex'), true, 'a PIN always asks');
+  assert.equal(L.needsSwitch(HOME[2], 'u-alex'), true);
   assert.equal(L.profileNote(HOME[0]), 'Owner');
   assert.equal(L.profileNote(HOME[1]), 'PIN');
   assert.equal(L.profileNote(HOME[3]), '');
@@ -313,12 +321,31 @@ test('connect: the local-network gate holds the local request until it decides',
   const s = await p;
   assert.equal(s.kind, 'remote');
   assert.ok(!calls.some((u) => u.includes('10-0-0-2')), 'the local address was left alone');
-  assert.ok(seen.includes('lan:skip'));
+  assert.ok(seen.includes('lan:skipped'));
   // 'blocked' (denied in the browser) reports so; 'allow' probes it
   PL.plex.lanGate = () => Promise.resolve('blocked');
   await assert.rejects(PL.plex.connect({ ...RESOURCE, connections: [RESOURCE.connections[0]] }), (e) => e.routes.lan === 'blocked');
   PL.plex.lanGate = () => Promise.resolve('allow');
   assert.equal((await PL.plex.connect(RESOURCE)).kind, 'lan');
+  // allowed after the explainer: the local request waits longer (the browser's prompt is up)
+  const timeouts = [];
+  fakeHttp(PL, { '10-0-0-2': 'ok', '203-0-113-5': 'ok', '198-51-100-7': 'ok' });
+  const http = PL.http;
+  PL.http = (m, url, o) => { timeouts.push([url.split('/')[2], o.timeout]); return http(m, url, o); };
+  PL.plex.lanGate = () => Promise.resolve('asked');
+  assert.equal((await PL.plex.connect(RESOURCE)).kind, 'lan');
+  assert.ok(timeouts.some(([h, t]) => h.startsWith('10-0-0-2') && t === 30000));
+  assert.ok(timeouts.some(([h, t]) => h.startsWith('203-0-113-5') && t === 4000));
+});
+
+test('connect: a dropped attempt never asks (isCurrent is passed to the gate)', async () => {
+  const PL = load('web');
+  fakeHttp(PL, { '203-0-113-5': 'ok' });
+  let got = null;
+  PL.plex.lanGate = (r, o) => { got = o; return Promise.resolve(o.isCurrent && !o.isCurrent() ? 'skip' : 'ask'); };
+  await PL.plex.connect(RESOURCE, { isCurrent: () => false });
+  assert.equal(typeof got.isCurrent, 'function');
+  assert.equal(got.isCurrent(), false);
 });
 
 test('connect: a background check never stops to ask', async () => {

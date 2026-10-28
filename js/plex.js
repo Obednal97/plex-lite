@@ -158,24 +158,6 @@
     if (PL.fuzzy && PL.fuzzy.reset) PL.fuzzy.reset();
   };
 
-  // All-or-nothing: the new profile's token, server and name are only kept if its server connects.
-  // opts: as for ensureServer (onRoute).
-  plex.switchUser = function (user, pin, opts) {
-    var prev = { token: plex.token, server: plex.server };
-    return plex.switchToken(user, pin).then(function (token) {
-      plex.token = token;
-      return plex.ensureServer(true, opts).then(function (server) {
-        plex.setToken(token);
-        plex.keepProfile(user);
-        return server;
-      });
-    }).then(null, function (err) {
-      plex.token = prev.token;
-      if (prev.server) plex.useServer(prev.server);
-      throw err;
-    });
-  };
-
   // An error from plex.tv itself (not the media server) is marked err.plexTv.
   plex.listServers = function () {
     return plex.tvRequest('GET', '/api/v2/resources', { includeHttps: 1, includeRelay: 1 }).then(function (list) {
@@ -236,15 +218,19 @@
   plex.routeOf = routeOf;
 
   // Before the first request to a server's local address (the web build: Chrome's local-network
-  // permission). fn(resource) -> Promise of 'allow' | 'skip' | 'blocked'; null: always allow.
+  // permission). fn(resource, {quiet, isCurrent}) -> Promise of 'allow' | 'asked' (allowed after an
+  // explainer: the browser's own prompt follows) | 'skip' | 'blocked'; null: always allow.
   plex.lanGate = null;
 
-  // quiet: a background check, which never stops to ask (an explainer would pop up over the app)
-  function gateLan(resource, cands, quiet) {
+  // -> 'allow' | 'asked' | 'skipped' | 'blocked'. opts.quiet: a background check, which never stops
+  // to ask (an explainer would pop up over the app); opts.isCurrent(): false once the attempt that
+  // asked was dropped (Back, Cancel), so nothing asks for it.
+  function gateLan(resource, cands, opts) {
     var hasLan = !cands || cands.some(function (c) { return routeOf(c.kind) === 'lan'; });
     if (!hasLan || !plex.lanGate) return Promise.resolve('allow');
-    return Promise.resolve(plex.lanGate(resource, { quiet: !!quiet })).then(function (d) {
-      return d === 'ask' ? 'skip' : d || 'allow';
+    return Promise.resolve(plex.lanGate(resource, { quiet: !!opts.quiet, isCurrent: opts.isCurrent })).then(function (d) {
+      if (d === 'ask' || d === 'skip') return 'skipped';
+      return d === 'blocked' || d === 'asked' ? d : 'allow';
     }, function () { return 'allow'; });
   }
 
@@ -267,7 +253,10 @@
       none.routes = { lan: 'insecure', remote: 'insecure' };
       return Promise.reject(none);
     }
-    return gateLan(resource, all, opts.quiet).then(function (lan) {
+    return gateLan(resource, all, opts).then(function (gate) {
+      // just asked: the browser's prompt is up, and the local request waits for the answer
+      var lanTimeout = gate === 'asked' ? 30000 : 4000;
+      var lan = gate === 'asked' ? 'allow' : gate;
       var cands = lan === 'allow' ? all : all.filter(function (c) { return routeOf(c.kind) !== 'lan'; });
       var groups = {};
       all.forEach(function (c) { groups[routeOf(c.kind)] = []; });
@@ -308,7 +297,7 @@
         if (!cands.length) return decide();
         Object.keys(groups).forEach(function (g) { if (g !== 'lan' || lan === 'allow') report(g, 'trying'); });
         cands.forEach(function (c, i) {
-          probe(c.uri, token, c.kind === 'relay' ? 8000 : 4000).then(
+          probe(c.uri, token, c.kind === 'relay' ? 8000 : routeOf(c.kind) === 'lan' ? lanTimeout : 4000).then(
             function () { state[i] = 'ok'; groupDone(routeOf(c.kind)); decide(); },
             function (e) { state[i] = failure(e); groupDone(routeOf(c.kind)); decide(); });
         });
@@ -394,7 +383,7 @@
     opts = opts || {};
     var cached = plex.server;
     var rediscover = function (quiet) {
-      var o = quiet ? { quiet: true, prefer: opts.prefer } : opts;
+      var o = quiet ? { quiet: true, prefer: opts.prefer, isCurrent: opts.isCurrent } : opts;
       return plex.listServers().then(function (servers) {
         if (!servers.length) {
           var e = new Error('No Plex servers are linked to this account');
@@ -430,11 +419,11 @@
     }
     if (!cached || force || opts.prefer) return rediscover();
     // a remembered local address is a request to the local network too: it waits for the gate
-    var gate = routeOf(cached.kind) === 'lan' ? gateLan(null, null, opts.quiet) : Promise.resolve('allow');
+    var gate = routeOf(cached.kind) === 'lan' ? gateLan(null, null, opts) : Promise.resolve('allow');
     return gate.then(function (lan) {
-      if (lan !== 'allow') return rediscover();
+      if (lan !== 'allow' && lan !== 'asked') return rediscover();
       if (opts.onRoute) opts.onRoute(routeOf(cached.kind), 'trying', null);
-      return probe(cached.uri, cached.token, 2500).then(function () {
+      return probe(cached.uri, cached.token, lan === 'asked' ? 30000 : 2500).then(function () {
         if (opts.onRoute) opts.onRoute(routeOf(cached.kind), 'ok', null);
         // stuck on a remote/relay address after a LAN hiccup: look for a LAN route in the background
         if (cached.kind === 'remote' || cached.kind === 'relay') {

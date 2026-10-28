@@ -95,7 +95,7 @@
       case 'BACK': {
         var to = L.backTarget(s);
         if (!to) return s;
-        return copy(s, { view: to, pin: '', pinError: false });
+        return copy(s, { view: to, pin: '', pinError: false, pinBusy: false });
       }
       case 'POPUP_OPENED':
         return copy(s, { view: 'waiting' });
@@ -106,14 +106,14 @@
       case 'CANCEL': {
         var c = s.view === 'connecting' ? L.cancelTarget(s) : L.backTarget(s);
         if (!c) return s;
-        return copy(s, { view: c, pin: '', pinError: false, routes: null });
+        return copy(s, { view: c, pin: '', pinError: false, pinBusy: false, routes: null });
       }
       case 'SIGNED_IN':
         // users: the account's Plex Home profiles ([] when it has none)
         if (L.needsPicker(e.users)) return copy(s, { view: 'profiles', hasProfiles: true, firstRun: true });
         return copy(s, { view: 'connecting', firstRun: true, hasProfiles: false, routes: null });
       case 'PICK':
-        if (e.user && e.user.protected) return copy(s, { view: 'pin', user: e.user, pin: '', pinError: false });
+        if (e.user && e.user.protected) return copy(s, { view: 'pin', user: e.user, pin: '', pinError: false, pinBusy: false });
         return copy(s, { view: 'connecting', user: e.user, routes: null });
       case 'PIN_KEY': {
         if (s.view !== 'pin' || s.pinBusy) return s;
@@ -143,9 +143,9 @@
       case 'RETRY':
         return copy(s, { view: 'connecting', routes: null });
       case 'SIGN_OUT':
-        return copy(s, { view: L.signInView(s.platform), user: null, hasProfiles: false, firstRun: true, error: null, routes: null, pin: '' });
+        return copy(s, { view: L.signInView(s.platform), user: null, hasProfiles: false, firstRun: true, error: null, routes: null, pin: '', pinBusy: false });
       case 'CHOOSE_PROFILE':
-        return copy(s, { view: 'profiles', pin: '', pinError: false });
+        return copy(s, { view: 'profiles', pin: '', pinError: false, pinBusy: false });
       case 'CHOOSE_SERVER':
         return copy(s, { view: 'servers' });
       case 'SHOW':
@@ -170,9 +170,11 @@
     return 0;
   };
 
-  // The owner keeps the account's own sign-in (no switch needed) unless the profile has a PIN.
-  L.needsSwitch = function (user) {
-    return !(user && user.admin && !user.protected);
+  // A profile needs a switch on plex.tv unless it is the one the current sign-in already belongs to
+  // (currentUuid) and has no PIN. Anyone else, the owner included, switches: the token in use may
+  // be another profile's.
+  L.needsSwitch = function (user, currentUuid) {
+    return !(user && currentUuid && user.uuid === currentUuid && !user.protected);
   };
 
   // A line under the name: Owner, PIN (or Kids for a managed child account)
@@ -319,7 +321,7 @@
   L.webZoom = function (layout, w, h) {
     var z;
     if (layout === 'stack') z = clampTo(Math.min(w / 390, h / 844), 1, 1.35);
-    else if (layout === 'short') z = clampTo(Math.min(w / 844, h / 390), 0.85, 1.2);
+    else if (layout === 'short') z = clampTo(Math.min(w / 844, h / 390), 1, 1.2); // never below: 44 px targets
     else z = clampTo(Math.min(w / 1440, h / 900), 0.7, 1.45);
     return Math.round(z * 1000) / 1000;
   };
