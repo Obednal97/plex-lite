@@ -137,6 +137,10 @@
     this.guideHead = PL.el('div', 'live-guide-head');
     g.appendChild(this.guideHead);
     var clip = PL.el('div', 'live-guide-clip');
+    // the focus is a still plate in the focus slot: the rows slide under it and switch ink
+    this.guidePlate = PL.el('div', 'lmg-plate');
+    this.guidePlate.style.top = (ROWS_ABOVE * ROW) + 'px';
+    clip.appendChild(this.guidePlate);
     this.guideTrack = PL.el('div', 'live-guide-track');
     clip.appendChild(this.guideTrack);
     g.appendChild(clip);
@@ -256,6 +260,7 @@
     this.iconSig = sig;
     var was = this.icons[this.iconIndex] && this.icons[this.iconIndex].id;
     PL.clear(this.iconRow);
+    this.iconGlider = new PL.ui.Glider(this.iconRow);
     this.icons = list.map(function (ic, i) {
       var n = PL.el('div', 'round');
       n.setAttribute('aria-label', ic.label);
@@ -294,6 +299,7 @@
     }
     var self = this;
     this.icons.forEach(function (ic, i) { ic.node.classList.toggle('focused', z === 'icons' && i === self.iconIndex); });
+    PL.glideTo(this.iconGlider, this.icons.map(function (ic) { return ic.node; }), z === 'icons' ? this.iconIndex : -1);
   };
 
   LiveOsd.prototype.set = function (key, node, prop, value) {
@@ -541,6 +547,7 @@
   LiveOsd.prototype.renderGuide = function (refresh) {
     var list = this.live().channels || [];
     var n = list.length;
+    this.guidePlate.classList.toggle('empty', !n);
     if (!n) return;
     // a long list wraps round the focus; a short one (fits on screen) doesn't
     var wrap = n > ROWS_ABOVE + ROWS_BELOW + 3;

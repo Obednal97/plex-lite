@@ -42,11 +42,11 @@ Safe margins 96 px left/right. Bottom-up, with controls up and no tab open:
 | Element | Where | Notes |
 |---|---|---|
 | Scrim | bottom 520 px | `linear-gradient(to top, ink 92% → 70% at 40% → 0)`; no solid bar |
-| Tabs | left 96, bottom 44 | text tabs 26 px/600, `--text-3`; selected = `--fill-hi` pill; focused = white plate |
+| Tabs | left 96, bottom 44 | text tabs 26 px/600, `--text-3`; selected = `--fill-hi` pill; focused = white capsule. Both travel along the strip like the tab bar's; the tabs never scale |
 | Times | bottom 112, 26 px | left: elapsed in `--text`, then " · Chapter N" (chapter title from Plex) in `--text-2`; right: "−5:35 · Ends at 21:14" in `--text-2` |
 | Bar | left/right 96, bottom 166 | 6 px; split into one segment per chapter (6 px gaps) when chapters exist; fill `--resume`; track white 30%. **Focused:** 10 px with a 28 px white head |
 | Title block | left 96, bottom 214 | eyebrow 26 px `--text-2` (year, or "Show · S1 E2"), title 64 px/700 |
-| Round icons | right 96, bottom 214, gap 20 | 68 px circles, white 14% + 1 px rim; focused = white plate, dark icon, scale 1.08. Order: Subtitles, Audio (only when there is more than one audio track), Next episode (episodes with a next) |
+| Round icons | right 96, bottom 214, gap 20 | 68 px circles, white 14% + 1 px rim; focused = dark icon on a 74 px white disc that travels between the icons (the icons never scale; MOTION.md, "Focus marks"). Order: Subtitles, Audio (only when there is more than one audio track), Next episode (episodes with a next) |
 
 **Paused / scrubbing (board 2):** a 30% ink veil over the picture; the bar grows to 12 px; a 4 px teal tick marks the
 real position; the part between real and target is white 75%. Under the bar: a pause glyph and
@@ -72,7 +72,7 @@ which swaps the list for Small / Medium / Large (stored like other settings). Au
 **Chapters** (when chapters exist),
 **Episodes** (episodes only: the current season as cards, current one marked "Now", like chapters).
 - Chapters: 320×180 cards, gap 32 (five fill the width; the row scrolls beyond that), title + start time under each;
-  the current chapter has a mini progress line and is where focus lands; focused card = 3 px white rim, scale 1.08,
+  the current chapter has a mini progress line and is where focus lands; focused card = 3 px white rim, the art (not its title) scaled 1.08 from its centre,
   the shared shadow. Chapter thumbnails from Plex when present (a separate, optional server setting), else a plain
   card with the time large.
 - Info: synopsis (28 px `--reading`, max ~1000 px wide), a "Start from the beginning" button, and a two-column
