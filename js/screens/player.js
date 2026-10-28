@@ -435,6 +435,23 @@
       }
     });
     on('seeked', function () { self.onSeeked(); });
+    // The web build: Plex's playlist covers the whole file and starts at the offset
+    // (#EXT-X-START), and browsers report that absolute time, where the TV's player counts from the
+    // start of the stream. Once the video says so, positions stop adding the offset.
+    if (PL.isWeb) {
+      on('canplay', function () {
+        if (self.mode !== 'transcode' || self.live || !(self.base > 3)) return;
+        if (Math.abs(v.currentTime - self.base) > 5) return;
+        PL.log('stream time is the file\'s time (offset ' + self.base + 's)');
+        self.base = 0;
+        // cues timed against the old base are dropped and fetched again
+        if (self.subs.kind === 'embedded') {
+          self.subs.cues = [];
+          self.subs.segs = {};
+          self.subs.timing = null;
+        }
+      });
+    }
     on('playing', function () {
       var was = self.state;
       self.setStatus(null);
@@ -1590,6 +1607,11 @@
     this.teardownVideo();
     this.stopTranscode();
     var gen = ++this.gen;
+    // The web build: a restart (seek, track change) gets a new session id, so the old one is
+    // reported stopped (Plex would list it as playing for minutes).
+    if (PL.isWeb && !this.live && this.session && this.full && this.lastReported && this.lastReported !== 'stopped') {
+      this.report(true, 'stopped', this.position());
+    }
     // Live TV: Plex binds the tuned stream to the session id sent with the tune, so playback must
     // reuse it (a different id gets "Failed to find consumer" and no segments).
     this.session = this.live && this.liveSession ? this.liveSession : PL.uuid();
