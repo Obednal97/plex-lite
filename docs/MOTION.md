@@ -106,9 +106,12 @@ CSS transition (`css/motion.css`):
   the tab bar; the subtitle and audio menus have one plate that travels with the list on the same
   spring (`--t-cap`); the end card's two buttons share a capsule; Info's button and the Skip pill
   light a plate behind the label (opacity, plus a 1.05 pop for Info); the mini guide has a still
-  plate in the focus slot that the rows glide under. Labels switch ink as the mark arrives (140 ms
-  after a 90 ms delay, like the tab bar; 60 ms after 70 ms over an in-place plate). Only artwork
-  pops (chapter and episode stills 1.08 from their centre, cast circles 1.13), and it carries
+  plate in the focus slot that the rows glide under. Labels switch ink as the mark reaches them,
+  timed to when it covers them half way: 140 ms after a 90 ms delay on the tabs and the end card
+  (as on the tab bar), 120 ms after 50 ms for the icons' and the menu's shorter hops, 100 ms after
+  10 ms in the mini guide (its rows glide on `--ease`), 60 ms after 70 ms over an in-place plate,
+  and at once when a hidden mark lands (it appears in place, so a delay would leave a blank plate). Only artwork
+  pops (chapter and episode stills 1.08 from their centre, cast circles 1.13; their shadows fade), and it carries
   `will-change: transform` while focused, so it is a layer for as long as it is scaled and is drawn
   the same way moving and at rest. A card that loses focus drops its layer at scale 1, where both
   ways draw the same pixels.

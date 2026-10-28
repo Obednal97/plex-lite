@@ -139,9 +139,10 @@
 .lmg-plate.empty { opacity: 0; }
 .lmg-row {
   position: absolute; left: 16px; top: 0; width: 748px; height: 96px; border-radius: 16px; color: var(--text);
-  transition: transform var(--t-scroll) var(--ease), color 140ms linear 90ms;
+  transition: transform var(--t-scroll) var(--ease), color 100ms linear 10ms;
 }
-.lmg-head, .lmg-num, .lmg-foot { transition: color 140ms linear 90ms; }
+/* the rows glide on --ease, half way in 60 ms: the ink turns over by then */
+.lmg-head, .lmg-num, .lmg-foot { transition: color 100ms linear 10ms; }
 .lmg-logo { position: absolute; left: 16px; top: 16px; width: 120px; height: 64px; border-radius: 12px; overflow: hidden; background: rgba(255, 255, 255, 0.10); }
 .lmg-logo.loaded { background: #f4f4f6; }
 .lmg-logo img { position: absolute; left: 8px; top: 4px; width: 104px; height: 56px; }

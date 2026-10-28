@@ -9,7 +9,8 @@
    that scales jumps when a pop starts and again when it lands. So: a mark that travels (the round
    icons' disc, the tabs' capsule, the menu's plate, the end card's capsule; ui.Glider), or a plate
    behind a still label (Info, Skip); only artwork scales, and it keeps a layer while it is scaled.
-   Labels switch ink as the mark arrives (140 ms after 90, like the tab bar). */
+   Labels switch ink as the mark reaches them: 140 ms after 90 on the tabs and the end card (as on
+   the tab bar), 120 ms after 50 for the icons' and menu's shorter hops, at once when a mark lands. */
 
 .player-status { position: absolute; left: 0; top: 480px; width: 1920px; text-align: center; font-size: 28px; color: var(--text-2); z-index: 5; transition: opacity 200ms var(--ease); }
 .player-status .spinner { margin: 0 auto 24px; }
@@ -51,8 +52,10 @@
 .round {
   display: inline-block; position: relative; width: 68px; height: 68px; margin-left: 20px; border-radius: 34px; box-sizing: border-box;
   background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.22); color: var(--text);
-  transition: color 140ms linear 90ms;
+  transition: color 120ms linear 50ms;
 }
+/* a mark that lands (it was hidden) is there at once, so its label must be too */
+.glide-landing .round, .glide-landing .ptab, .glide-landing .cta-btn, .glide-landing .cta-count { transition: none; }
 .osd-icons .glide-cap + .round { margin-left: 0; }
 .round .glyph { position: absolute; left: 50%; top: 50%; margin: -16px 0 0 -16px; }
 .round .glyph[width="28"] { margin: -14px 0 0 -14px; }
@@ -161,7 +164,7 @@
 
 .cards-track { position: absolute; left: 0; top: 0; white-space: nowrap; transition: transform var(--t-scroll) var(--spring); }
 .pcard {
-  display: inline-block; vertical-align: top; width: 320px; margin-right: 32px; white-space: normal;
+  display: inline-block; position: relative; vertical-align: top; width: 320px; margin-right: 32px; white-space: normal;
   transition: opacity 200ms linear;
 }
 .pcard.gone { opacity: 0; }
@@ -172,7 +175,12 @@
   transition: transform var(--t-pop) var(--spring);
 }
 .pcard.focused .pcard-art { transform: scale(1.08); will-change: transform; }
-.pcard.focused .pcard-art { box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5); }
+/* its shadow fades in under it (the art clips its own children, so the shadow is a sibling) */
+.pcard-shadow {
+  position: absolute; left: 0; top: 0; width: 320px; height: 180px; border-radius: 14px; box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5);
+  opacity: 0; transition: opacity 200ms linear, transform var(--t-pop) var(--spring);
+}
+.pcard.focused .pcard-shadow { opacity: 1; transform: scale(1.08); }
 .pcard-img { position: absolute; left: 0; top: 0; width: 320px; height: 180px; object-fit: cover; opacity: 0; transition: opacity 240ms linear; }
 .pcard-img.loaded { opacity: 1; }
 .pcard-fallback { position: absolute; left: 0; top: 0; width: 320px; height: 180px; line-height: 180px; text-align: center; font-size: 44px; font-weight: 700; color: var(--text-2); }
@@ -197,7 +205,12 @@
   position: relative; width: 160px; height: 160px; border-radius: 80px; background: var(--glass);
   transition: transform var(--t-pop) var(--spring);
 }
-.ccard.focused .ccard-art { transform: scale(1.13); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5); will-change: transform; }
+.ccard.focused .ccard-art { transform: scale(1.13); will-change: transform; }
+.ccard-art::before {
+  content: ""; position: absolute; left: 0; top: 0; width: 160px; height: 160px; border-radius: 80px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5); opacity: 0; transition: opacity 200ms linear;
+}
+.ccard.focused .ccard-art::before { opacity: 1; }
 .ccard-initials { position: absolute; left: 0; top: 0; width: 160px; height: 160px; line-height: 160px; font-size: 48px; font-weight: 600; color: var(--text-2); }
 .ccard-img { position: absolute; left: 0; top: 0; width: 160px; height: 160px; border-radius: 80px; object-fit: cover; object-position: 50% 30%; opacity: 0; transition: opacity 240ms linear; }
 .ccard-img.loaded { opacity: 1; }
@@ -266,12 +279,12 @@
 .menu-row {
   display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: space-between; justify-content: space-between;
   position: relative; height: 64px; margin-bottom: 4px; padding: 0 20px; border-radius: 16px; box-sizing: border-box; font-size: 28px; font-weight: 500; color: var(--text);
-  transition: color 140ms linear 90ms;
+  transition: color 120ms linear 50ms;
 }
 .menu-row.two { height: 76px; }
 .menu-text { min-width: 0; overflow: hidden; }
 .menu-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 34px; }
-.menu-sub { margin-top: 2px; font-size: 20px; line-height: 24px; font-weight: 500; color: var(--text-3); white-space: nowrap; transition: color 140ms linear 90ms; }
+.menu-sub { margin-top: 2px; font-size: 20px; line-height: 24px; font-weight: 500; color: var(--text-3); white-space: nowrap; transition: color 120ms linear 50ms; }
 .menu-row .glyph { -webkit-flex: none; flex: none; margin-left: 16px; }
 .menu-row.link { font-size: 26px; color: var(--text-2); }
 .menu-row.focused { color: var(--focus-ink); }

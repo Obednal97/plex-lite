@@ -40,9 +40,13 @@
 
   // name: a key of GLYPHS, or a glyph definition of the same shape (Live TV draws its own).
   // Moves a ui.Glider's capsule onto nodes[cap] and its plate onto nodes[plate] (-1: hidden; plate
-  // undefined: left alone). A mark that was hidden lands where it appears instead of flying in.
+  // undefined: left alone). A mark that was hidden lands where it appears instead of flying in, and
+  // then the labels switch ink at once ('glide-landing'), not as a travelling mark arrives. Call it
+  // right after toggling the nodes' classes, before anything reads layout, so the class applies to
+  // the same style change.
   function glideTo(g, nodes, cap, plate) {
     if (!g) return;
+    g.container.classList.toggle('glide-landing', cap >= 0 && !g.capEl.classList.contains('on'));
     var want = cap >= 0 || plate >= 0;
     var rects = want ? g.measure(nodes) : null;
     g.cap(rects && cap >= 0 ? rects[cap] : null);
@@ -1305,6 +1309,7 @@
     var track = tab.track = PL.el('div', 'cards-track');
     tab.cards = items.map(function (it, i) {
       var n = PL.el('div', 'pcard' + (it.now ? ' now' : ''));
+      n.appendChild(PL.el('div', 'pcard-shadow'));
       var art = PL.el('div', 'pcard-art');
       if (it.fallback) art.appendChild(PL.el('div', 'pcard-fallback', it.fallback));
       if (it.progress != null) {
