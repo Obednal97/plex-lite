@@ -207,7 +207,8 @@
     G.setBrowse(next, transient);
     this.seenSeq = G.browseSeq;
     this.syncMode();
-    this.buildChips();
+    // a preview leaves the chips alone (they're behind the rail; saves a layout per preview)
+    if (!transient || this.isWall()) this.buildChips();
     if (this.isWall()) return;
     if (this.area === 'wall') this.area = 'grid';
     this.applyFilter(false, focusId);
@@ -270,6 +271,7 @@
       onCancel: function () {
         if (self.sel.base !== before.base || self.sel.refine !== before.refine) self.setSel(before, focusId, true);
         else G.setBrowse(before, true);
+        self.buildChips();
         self.railOpen = false;
         self.focusArea(area === 'wall' && !self.isWall() ? 'grid' : area);
       },

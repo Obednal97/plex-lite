@@ -16,7 +16,8 @@
   var LIST_H = 768;           // the rail's list clip (12 rows)
   var LEAD = 4;               // rows kept above the focus once the list scrolls
   var PAGE = 8;               // CH+/CH− in the rail
-  var PREVIEW_MS = 300;       // the guide behind follows the focus after this rest
+  var PREVIEW_MS = 450;       // the guide behind follows the focus after this rest (a guide redraw
+                              // costs ~100 ms on the TV, so not between quick presses)
   var CLOSE_MS = 140;
 
   function now() { return Math.floor(Date.now() / 1000); }
