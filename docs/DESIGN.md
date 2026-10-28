@@ -91,7 +91,11 @@ Transform and opacity only.
   as on the player. Number entry is a lit-glass tile over the art. The live player keeps player v2's
   bottom block (scrim, eyebrow, 64 px title, round icons, keycap hints) with a logo plate, a programme
   bar (aired / position / live edge) instead of the seek bar, and "Next …" on the right; the mini guide
-  is a column of rows over a left wedge scrim while the picture keeps playing.
+  is a column of rows over a left wedge scrim while the picture keeps playing. **Browse**
+  ([LIVETV-browse-design.md](LIVETV-browse-design.md)): a 560 px panel down the left over a scrim, rows
+  64 apart with counts in `--text-3`, one travelling white plate; the chip row leads with the choice on
+  a `--fill-hi` pill and a hairline; On now is shelves of 420×236 landscape cards with a logo plate,
+  the title on the art and a teal progress line, the caption under the focused card only.
 - **Sheets, toasts, Up Next:** lit glass (gradient fill + rim + soft shadow), opaque enough that
   no live blur is needed.
 - **Player** (Apple TV app first, Netflix second; spec and remote table in

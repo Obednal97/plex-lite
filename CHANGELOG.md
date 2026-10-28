@@ -26,9 +26,26 @@ releases are fixes only.
 - Search puts Channels and On TV first when the query is about channels (a channel name word or
   number starts with it, and no library title is exactly it); the order never changes under the focus.
 - White channel logos get a dark plate in the guide and Search (each logo is sampled once).
+- Live TV Browse (docs/LIVETV-browse-design.md): Blue, Left at the start of the guide or OK on the
+  first chip open a Browse rail of Favourites, All channels, On now, categories (Entertainment,
+  Movies, Sport, News, Documentaries, Kids, Music, Shopping…) and channel families found in the
+  channel names (a brand shared by 3+ channels, with sub-families), each with a count. The guide
+  behind previews the focused choice; the chips refine it by the other dimension (a category's
+  families, a family's categories). Categories come from the guide's own genres (shows looked up 40
+  at a time in the background) with a channel-name fallback, remembered per server.
+- On now wall: the rail's On now shows shelves of what's on now by category, with programme art,
+  the channel's logo and progress; OK watches and CH+/CH− surf that shelf.
+- The mini guide and CH+/CH− follow the Browse choice; Blue over the picture opens the rail, and the
+  mini guide names the choice and its size. Number entry in the player reaches every channel and
+  switches to All channels when needed. The banner and mini guide get the dark plate for white logos.
+- The demo server's padded lineup adds invented channel brands, and episodes carry their genres on
+  their shows, as on a real Plex DVR.
 
 ### Changed
 
+- Live TV's filter row (All, Favourites, Movies, Sports, News) is replaced by the Browse rail and its
+  chips; Blue opens Browse on the Live TV tab and in the live player (the frame-time overlay stays on
+  Blue elsewhere).
 - Live TV rebuilt (docs/LIVETV-v2-design.md). The tab is a two-hour guide grid of every channel in
   the DVR's lineup (channels without guide data too), with the focused programme's details, synopsis
   and artwork above it, filters (All, Favourites, Movies, Sports, News), number keys to jump to a
@@ -72,6 +89,7 @@ releases are fixes only.
 
 ### Fixed
 
+- Changing live channel tells Plex the old channel's session stopped (it was listed as playing for minutes).
 - Focus in the player and the live controls no longer makes labels jump. On the TV's Chrome 53 a
   focused tab, card or button that scaled was drawn one way while it moved and another at rest, so
   its text shifted as the pop started and again as it landed. Labels now stay still and the focus
