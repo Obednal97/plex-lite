@@ -2568,7 +2568,7 @@
       // nothing attached (no way to play HLS here): fail at once rather than wait on "Loading…"
       if (!self.video.getAttribute('src')) self.fail(new Error(why));
       else self.onVideoError(why);
-    }, !!this.live);
+    });
   };
 
   Player.prototype.teardownVideo = function () {
