@@ -268,8 +268,8 @@
       onPreview: function (key) { self.setSel({ base: key }, null, true); },
       onApply: function (key) {
         // (a preview may have shown the choice already: Back from the wall returns to `before`)
-        if (key === 'now' && before.base !== 'now') self.beforeWall = before;
         self.setSel(key === before.base ? before : { base: key });
+        if (key === 'now' && before.base !== 'now') self.beforeWall = before;
         done();
       },
       onCancel: function () {
