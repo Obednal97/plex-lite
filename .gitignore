@@ -12,3 +12,6 @@ shots/
 __pycache__/
 *.pyc
 dist/
+# Vercel CLI link (vercel link) and the env file it may write
+.vercel/
+.env*
