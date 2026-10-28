@@ -38,7 +38,6 @@
     next: { fill: true, parts: [['path', { d: 'M4 5.5v13l10-6.5z' }], ['rect', { x: 16, y: 5, width: 3.2, height: 14, rx: 1 }]] },
   };
 
-  // name: a key of GLYPHS, or a glyph definition of the same shape (Live TV draws its own).
   // Moves a ui.Glider's capsule onto nodes[cap] and its plate onto nodes[plate] (-1: hidden; plate
   // undefined: left alone). A mark that was hidden lands where it appears instead of flying in, and
   // then the labels switch ink at once ('glide-landing'), not as a travelling mark arrives. Call it
@@ -55,6 +54,7 @@
     g.place(g.plateEl, rects && plate >= 0 ? rects[plate] : null, true, !on);
   }
 
+  // name: a key of GLYPHS, or a glyph definition of the same shape (Live TV draws its own).
   function glyph(name, size, weight) {
     var g = typeof name === 'string' ? GLYPHS[name] : name;
     var fill = !!g.parts; // {fill: true, parts} (an array's .fill is Array.prototype.fill)
