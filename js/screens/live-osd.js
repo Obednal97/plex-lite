@@ -525,7 +525,9 @@
   };
 
   LiveOsd.prototype.applyBrowse = function (key) {
-    var sel = { base: key, refine: null };
+    var cur = G.getBrowse();
+    // the choice already in use keeps its chip (refinement)
+    var sel = key === cur.base ? { base: cur.base, refine: cur.refine } : { base: key, refine: null };
     var list = G.channelsFor(sel);
     if (!list.length) {
       PL.toast('Nothing in ' + PL.liveBrowse.selLabel(sel, G.browseCtx()) + ' right now');

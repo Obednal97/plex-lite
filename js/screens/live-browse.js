@@ -177,8 +177,13 @@
     }, CLOSE_MS);
   };
 
-  BrowseRail.prototype.key = function (code) {
-    if (this.closing) return true;
+  BrowseRail.prototype.key = function (code, e) {
+    // while it fades out, keys belong to the screen underneath (quick typing, OK then Down)
+    if (this.closing) {
+      if (this.opts.onForward && code !== K.BLUE) this.opts.onForward(code);
+      return true;
+    }
+    var repeat = !!(e && e.repeat);
     if (code >= 48 && code <= 57 && this.opts.onForward) {
       // a channel number: close and let the guide (or the player) take it
       var fwd = this.opts.onForward;
@@ -196,6 +201,9 @@
         this.apply();
         return true;
       case K.LEFT:
+        // a held Left that opened the rail at the start of the guide doesn't close it again
+        if (!repeat) this.close();
+        return true;
       case K.BLUE:
         this.close();
         return true;
@@ -269,6 +277,13 @@
     this.sig = sig;
     var cur = this.current();
     var curShelf = this.shelves[this.stack.index] && this.shelves[this.stack.index].key;
+    // every shelf keeps the channel it was on
+    var kept = {};
+    var old = this.stack.zones || [];
+    this.shelves.forEach(function (sh, i) {
+      var it = old[i] && old[i].items && old[i].items[old[i].index];
+      if (it) kept[sh.key] = it.ratingKey;
+    });
     this.shelves = shelves;
     var self = this;
     var zones = shelves.map(function (s, si) {
@@ -288,12 +303,18 @@
       return shelf;
     });
     var index = 0;
-    for (var i = 0; i < shelves.length; i++) if (shelves[i].key === curShelf) index = i;
-    if (cur) {
-      var items = zones[index] ? zones[index].items : [];
-      for (var j = 0; j < items.length; j++) if (items[j].ratingKey === cur.channel.identifier) zones[index].index = j;
+    for (var i = 0; i < shelves.length; i++) {
+      if (shelves[i].key === curShelf) index = i;
+      var want = kept[shelves[i].key];
+      var items = zones[i].items;
+      for (var j = 0; want && j < items.length; j++) if (items[j].ratingKey === want) zones[i].index = j;
+    }
+    if (cur && zones[index]) {
+      var its = zones[index].items;
+      for (var k = 0; k < its.length; k++) if (its[k].ratingKey === cur.channel.identifier) zones[index].index = k;
     }
     this.stack.setZones(zones, index);
+    this.empty.textContent = G.channels.length ? 'Nothing on now has guide information.' : 'Loading the guide…';
     this.empty.style.display = shelves.length ? 'none' : '';
     if (this.focused) this.stack.focus(true);
     return true;
@@ -367,9 +388,13 @@
     this.opts.onTune(s.items.map(function (x) { return x.channel; }), i, 'On now › ' + s.label);
   };
 
-  LiveWall.prototype.menu = function (x, done) {
+  LiveWall.prototype.menu = function (x) {
     if (!this.opts.onMenu) return false;
-    return this.opts.onMenu(x.channel, done);
+    var self = this;
+    var si = this.stack.index;
+    var z = this.stack.current();
+    var i = z ? z.index : 0;
+    return this.opts.onMenu(x.channel, function () { self.tune(si, i); });
   };
 
   LiveWall.prototype.setFocused = function (on) {
@@ -381,7 +406,7 @@
     this.el.classList.toggle('lw-on', on);
   };
 
-  LiveWall.prototype.key = function (code) {
+  LiveWall.prototype.key = function (code, repeat) {
     var z = this.stack.current();
     if (!z) return false;
     if (code === K.UP && this.stack.index === 0) {
@@ -389,7 +414,7 @@
       return true;
     }
     if (code === K.LEFT && z.index === 0) {
-      if (this.opts.onRail) this.opts.onRail();
+      if (this.opts.onRail && !repeat) this.opts.onRail();
       return true;
     }
     if (code === K.YELLOW) {

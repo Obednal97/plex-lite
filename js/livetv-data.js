@@ -49,6 +49,8 @@
     G.catsFor = null;
     G.famCache = null;
     G.browseSel = null;
+    G.liveTally = null;
+    resetBrowse();
     G.gen++;
     G.version++;
   };
@@ -291,10 +293,21 @@
   var B = PL.liveBrowse;
   var GENRE_BATCH = 40;
   var genreTimer = null;
-  var genreJob = null;
+  var genreJob = null;      // {gen, promise, again}
   var prior = null;         // {identifier: {category: seconds}} saved by earlier sessions
   var priorFor = null;
   var saveTimer = null;
+
+  // A server change: nothing scheduled for the old server may run against the new one.
+  function resetBrowse() {
+    clearTimeout(genreTimer);
+    clearTimeout(saveTimer);
+    genreTimer = null;
+    saveTimer = null;
+    genreJob = null;
+    prior = null;
+    priorFor = null;
+  }
 
   function serverKey() { return (PL.plex.server && PL.plex.server.machineId) || 'default'; }
   function catsKey() { return 'livetv.cats.' + serverKey(); }
@@ -328,8 +341,12 @@
   }
 
   // Looks up the genres of the loaded programmes' shows (those on now first). Resolves when done.
+  // Called while a job runs (a block arrived meanwhile), it runs again once that job ends.
   G.loadGenres = function () {
-    if (genreJob) return genreJob;
+    if (genreJob && genreJob.gen === G.gen) {
+      genreJob.again = true;
+      return genreJob.promise;
+    }
     if (!G.src) return Promise.resolve();
     var gen = G.gen;
     var t = now();
@@ -350,34 +367,41 @@
     }
     var nowEnd = first.length;
     var i = 0;
+    var failed = 0;
     var t0 = Date.now();
+    var job = { gen: gen, again: false, promise: null };
     var next = function () {
       if (gen !== G.gen || i >= keys.length) return null;
       var batch = keys.slice(i, i + GENRE_BATCH);
       i += batch.length;
       return PL.plex.get('/' + G.src.provider + '/metadata/' + batch.join(','),
         { excludeFields: 'summary', excludeElements: 'Image' }, { timeout: 15000 }).then(function (mc) {
-        if (gen !== G.gen) return null;
+        if (gen !== G.gen) return;
         (mc.Metadata || []).forEach(function (m) {
           G.showCats[m.ratingKey] = B.categoryOfGenres((m.Genre || []).map(function (g) { return g.tag; }));
         });
         batch.forEach(function (k) { if (G.showCats[k] === undefined) G.showCats[k] = null; });
+      }, function (err) {
+        // one batch failing doesn't end the rest (its shows are tried again with the next block)
+        failed++;
+        PL.warn('browse genres batch failed', err && err.message);
+      }).then(function () {
+        if (gen !== G.gen) return null;
         // the shows on now are in: the wall and the counts can use them already
-        if (i >= nowEnd && i - batch.length < nowEnd && i < keys.length) G.refreshBrowse();
-        return new Promise(function (ok) { setTimeout(ok, 150); }).then(next);
+        if (i >= nowEnd && i - GENRE_BATCH < nowEnd && i < keys.length) G.refreshBrowse();
+        return new Promise(function (ok) { setTimeout(ok, failed > 3 ? 2000 : 150); }).then(next);
       });
     };
-    genreJob = Promise.resolve().then(next).then(function () {
-      genreJob = null;
+    job.promise = Promise.resolve().then(next).then(function () {
+      if (genreJob === job) genreJob = null;
       if (gen !== G.gen) return;
-      PL.log('browse genres', keys.length, 'shows', Math.ceil(keys.length / GENRE_BATCH), 'requests', (Date.now() - t0) + 'ms');
+      PL.log('browse genres', keys.length, 'shows', Math.ceil(keys.length / GENRE_BATCH), 'requests', (Date.now() - t0) + 'ms',
+        failed ? failed + ' failed' : '');
       G.refreshBrowse();
-    }, function (err) {
-      genreJob = null;
-      PL.warn('browse genres failed', err && err.message);
-      if (gen === G.gen) G.refreshBrowse();
+      if (job.again) genresSoon();
     });
-    return genreJob;
+    genreJob = job;
+    return job.promise;
   };
 
   // Every block rebuilds the channel list, but the names rarely change: families are worked out
@@ -428,15 +452,19 @@
 
   function saveSoon() {
     clearTimeout(saveTimer);
+    // what to save is fixed now: a server change before the timer fires mustn't mix servers
+    var key = catsKey();
+    var saved = loadPrior();
+    var live = G.liveTally || {};
+    var channels = G.channels;
     saveTimer = setTimeout(function () {
-      var saved = loadPrior();
-      var live = G.liveTally || {};
+      saveTimer = null;
       var out = {};
-      G.channels.forEach(function (c) {
+      channels.forEach(function (c) {
         var t = B.blendTally(live[c.identifier], saved[c.identifier]);
         if (Object.keys(t).length) out[c.identifier] = t;
       });
-      PL.storage.set(catsKey(), { v: 1, t: out });
+      PL.storage.set(key, { v: 1, t: out });
     }, 4000);
   }
 
@@ -460,7 +488,9 @@
     var t = now();
     var minute = Math.floor(t / 60);
     if (ctxCache && ctxCache.version === G.version && ctxCache.minute === minute && ctxCache.channels === G.channels) return ctxCache;
-    if (!G.cats || G.catsFor !== G.channels) computeCats();
+    // a new block rebuilds the channel list; its categories wait for the scheduled refresh rather than
+    // ~70 ms of work inside the guide's redraw (a channel new to the list is uncategorised till then)
+    if (!G.cats) computeCats();
     var fav = {};
     G.favourites().forEach(function (id) { fav[id] = true; });
     var onNow = {};

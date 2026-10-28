@@ -94,6 +94,9 @@ test('families: shared leading words, 3+ different channels, sub-families, label
   assert.deepEqual(plain(f.of['5']), ['ORBIT', 'ORBIT SPORT']);
   assert.deepEqual(plain(f.of['1']), ['ORBIT', null]);
   assert.equal(f.of['24'], undefined);
+  // accented names split into words like any other
+  const acc = B.families([ch(91, 'QV - Télé Lumière'), ch(92, 'QV - Télé Soleil'), ch(93, 'QV - TÉLÉ NORD HD')]);
+  assert.deepEqual(plain(acc.list.map((x) => x.label)), ['Télé']);
   // a lower minimum finds more
   assert.ok(B.families(LINEUP, 2).list.length >= f.list.length);
 });
@@ -158,7 +161,8 @@ test('labels, validity and stored filters', () => {
   assert.equal(B.allLabel('c:sport', c), 'All sport');
   assert.equal(B.allLabel('f:ORBIT', c), 'All Orbit');
   assert.equal(B.valid('f:GONE', c), false);
-  assert.deepEqual(plain(B.normalise({ base: 'f:GONE', refine: 'c:sport' }, c)), { base: 'all', refine: 'c:sport' });
+  assert.deepEqual(plain(B.normalise({ base: 'f:GONE', refine: 'c:sport' }, c)), { base: 'all', refine: null });
+  assert.deepEqual(plain(B.normalise({ base: 'c:sport', refine: 'f:GONE' }, c)), { base: 'c:sport', refine: null });
   assert.deepEqual(plain(B.normalise({ base: 'now', refine: 'c:sport' }, c)), { base: 'now', refine: null });
   assert.equal(B.fromLegacy('sports'), 'c:sport');
   assert.equal(B.fromLegacy('favourites'), 'fav');

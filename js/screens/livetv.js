@@ -61,6 +61,7 @@
     this.unlisten = G.listen(function () { if (self.alive) self.onData(); });
     this.wantsBlue = true;
     this.buildChips();
+    if (this.isWall()) this.syncMode();
     this.load();
   }
 
@@ -181,7 +182,7 @@
     });
     this.subnav.el.style.top = '136px';
     this.subnavHost.appendChild(this.subnav.el);
-    this.subnav.setFocused(this.area === 'subnav' && this.visible && !PL.app.tabsFocused);
+    this.subnav.setFocused(this.area === 'subnav' && this.visible && !PL.app.tabsFocused && !this.railOpen);
   };
 
   LiveTVScreen.prototype.chooseChip = function (value) {
@@ -202,7 +203,7 @@
   LiveTVScreen.prototype.setSel = function (sel, focusId, transient) {
     var wasWall = this.isWall();
     var next = G.channels.length ? B.normalise(sel, G.browseCtx()) : { base: sel.base, refine: sel.refine || null };
-    if (next.base === 'now' && !wasWall) this.beforeWall = { base: this.sel.base, refine: this.sel.refine };
+    if (next.base === 'now' && !wasWall && !transient) this.beforeWall = { base: this.sel.base, refine: this.sel.refine };
     this.sel = next;
     G.setBrowse(next, transient);
     this.seenSeq = G.browseSeq;
@@ -224,7 +225,7 @@
         onRail: function () { self.openRail(); },
         onTop: function () { self.focusArea('subnav'); },
         onFocusShelf: function () { self.buildChips(); },
-        onMenu: function (c) { return self.menu(c); },
+        onMenu: function (c, play) { return self.menu(c, play); },
       });
     }
     this.el.classList.toggle('mode-wall', on);
@@ -251,6 +252,7 @@
     var before = { base: this.sel.base, refine: this.sel.refine };
     var focusId = this.channel() ? this.channel().identifier : null;
     var area = this.area;
+    var at = { anchor: this.anchor, start: this.start };
     this.cancelEntry();
     if (PL.app.tabsFocused) PL.app.blurTabs(true);
     this.railOpen = true;
@@ -265,12 +267,24 @@
       current: this.sel.base,
       onPreview: function (key) { self.setSel({ base: key }, null, true); },
       onApply: function (key) {
+        // (a preview may have shown the choice already: Back from the wall returns to `before`)
+        if (key === 'now' && before.base !== 'now') self.beforeWall = before;
         self.setSel(key === before.base ? before : { base: key });
         done();
       },
       onCancel: function () {
-        if (self.sel.base !== before.base || self.sel.refine !== before.refine) self.setSel(before, focusId, true);
-        else G.setBrowse(before, true);
+        if (self.sel.base !== before.base || self.sel.refine !== before.refine) {
+          self.setSel(before, focusId, true);
+          // back where the guide was in time, not just on the channel
+          if (!self.isWall() && self.list.length) {
+            self.anchor = at.anchor;
+            self.start = Math.max(at.start, self.origin);
+            self.refocus();
+            self.render();
+          }
+        } else {
+          G.setBrowse(before, true);
+        }
         self.buildChips();
         self.railOpen = false;
         self.focusArea(area === 'wall' && !self.isWall() ? 'grid' : area);
@@ -657,9 +671,9 @@
     var list = G.list(c.identifier);
     var t = now();
     if (!this.cur) {
-      // Left at the start: the Browse rail
+      // Left at the start: the Browse rail (a fresh press, not a held Left running into it)
       if (dir < 0 && this.start === this.origin) {
-        this.openRail();
+        if (!this.repeat) this.openRail();
         return;
       }
       // a row without guide data: walk the view in half hours
@@ -673,7 +687,7 @@
     if (!next || next.e <= t) {
       if (dir > 0) G.ensure(this.cur.e, this.cur.e + 3 * 3600).catch(function () {});
       // nothing earlier: Left opens the Browse rail
-      else this.openRail();
+      else if (!this.repeat) this.openRail();
       return;
     }
     this.cur = next;
@@ -734,14 +748,15 @@
     }));
   };
 
-  LiveTVScreen.prototype.favourite = function () {
-    var c = this.channel();
+  LiveTVScreen.prototype.favourite = function (chan) {
+    var c = chan || this.channel();
     if (!c) return;
     var on = G.toggleFavourite(c.identifier);
     PL.toast(on ? 'Added ' + c.name + ' to Favourites' : 'Removed ' + c.name + ' from Favourites');
   };
 
-  LiveTVScreen.prototype.menu = function (chan) {
+  // chan, play: a wall card's channel and how to watch it (in its shelf)
+  LiveTVScreen.prototype.menu = function (chan, play) {
     var c = chan || this.channel();
     if (!c) return false;
     var self = this;
@@ -749,8 +764,8 @@
     PL.app.push(screens.sheet([{
       heading: c.vcn + '  ' + c.name,
       rows: [
-        { label: 'Watch ' + c.name, action: function () { self.play(); } },
-        { label: fav ? 'Remove from Favourites' : 'Add to Favourites', action: function () { self.favourite(); } },
+        { label: 'Watch ' + c.name, action: function () { if (play) play(); else self.play(); } },
+        { label: fav ? 'Remove from Favourites' : 'Add to Favourites', action: function () { self.favourite(c); } },
       ],
     }], { focus: 0 }));
     return true;
@@ -808,7 +823,10 @@
     this.render();
   };
 
-  LiveTVScreen.prototype.key = function (code) {
+  LiveTVScreen.prototype.key = function (code, e) {
+    // a held key repeats: Left that runs into the start of the guide must not open the rail
+    this.repeat = !!(e && e.repeat);
+    this.lastKeyAt = Date.now();
     if (code >= 48 && code <= 57) {
       this.typeDigit(code - 48);
       return true;
@@ -834,16 +852,13 @@
         return true;
       }
       if (code === K.UP) return PL.app.focusTabs();
+      if (this.isWall() && PL.isBack(code)) return this.leaveWall();
       return this.subnav.key(code);
     }
     if (this.area === 'wall' && this.isWall()) {
-      if (code === K.OK_LONG || this.wall.key(code)) return true;
-      // Back: the guide as it was before On now
-      if (PL.isBack(code)) {
-        this.setSel(this.beforeWall && this.beforeWall.base !== 'now' ? this.beforeWall : { base: 'all' });
-        this.focusArea(this.list.length ? 'grid' : 'subnav');
-        return true;
-      }
+      if (!this.wall) return false;
+      if (this.wall.key(code, this.repeat)) return true;
+      if (PL.isBack(code)) return this.leaveWall();
       return false;
     }
     if (!this.list.length) return false;
@@ -870,6 +885,13 @@
     }
   };
 
+  // Back from the wall: the guide as it was before On now.
+  LiveTVScreen.prototype.leaveWall = function () {
+    this.setSel(this.beforeWall && this.beforeWall.base !== 'now' ? this.beforeWall : { base: 'all' });
+    this.focusArea(this.list.length ? 'grid' : 'subnav');
+    return true;
+  };
+
   LiveTVScreen.prototype.focusFromTabs = function () {
     this.focusArea(this.isWall() ? 'wall' : this.list.length ? 'grid' : 'subnav');
   };
@@ -891,7 +913,8 @@
         G.prune();
         this.paintRuler();
       }
-      if (this.wall.refresh()) this.buildChips();
+      // (not under a moving focus: a rebuild costs ~190 ms on the TV)
+      if (this.wall && !(this.area === 'wall' && Date.now() - (this.lastKeyAt || 0) < 8000) && this.wall.refresh()) this.buildChips();
       G.ensure(t, t + 3600).catch(function () {});
       return;
     }

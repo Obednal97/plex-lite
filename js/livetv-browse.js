@@ -148,7 +148,8 @@
     if (m) t = m[2];
     t = t.replace(TAIL, '');
     var out = [];
-    (t.match(/[A-Za-z0-9&!']+/g) || []).forEach(function (w) {
+    // words are what lies between spaces and punctuation, so accented names split right too
+    (t.match(/[^\s\-|:;,.()[\]/+*"]+/g) || []).forEach(function (w) {
       var split = /^([A-Za-z]{2,})(\d+)$/.exec(w);
       if (split) {
         out.push({ w: split[1].toUpperCase(), o: split[1] });
@@ -484,8 +485,10 @@
 
   // Turns a stored filter into one that still works: unknown choices fall back to All.
   B.normalise = function (sel, ctx) {
-    var base = sel && B.valid(sel.base, ctx) ? sel.base : 'all';
-    var refine = sel && sel.refine && base !== 'now' && B.valid(sel.refine, ctx) ? sel.refine : null;
+    var ok = sel && B.valid(sel.base, ctx);
+    var base = ok ? sel.base : 'all';
+    // (a refinement only means something under the choice it was made in)
+    var refine = ok && sel.refine && base !== 'now' && B.valid(sel.refine, ctx) ? sel.refine : null;
     return { base: base, refine: refine };
   };
 
