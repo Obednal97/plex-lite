@@ -1,7 +1,27 @@
-/* The web build only (tools/build-web.mjs). The app is drawn on a 1920x1080 stage (css/app.css);
-   web/web.js scales the body to fit the window, centred, with black bars round it. */
-html { width: 100%; height: 100%; background: #000; }
+/* The web build only (tools/build-web.mjs). The app is drawn on a stage 1920 px wide (css/app.css);
+   web/web.js scales the body to the window's width and sets the stage's height to fill the window
+   (--stage-h, 900 to 1440; 1080 on the TV). */
+:root { --stage-h: 1080px; }
+html { width: 100%; height: 100%; background: var(--ground, #2b2b2e); }
 body { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+
+/* ---- Full window: what spans the screen takes the stage's height --------------------------------- */
+
+body, #app, .backdrop, .backdrop-shade, .screens, .screen, .grid, .sheet-scrim, .player video, .player-veil,
+.search-results, .lg, .live, .live-guide, .live-wedge, .lb, .lb-scrim, .lb-panel, .lw, .osdl-screen { height: var(--stage-h); }
+.backdrop-ambient .backdrop-img, .backdrop-detail .backdrop-img { height: var(--stage-h); object-fit: cover; }
+.player { background: #000; }
+/* what fills down to the bottom from a fixed top */
+.lg-grid { height: calc(var(--stage-h) - 506px); }
+.lw-clip { height: calc(var(--stage-h) - 214px); }
+.osdl-view { height: calc(var(--stage-h) - 290px); }
+.live-guide-clip { height: calc(var(--stage-h) - 248px); }
+.sheet { max-height: calc(var(--stage-h) - 224px); }
+/* the home hero sits on the shelves below it, which are placed from the top */
+.hero { bottom: calc(500px + var(--stage-h) - 1080px); }
+/* centred on the screen */
+.loading, .az-flash { top: calc(var(--stage-h) / 2 - 70px); }
+.player-status { top: calc(var(--stage-h) / 2 - 60px); }
 
 /* Sign-in (web/web-signin.js) */
 .web-signin-buttons { margin: 8px 0 28px; }

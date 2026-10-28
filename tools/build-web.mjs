@@ -30,13 +30,19 @@ const SKIP = (rel) => /(^|\/)dev-config[^/]*\.js$/.test(rel) || /^plugins\/[^/]+
 // popup there)
 const WEB = {
   'web/env.js': 'web/env.js', 'web/web-input.js': 'web/web-input.js', 'web/web.js': 'web/web.js', 'web/web-signin.js': 'web/web-signin.js',
-  'web/web-media.js': 'web/web-media.js', 'web/web.css': 'web/web.css', 'web/plugin-frame.html': 'web/plugin-frame.html',
+  'web/web-media.js': 'web/web-media.js', 'web/web.css': 'web/web.css',
+  'web/web-desktop.js': 'web/web-desktop.js', 'web/web-desktop.css': 'web/web-desktop.css',
+  'web/web-player.js': 'web/web-player.js', 'web/web-player.css': 'web/web-player.css',
+  'web/web-cards.js': 'web/web-cards.js', 'web/web-cards.css': 'web/web-cards.css', 'web/plugin-frame.html': 'web/plugin-frame.html',
   'web/vendor/hls.js/hls.light.min.js': 'web/vendor/hls.js/hls.light.min.js', 'web/vendor/hls.js/LICENSE': 'web/vendor/hls.js/LICENSE',
   'web/signed-in.html': 'signed-in.html', 'web/signed-in.js': 'signed-in.js', 'web/signed-in.css': 'signed-in.css',
   'web/robots.txt': 'robots.txt',
 };
 // scripts after js/app.js, in order
-const WEB_SCRIPTS = ['web/vendor/hls.js/hls.light.min.js', 'web/web-input.js', 'web/web.js', 'web/web-signin.js', 'web/web-media.js'];
+const WEB_SCRIPTS = ['web/vendor/hls.js/hls.light.min.js', 'web/web-input.js', 'web/web.js', 'web/web-desktop.js',
+  'web/web-player.js', 'web/web-cards.js', 'web/web-signin.js', 'web/web-media.js'];
+// stylesheets after the app's own, in order
+const WEB_STYLES = ['web/web.css', 'web/web-desktop.css', 'web/web-player.css', 'web/web-cards.css'];
 
 const fail = (msg) => { console.error(`build-web: ${msg}`); process.exit(1); };
 
@@ -88,7 +94,7 @@ html = html.replace('<title>Plex Lite</title>', [
   '  <link rel="icon" type="image/png" href="img/largeIcon.png">',
 ].join('\n'));
 html = html.replace(/(\s*)<script src="js\/core\.js"><\/script>/, '$1<script src="web/env.js"></script>$1<script src="js/core.js"></script>');
-html = html.replace(/(\s*)(<\/head>)/, '\n  <link rel="stylesheet" href="web/web.css">$1$2');
+html = html.replace(/(\s*)(<\/head>)/, WEB_STYLES.map((s) => `\n  <link rel="stylesheet" href="${s}">`).join('') + '$1$2');
 // the Overseerr plugin's browser path (instead of its webOS service), right after its shared core
 html = html.replace(/(\s*)<script src="plugins\/overseerr\/seerr\.js"><\/script>/, (m, ws) => `${m}${ws}<script src="plugins/overseerr/seerr-web.js"></script>`);
 html = html.replace(/(\s*)<script src="js\/app\.js"><\/script>/, (m, ws) => m + WEB_SCRIPTS.map((s) => `${ws}<script src="${s}"></script>`).join(''));

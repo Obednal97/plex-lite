@@ -1,5 +1,5 @@
-// The web build's platform glue (docs/WEB.md): who we are to Plex, the 1920x1080 stage scaled to
-// the window, keyboard and mouse equivalents of the remote's buttons, the browser's Back button,
+// The web build's platform glue (docs/WEB.md): who we are to Plex, the stage fitted to the
+// window, keyboard and mouse equivalents of the remote's buttons, the browser's Back button,
 // Chrome's local-network permission, and ending server sessions when the page goes away.
 // Loaded only by the web build (tools/build-web.mjs), after js/app.js. ES2015 like the rest.
 'use strict';
@@ -34,18 +34,44 @@
 
   // On-screen key names follow the input mode: web/web-input.js sets PL.keyLabels.
 
-  // ---- The stage: 1920x1080, scaled to fit the window (letterboxed) ----------------------------
+  // ---- The stage: 1920 px wide, as tall as the window (docs/WEB.md, "The window") ---------------
+
+  // The layout is 1920 stage px wide, scaled to the window's width, and its height follows the
+  // window (--stage-h, PL.ui.SCREEN_H): no bars. Wider than 1920x900 (ultra-wide, or a short
+  // window) the stage stays 900 tall with bars at the sides; taller than 4:3 (a phone in portrait)
+  // it falls back to the 1920x1080 stage letterboxed until the touch layout takes over.
+  var MIN_H = 900;
+  var MAX_H = 1440;
+  web.stage = { w: 1920, h: 1080, scale: 1 };
 
   // The layout viewport, not innerWidth: a phone's browser zooms out to show the 1920 px body
   // before it is scaled, which makes innerWidth that wide too.
   function fit() {
     var w = document.documentElement.clientWidth || window.innerWidth;
     var h = document.documentElement.clientHeight || window.innerHeight;
-    var s = Math.min(w / 1920, h / 1080);
+    var s = w / 1920;
+    var H = h / s;
+    if (H < MIN_H) {
+      H = MIN_H;
+      s = h / MIN_H;
+    } else if (H > MAX_H) {
+      H = 1080;
+      s = Math.min(w / 1920, h / 1080);
+    }
+    H = Math.round(H);
     var x = Math.round((w - 1920 * s) / 2);
-    var y = Math.round((h - 1080 * s) / 2);
+    var y = Math.max(0, Math.round((h - H * s) / 2));
+    var changed = H !== web.stage.h;
+    web.stage = { w: 1920, h: H, scale: s };
     PL.stageScale = s;
+    if (PL.ui) PL.ui.SCREEN_H = H;
+    document.documentElement.style.setProperty('--stage-h', H + 'px');
     document.body.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + s + ')';
+    if (changed) {
+      var ev;
+      try { ev = new CustomEvent('pl-stageresize', { detail: { h: H } }); } catch (e) { ev = null; }
+      if (ev) document.dispatchEvent(ev);
+    }
   }
   window.addEventListener('resize', PL.rafThrottle(fit));
   fit(); // this script runs at the end of <body>: scale before the first layout
@@ -273,7 +299,7 @@
         web.toggleFullscreen();
         setTimeout(rebuild, 400);
       } },
-      { label: 'Keyboard and mouse', value: '', action: explainKeys },
+      { label: 'Keyboard shortcuts', value: '?', action: function () { web.shortcuts(); } },
     ];
   };
 
@@ -317,16 +343,6 @@
     }
     lines.push(['Away from home', 'Plex Lite uses Plex Remote Access, else the Plex relay (slower, limited quality)']);
     sheet('Local network access', lines);
-  }
-
-  function explainKeys() {
-    sheet('Keyboard and mouse', [
-      ['Arrows, Enter', 'Move, OK'], ['Esc or Backspace', 'Back (the browser\'s Back button too)'],
-      ['Hold Enter, Shift+Enter, right-click or a long press', 'Hold OK (quick actions)'],
-      ['Space', 'Play / pause'], [', and .', 'Rewind / fast-forward'], ['Page Up / Page Down', 'Channel up / down, page'],
-      ['R  G  Y  B', 'Red, Green, Yellow and Blue buttons'], ['I', 'Info'], ['F', 'Full screen'],
-      ['Mouse', 'Point and click; the wheel moves between rows'],
-    ]);
   }
 
   web.info = sheet;
