@@ -457,11 +457,24 @@
     if (current) return;
     if (u.protected) { T.toast('PIN-protected profiles are not supported yet'); return; }
     T.toast('Switching to ' + u.title + '…');
-    // as the TV: the new profile's token and server, then the app starts again (the layer rebuilds)
-    PL.plex.switchUser(u).then(() => {
+    // as the first-run screens do (js/screens/firstrun.js connect): the profile's token, then its
+    // server; both are kept only once the server has connected, else the ones before are put back.
+    // Then the app starts again (the layer rebuilds for the new profile).
+    const plex = PL.plex;
+    const prev = { token: plex.token, server: plex.server };
+    plex.switchToken(u).then((token) => {
+      plex.token = token;
+      return plex.ensureServer(true);
+    }).then(() => {
+      plex.setToken(plex.token);
+      plex.keepProfile(u);
       T.sheets.closeAll();
       app.start();
-    }, (err) => T.toast(PL.errorMessage(err)));
+    }, (err) => {
+      plex.token = prev.token;
+      if (prev.server) plex.useServer(prev.server);
+      T.toast(PL.errorMessage(err));
+    });
   }
 
   // ---- Server --------------------------------------------------------------------------------------------
