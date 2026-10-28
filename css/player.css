@@ -2,7 +2,14 @@
    up. Bottom-up at 1920x1080: tabs 44, times 112, bar 165-177, title and round icons 214. A tab
    slides the block up 292 px (the tabs 290) for a 260 px row of cards. Everything that moves is transform/opacity: the
    bar's fills are scaleX, its height scaleY, the head, tick and preview translate3d (MOTION.md).
-   Loaded before theme.css. No flex gap on the TV (Chrome 53): margins instead. */
+   Loaded before theme.css. No flex gap on the TV (Chrome 53): margins instead.
+
+   Focus never scales text (MOTION.md, "Focus marks"). Chrome 53 paints a scaled element into its
+   parent's layer at rest but draws it as a layer of its own while the transform animates, so text
+   that scales jumps when a pop starts and again when it lands. So: a mark that travels (the round
+   icons' disc, the tabs' capsule, the menu's plate, the end card's capsule; ui.Glider), or a plate
+   behind a still label (Info, Skip); only artwork scales, and it keeps a layer while it is scaled.
+   Labels switch ink as the mark arrives (140 ms after 90, like the tab bar). */
 
 .player-status { position: absolute; left: 0; top: 480px; width: 1920px; text-align: center; font-size: 28px; color: var(--text-2); z-index: 5; transition: opacity 200ms var(--ease); }
 .player-status .spinner { margin: 0 auto 24px; }
@@ -44,12 +51,20 @@
 .round {
   display: inline-block; position: relative; width: 68px; height: 68px; margin-left: 20px; border-radius: 34px; box-sizing: border-box;
   background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.22); color: var(--text);
-  transition: transform var(--t-pop) var(--spring), background-color 160ms linear, color 160ms linear;
+  transition: color 140ms linear 90ms;
 }
-.round:first-child { margin-left: 0; }
+.osd-icons .glide-cap + .round { margin-left: 0; }
 .round .glyph { position: absolute; left: 50%; top: 50%; margin: -16px 0 0 -16px; }
 .round .glyph[width="28"] { margin: -14px 0 0 -14px; }
-.round.focused { background: var(--focus); color: var(--focus-ink); border-color: var(--focus); transform: scale(1.08); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); }
+.round.focused { color: var(--focus-ink); }
+/* the focus: one white disc that travels between the icons, 74 px (the old 1.08 pop, in whole
+   pixels) behind the 68 px icon, whose own fill and rim vanish over it */
+.osd-icons .glide-plate { display: none; }
+.osd-icons .glide-cap { top: 0; height: 68px; border-radius: 34px; background: none; box-shadow: none; }
+.osd-icons .glide-cap::before {
+  content: ""; position: absolute; left: -3px; top: -3px; width: 74px; height: 74px; border-radius: 37px;
+  background: linear-gradient(180deg, #ffffff 0%, #e9ecf1 100%); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
 .scrubbing .osd-icons, .tab-open .osd-icons { opacity: 0; }
 .pointer .round { cursor: pointer; }
 
@@ -121,12 +136,17 @@
 .tab-open .osd-tabs { transform: translate3d(0, -290px, 0); }
 .scrubbing .osd-tabs { opacity: 0; }
 .ptab {
-  display: inline-block; height: 52px; line-height: 52px; padding: 0 22px; margin-right: 4px; border-radius: 26px;
+  display: inline-block; position: relative; height: 52px; line-height: 52px; padding: 0 22px; margin-right: 4px; border-radius: 26px;
   font-size: 26px; font-weight: 600; color: var(--text-3);
-  transition: transform var(--t-pop) var(--spring), background-color 160ms linear, color 160ms linear;
+  transition: color 140ms linear 90ms;
 }
-.ptab.selected { background: var(--fill-hi); color: var(--text); }
-.ptab.focused { background: var(--focus); color: var(--focus-ink); transform: scale(1.05); }
+.ptab.selected { color: var(--text); }
+.ptab.focused { color: var(--focus-ink); }
+/* one capsule (focused) and one plate (the open tab, while its cards have the focus) travel along
+   the strip, as on the tab bar; the tabs themselves never scale or change ground */
+.osd-tabs .glide-plate, .osd-tabs .glide-cap { top: 0; height: 52px; border-radius: 26px; }
+.osd-tabs .glide-plate { background: var(--fill-hi); box-shadow: none; opacity: 0; }
+.osd-tabs .glide-plate.on { opacity: 1; }
 .pointer .ptab { cursor: pointer; }
 
 .osd-panel {
@@ -142,11 +162,16 @@
 .cards-track { position: absolute; left: 0; top: 0; white-space: nowrap; transition: transform var(--t-scroll) var(--spring); }
 .pcard {
   display: inline-block; vertical-align: top; width: 320px; margin-right: 32px; white-space: normal;
-  transform-origin: 50% 0; transition: transform var(--t-pop) var(--spring), opacity 200ms linear;
+  transition: opacity 200ms linear;
 }
 .pcard.gone { opacity: 0; }
-.pcard.focused { transform: scale(1.08); }
-.pcard-art { position: relative; width: 320px; height: 180px; border-radius: 14px; overflow: hidden; background: #1f2129; }
+/* only the art pops (from its centre: 7 px down, clear of the title, which stays put). It keeps a
+   layer while it is scaled, so it is drawn the same way moving and at rest (no snap as it lands) */
+.pcard-art {
+  position: relative; width: 320px; height: 180px; border-radius: 14px; overflow: hidden; background: #1f2129;
+  transition: transform var(--t-pop) var(--spring);
+}
+.pcard.focused .pcard-art { transform: scale(1.08); will-change: transform; }
 .pcard.focused .pcard-art { box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5); }
 .pcard-img { position: absolute; left: 0; top: 0; width: 320px; height: 180px; object-fit: cover; opacity: 0; transition: opacity 240ms linear; }
 .pcard-img.loaded { opacity: 1; }
@@ -172,7 +197,7 @@
   position: relative; width: 160px; height: 160px; border-radius: 80px; background: var(--glass);
   transition: transform var(--t-pop) var(--spring);
 }
-.ccard.focused .ccard-art { transform: scale(1.13); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5); }
+.ccard.focused .ccard-art { transform: scale(1.13); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5); will-change: transform; }
 .ccard-initials { position: absolute; left: 0; top: 0; width: 160px; height: 160px; line-height: 160px; font-size: 48px; font-weight: 600; color: var(--text-2); }
 .ccard-img { position: absolute; left: 0; top: 0; width: 160px; height: 160px; border-radius: 80px; object-fit: cover; object-position: 50% 30%; opacity: 0; transition: opacity 240ms linear; }
 .ccard-img.loaded { opacity: 1; }
@@ -191,12 +216,20 @@
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; max-height: 120px;
 }
 .info-btn {
-  display: inline-block; height: 64px; line-height: 64px; padding: 0 32px 0 26px; border-radius: 32px; white-space: nowrap;
+  display: inline-block; position: relative; height: 64px; line-height: 64px; padding: 0 32px 0 26px; border-radius: 32px; white-space: nowrap;
   font-size: 26px; font-weight: 700; color: var(--text); background: rgba(255, 255, 255, 0.14); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
-  transition: transform var(--t-pop) var(--spring), background-color 160ms linear, color 160ms linear;
+  transition: color 60ms linear 70ms;
 }
-.info-btn .glyph { vertical-align: -5px; margin-right: 12px; }
-.info-btn.focused { background: var(--focus); color: var(--focus-ink); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); transform: scale(1.05); }
+.info-btn .glyph { position: relative; vertical-align: -5px; margin-right: 12px; }
+.info-btn span { position: relative; }
+.info-btn.focused { color: var(--focus-ink); }
+/* the white plate fades in and pops behind the label, which never scales */
+.plate-pop::before {
+  content: ""; position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: inherit;
+  background: var(--focus); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); opacity: 0;
+  transition: opacity 200ms linear, transform var(--t-pop) var(--spring);
+}
+.plate-pop.focused::before { opacity: 1; transform: scale(1.05); will-change: transform; }
 .pointer .info-btn { cursor: pointer; }
 .info-facts { position: absolute; left: 1018px; top: 0; width: 710px; font-size: 24px; line-height: 30px; font-weight: 500; }
 .info-fact { margin-bottom: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -222,18 +255,26 @@
 @keyframes caretIn { from { opacity: 0; } to { opacity: 1; } }
 .menu-head { padding: 0 20px 8px; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-3); }
 .menu-clip { position: relative; overflow: hidden; }
-.menu-list { transition: transform 200ms var(--spring); }
+/* the list scrolls and its focus plate travels on the same spring, so a long list moving under a
+   still plate reads as one motion */
+.menu-list { position: relative; transition: transform var(--t-cap) var(--spring); }
+.menu-plate {
+  position: absolute; left: 0; top: 0; width: 100%; height: 64px; border-radius: 16px; background: var(--focus); pointer-events: none;
+  transition: transform var(--t-cap) var(--spring), height var(--t-cap) var(--spring);
+}
+.menu-plate.instant { transition: none; }
 .menu-row {
   display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: space-between; justify-content: space-between;
-  height: 64px; margin-bottom: 4px; padding: 0 20px; border-radius: 16px; box-sizing: border-box; font-size: 28px; font-weight: 500; color: var(--text);
+  position: relative; height: 64px; margin-bottom: 4px; padding: 0 20px; border-radius: 16px; box-sizing: border-box; font-size: 28px; font-weight: 500; color: var(--text);
+  transition: color 140ms linear 90ms;
 }
 .menu-row.two { height: 76px; }
 .menu-text { min-width: 0; overflow: hidden; }
 .menu-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 34px; }
-.menu-sub { margin-top: 2px; font-size: 20px; line-height: 24px; font-weight: 500; color: var(--text-3); white-space: nowrap; }
+.menu-sub { margin-top: 2px; font-size: 20px; line-height: 24px; font-weight: 500; color: var(--text-3); white-space: nowrap; transition: color 140ms linear 90ms; }
 .menu-row .glyph { -webkit-flex: none; flex: none; margin-left: 16px; }
 .menu-row.link { font-size: 26px; color: var(--text-2); }
-.menu-row.focused { background: var(--focus); color: var(--focus-ink); }
+.menu-row.focused { color: var(--focus-ink); }
 .menu-row.focused .menu-sub { color: #3a3f48; }
 .menu-row.checked .menu-label { font-weight: 600; }
 .menu-rule { height: 1px; margin: 8px 20px; background: rgba(255, 255, 255, 0.14); }
@@ -249,10 +290,18 @@
 .skip-pill {
   position: absolute; right: 96px; bottom: 96px; height: 80px; line-height: 80px; padding: 0 40px 0 34px; border-radius: 40px; overflow: hidden;
   white-space: nowrap; font-size: 30px; font-weight: 700; background: var(--control); color: var(--text); box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5);
-  transition: opacity 200ms var(--ease), transform var(--t-scroll) var(--spring), background-color 160ms linear, color 160ms linear;
+  transition: opacity 200ms var(--ease), transform var(--t-scroll) var(--spring), color 60ms linear 70ms;
 }
-.skip-pill .glyph { vertical-align: -5px; margin-right: 16px; }
-.skip-pill.focused { background: var(--focus); color: var(--focus-ink); }
+.skip-pill .glyph { position: relative; vertical-align: -5px; margin-right: 16px; }
+.skip-pill span { position: relative; }
+/* lit by a white plate fading in behind the label (rounded itself: a composited child escapes the
+   pill's clip on Chrome 53) */
+.skip-pill::before {
+  content: ""; position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 40px; background: var(--focus);
+  opacity: 0; transition: opacity 200ms linear;
+}
+.skip-pill.focused::before { opacity: 1; }
+.skip-pill.focused { color: var(--focus-ink); }
 .cta-line { position: absolute; left: 0; bottom: 0; width: 100%; height: 5px; background: var(--resume); transform-origin: 0 0; }
 .skip-hidden .skip-pill { opacity: 0; transform: translate3d(0, 16px, 0); pointer-events: none; }
 .osd-open .skip-pill { transform: translate3d(0, -210px, 0); }
@@ -273,16 +322,19 @@
 .endcard-meta { margin-top: 6px; font-size: 24px; line-height: 30px; font-weight: 500; color: var(--text-2); }
 .endcard-thumb { display: inline-block; vertical-align: middle; width: 320px; height: 180px; border-radius: 14px; overflow: hidden; box-sizing: border-box; border: 1px solid rgba(255, 255, 255, 0.22); background: #1f2129; }
 .endcard-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.endcard-btns { margin-top: 32px; font-size: 0; }
+.endcard-btns { position: relative; margin-top: 32px; font-size: 0; }
+/* the focus is one capsule travelling between the two buttons, under their faint fills */
+.endcard-btns .glide-plate { display: none; }
+.endcard-btns .glide-cap { top: 0; height: 72px; border-radius: 36px; box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5); }
 .cta-btn {
   display: inline-block; position: relative; overflow: hidden; height: 72px; line-height: 72px; margin-left: 20px; padding: 0 36px; border-radius: 36px;
   font-size: 28px; font-weight: 600; color: var(--text); background: rgba(255, 255, 255, 0.14); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
-  transition: background-color 160ms linear, color 160ms linear;
+  transition: color 140ms linear 90ms;
 }
 .cta-next { padding: 0 36px 0 30px; font-weight: 700; }
 .cta-next .glyph { vertical-align: -4px; margin-right: 14px; }
-.cta-count { margin-left: 10px; font-weight: 500; color: var(--text-2); }
-.cta-btn.focused { background: var(--focus); color: var(--focus-ink); box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5); }
+.cta-count { margin-left: 10px; font-weight: 500; color: var(--text-2); transition: color 140ms linear 90ms; }
+.cta-btn.focused { color: var(--focus-ink); }
 .cta-btn.focused .cta-count { color: #3a3f48; }
 .cta-next .cta-line { display: none; }
 .cta-next.counting .cta-line { display: block; }

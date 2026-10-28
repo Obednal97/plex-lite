@@ -97,12 +97,13 @@
 .live-text { left: 280px; width: 1000px; }
 .osd-live-off { background: rgba(255, 255, 255, 0.22); }
 
+/* the focused icon's name, over it; it fades both ways (the icons never scale, so it never moves) */
 .live-tip {
   position: absolute; left: 50%; bottom: 84px; width: 300px; margin-left: -150px; text-align: center; pointer-events: none;
+  font-size: 22px; line-height: 30px; font-weight: 600; color: var(--text); text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
   opacity: 0; transition: opacity 120ms linear;
 }
-.live-tip { font-size: 0; }
-.round.focused .live-tip { opacity: 1; font-size: 22px; line-height: 30px; font-weight: 600; color: var(--text); text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8); }
+.round.focused .live-tip { opacity: 1; transition: opacity 160ms linear 90ms; }
 
 /* the programme's bar: aired (light), where we are (teal), the live edge (a tick when behind) */
 .live-bar { position: absolute; left: 96px; bottom: 168px; width: 1728px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); }
@@ -132,10 +133,15 @@
 .live-guide-head { position: absolute; left: 96px; top: 80px; font-size: 22px; line-height: 30px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); }
 .live-guide-clip { position: absolute; left: 80px; top: 128px; width: 780px; height: 832px; overflow: hidden; }
 .live-guide-track { position: absolute; left: 0; top: 0; }
+/* the focus: one still white plate in the focus slot (top set from ROWS_ABOVE * ROW); the rows
+   glide under it and switch ink as they arrive */
+.lmg-plate { position: absolute; left: 16px; top: 0; width: 748px; height: 96px; border-radius: 16px; background: var(--focus); }
+.lmg-plate.empty { opacity: 0; }
 .lmg-row {
   position: absolute; left: 16px; top: 0; width: 748px; height: 96px; border-radius: 16px; color: var(--text);
-  transition: transform var(--t-scroll) var(--ease), background-color var(--t-state) linear;
+  transition: transform var(--t-scroll) var(--ease), color 140ms linear 90ms;
 }
+.lmg-head, .lmg-num, .lmg-foot { transition: color 140ms linear 90ms; }
 .lmg-logo { position: absolute; left: 16px; top: 16px; width: 120px; height: 64px; border-radius: 12px; overflow: hidden; background: rgba(255, 255, 255, 0.10); }
 .lmg-logo.loaded { background: #f4f4f6; }
 .lmg-logo img { position: absolute; left: 8px; top: 4px; width: 104px; height: 56px; }
@@ -147,7 +153,7 @@
 .lmg-bar { display: inline-block; position: relative; width: 96px; height: 4px; margin-right: 14px; vertical-align: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.22); overflow: hidden; }
 .lmg-fill { position: absolute; left: 0; top: 0; width: 96px; height: 4px; transform-origin: 0 0; background: var(--resume); }
 .lmg-row.watching .lmg-head::after { content: "  \00B7  Watching"; color: var(--resume); font-weight: 600; }
-.lmg-row.focused { background: var(--focus); color: var(--focus-ink); }
+.lmg-row.focused { color: var(--focus-ink); }
 .lmg-row.focused .lmg-head, .lmg-row.focused .lmg-num { color: rgba(8, 8, 10, 0.75); }
 .lmg-row.focused .lmg-foot { color: rgba(8, 8, 10, 0.6); }
 .lmg-row.focused .lmg-bar { background: rgba(8, 8, 10, 0.18); }

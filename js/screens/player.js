@@ -39,6 +39,18 @@
   };
 
   // name: a key of GLYPHS, or a glyph definition of the same shape (Live TV draws its own).
+  // Moves a ui.Glider's capsule onto nodes[cap] and its plate onto nodes[plate] (-1: hidden; plate
+  // undefined: left alone). A mark that was hidden lands where it appears instead of flying in.
+  function glideTo(g, nodes, cap, plate) {
+    if (!g) return;
+    var want = cap >= 0 || plate >= 0;
+    var rects = want ? g.measure(nodes) : null;
+    g.cap(rects && cap >= 0 ? rects[cap] : null);
+    if (plate === undefined) return;
+    var on = g.plateEl.classList.contains('on');
+    g.place(g.plateEl, rects && plate >= 0 ? rects[plate] : null, true, !on);
+  }
+
   function glyph(name, size, weight) {
     var g = typeof name === 'string' ? GLYPHS[name] : name;
     var fill = !!g.parts; // {fill: true, parts} (an array's .fill is Array.prototype.fill)
@@ -66,6 +78,7 @@
   }
 
   PL.glyph = glyph;
+  PL.glideTo = glideTo; // the live controls (live-osd.js) use the same marks
 
   // "S1 E2" (Special 3 for season 0)
   function episodeCode(it) {
@@ -394,6 +407,7 @@
     this.ecNext.appendChild(this.ecLine);
     btns.appendChild(this.ecWatch);
     btns.appendChild(this.ecNext);
+    this.ecGlider = new PL.ui.Glider(btns);
     body.appendChild(btns);
     ec.appendChild(body);
     el.appendChild(ec);
@@ -586,13 +600,19 @@
       this.zoneClass = cls;
     }
     var self = this;
+    var iconOn = -1;
     this.icons.forEach(function (ic, i) {
-      ic.node.classList.toggle('focused', up && (z === 'icons' || (z === 'menu' && self.menu && self.menu.icon === i)) && i === self.iconIndex);
+      var on = up && (z === 'icons' || (z === 'menu' && self.menu && self.menu.icon === i)) && i === self.iconIndex;
+      ic.node.classList.toggle('focused', on);
+      if (on) iconOn = i;
     });
+    glideTo(this.iconGlider, this.icons.map(function (ic) { return ic.node; }), iconOn);
     this.tabs.forEach(function (t, i) {
       t.node.classList.toggle('focused', up && z === 'tabs' && i === self.tabIndex);
       t.node.classList.toggle('selected', up && z === 'cards' && i === self.tabIndex);
     });
+    glideTo(this.tabGlider, this.tabs.map(function (t) { return t.node; }),
+      up && z === 'tabs' ? this.tabIndex : -1, up && z === 'cards' ? this.tabIndex : -1);
     var tab = this.tabs[this.tabIndex];
     if (tab && tab.cards) {
       tab.cards.forEach(function (c, i) { if (c.node) c.node.classList.toggle('focused', up && z === 'cards' && i === tab.index); });
@@ -633,6 +653,7 @@
     var was = this.icons[this.iconIndex] && this.icons[this.iconIndex].id;
     if (list.map(function (b) { return b.id; }).join() === this.icons.map(function (b) { return b.id; }).join()) return;
     PL.clear(this.iconRow);
+    this.iconGlider = new PL.ui.Glider(this.iconRow);
     this.icons = list.map(function (b, i) {
       var n = PL.el('div', 'round');
       n.setAttribute('aria-label', b.label);
@@ -939,6 +960,8 @@
     box.appendChild(PL.el('div', 'menu-head', heading));
     var clip = PL.el('div', 'menu-clip');
     var list = m.list = PL.el('div', 'menu-list');
+    m.plate = PL.el('div', 'menu-plate instant');
+    list.appendChild(m.plate);
     clip.appendChild(list);
     box.appendChild(clip);
     m.rows = this.menuRows();
@@ -994,6 +1017,15 @@
     if (!m) return;
     m.nodes.forEach(function (r, i) { r.node.classList.toggle('focused', i === m.index); });
     var r = m.nodes[m.index];
+    if (r) {
+      // one plate travels to the focused row (it lands on the first paint of a fresh list)
+      m.plate.style.height = r.h + 'px';
+      PL.translate(m.plate, 0, r.top);
+      if (m.plate.classList.contains('instant')) {
+        void m.plate.offsetWidth;
+        m.plate.classList.remove('instant');
+      }
+    }
     if (!r || m.height <= m.clipH) return;
     // keep the focused row near the middle, starting the view on a whole row (no half-cut row under
     // the heading)
@@ -1060,6 +1092,7 @@
     if (list.map(function (t) { return t.id; }).join() === this.tabs.map(function (t) { return t.id; }).join() && this.tabsFor === this.full) return;
     this.tabsFor = this.full;
     PL.clear(this.tabRow);
+    this.tabGlider = new PL.ui.Glider(this.tabRow);
     PL.clear(this.panel);
     this.tabs = list.map(function (t, i) {
       var n = PL.el('div', 'ptab', t.label);
@@ -1217,7 +1250,7 @@
     var wrap = PL.el('div', 'info');
     var col = PL.el('div', 'info-main');
     col.appendChild(PL.el('p', 'info-summary', f.summary || ''));
-    var btn = PL.el('div', 'info-btn');
+    var btn = PL.el('div', 'info-btn plate-pop');
     btn.appendChild(glyph('restart', 24, 2.2));
     btn.appendChild(PL.el('span', '', 'Start from the beginning'));
     btn.addEventListener('mouseenter', function () { if (pointing() && !self.osdHidden) { tab.index = 0; self.setZone('cards'); } });
@@ -2139,6 +2172,7 @@
     this.el.classList.toggle('endcard-on', ec);
     this.ecWatch.classList.toggle('focused', ec && focus && this.ecIndex === 0);
     this.ecNext.classList.toggle('focused', ec && focus && this.ecIndex === 1);
+    glideTo(this.ecGlider, [this.ecWatch, this.ecNext], ec && focus ? this.ecIndex : -1);
     this.paintCtaLine();
   };
 
@@ -2360,6 +2394,7 @@
     }
     this.ecWatch.textContent = this.state === 'ended' ? 'Close' : 'Watch Credits';
     this.ecCount.textContent = '';
+    this.ecGlider.invalidate(); // the buttons' widths follow their labels
     this.ecNext.classList.toggle('counting', countdown);
     this.ecLine.classList.remove('run');
     this.paintZone();
@@ -2368,6 +2403,8 @@
     this.ecLine.classList.add('run');
     var tick = function () {
       self.ecCount.textContent = 'in ' + left;
+      self.ecGlider.invalidate();
+      self.paintCta();
       if (left-- <= 0) {
         self.playNext();
         return;
