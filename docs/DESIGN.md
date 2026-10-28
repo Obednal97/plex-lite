@@ -97,7 +97,7 @@ Transform and opacity only.
 - **Player** (Apple TV app first, Netflix second; spec and remote table in
   [PLAYER-v2-design.md](PLAYER-v2-design.md)): nothing on screen while watching. Any key raises one
   bottom block over a 520 px ink scrim: eyebrow (year, or "Show · S1 E2") and a 64 px title, round
-  68 px icons on the right (Subtitles, Audio when there is more than one track, Next episode), the
+  68 px icons on the right (Subtitles, Audio when there is more than one track, Next episode; the focus is one white disc that travels between them), the
   bar, the times, and text tabs (Info, Cast, Chapters, Episodes). The bar is the main control: one
   segment per chapter with 6 px gaps, 6 px at rest, 10 px with a white head when focused, filled in
   `--resume`; Left/Right jump −10 s / +30 s at once. Paused or scrubbing: a 30% veil, a 12 px bar,

@@ -70,6 +70,16 @@ releases are fixes only.
 - The demo server advertises preview thumbnails and serves index frames
   (`/library/parts/<id>/indexes/sd/<ms>`).
 
+### Fixed
+
+- Focus in the player and the live controls no longer makes labels jump. On the TV's Chrome 53 a
+  focused tab, card or button that scaled was drawn one way while it moved and another at rest, so
+  its text shifted as the pop started and again as it landed. Labels now stay still and the focus
+  travels instead, as on the tab bar: one disc for the round icons, one capsule for the tabs and
+  for the end card's buttons, one plate for the subtitle and audio menus, and a still plate the mini
+  guide's rows glide under. Only artwork pops, from its centre, and it is kept on its own layer
+  while it is scaled. Labels switch ink as the focus arrives.
+
 ## [0.1.0] - 2026-10-27 (first public release)
 
 ### Added
