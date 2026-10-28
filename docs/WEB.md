@@ -194,6 +194,34 @@ key hints on screen use these names (Enter, Esc, Y, right-click) in the mouse an
 the remote's names in remote mode ([Input modes](#input-modes)). The browser's Back button goes back
 inside the app; at the top level with the tab bar focused, Back leaves the site as usual.
 
+### Cards and rows with a mouse
+
+In the mouse and keyboard mode (`web/web-cards.js`, `web/web-cards.css`), while the mouse is the last
+input used:
+
+- **A hovered card** lifts (1.07, with one shared shadow element, as the TV's focus shadow) and shows
+  **▶** in the middle and **"…"** in the top-right corner. ▶ plays at once: a movie or episode
+  resumes where it was left (or starts), a show plays what its details page would (the next
+  episode on deck, else the first), a season its first unfinished episode. "…" (tooltip "More
+  options [Right-click]") opens the same quick actions as hold OK or a right-click. Clicking the
+  card itself opens its details, as before. Plex Lite has no watchlist or "add to" action yet, so there
+  is no **+**. Only standard Plex cards get ▶ and "…" (movies, episodes, shows, seasons); channels,
+  extras, people and plugin cards just lift.
+- **Rows** show **›** at the right edge (over a fade) when there is more, and **‹** once scrolled;
+  only while the mouse is over the row. Each click pages by the cards that fit whole (the card cut
+  off at the edge leads the next page). Paging moves the row's own position, so the arrow keys carry
+  on from the page on screen. A row scrolled past (dimmed) comes back up under the mouse.
+- **The Recommended hero follows the card the mouse rests on**, as it follows the focus on the TV:
+  after 350 ms on one card. Sweeping across a row, or leaving it, changes nothing.
+- **The library grid** gets the lift, ▶ and "…", without arrows.
+- **Details buttons** name what they do in a tooltip from their hint ("Shuffle all episodes" under
+  Shuffle, "Play from the beginning" under From start).
+
+Arrow keys, Enter or Tab bring the TV's focus plate back and hide all of this (`data-nav="keys"`);
+the next mouse move brings it back. In remote mode (Settings → Controls, TV browsers) and touch mode
+none of it appears, and the TV app never loads these files. The hooks wrap `PL.ui.Shelf`,
+`PL.ui.Grid` and `PL.ui.ButtonRow` methods from the web layer; no shared file changes.
+
 **Phones and tablets.** Not designed for yet. In portrait the whole TV layout shrinks to the
 screen's width, so it is usable (tap is click, a long press is hold OK, pinch to zoom) but small. A
 proper mobile layout would need: a layout that reflows below ~900 px (one-column details page,
