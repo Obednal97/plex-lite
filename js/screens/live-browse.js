@@ -256,16 +256,7 @@
   }
 
   // What is on now: [{channel, airing, cat}] in channel order.
-  LiveWall.prototype.items = function () {
-    var t = now();
-    var out = [];
-    G.channels.forEach(function (c) {
-      var a = G.nowNext(c.identifier, t).now;
-      // a channel showing only guide filler has nothing on to show
-      if (a && !PL.liveLogic.isFiller(a.title)) out.push({ channel: c, airing: a, cat: G.airingCat(a) || null });
-    });
-    return out;
-  };
+  LiveWall.prototype.items = function () { return G.onNow(now()); };
 
   // Rebuilds the shelves when what is on changed; keeps the focused shelf and channel.
   LiveWall.prototype.refresh = function (force) {

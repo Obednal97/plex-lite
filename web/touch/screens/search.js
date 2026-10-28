@@ -510,12 +510,13 @@
         remember();
         T.playLive(S.liveFor(G.channels, c.identifier, G.src.dvrKey));
       },
-      // the TV guide on the stage, at that channel and time (the phone guide is a later phase)
+      // the phone guide (web/touch/live/guide.js), at that channel and time
       guide(c, t) {
         dropKeyboard();
         remember();
         PL.liveGuide.openAt = { identifier: c.identifier, t: t || now() };
-        PL.app.push(PL.screens.livetv());
+        if (T.tabs.some((x) => x.id === 'livetv')) T.selectTab('livetv');
+        else PL.app.push(PL.screens.livetv());
       },
       menu(item) {
         const G = PL.liveGuide;
