@@ -300,24 +300,9 @@
       ], { closeOnSelect: false, focus: rows.length }));
     }
 
+    // Who's watching (js/screens/firstrun.js), with PINs; Back returns here unchanged
     function pickProfile() {
-      PL.plex.homeUsers().then(function (users) {
-        if (users.length < 2) { PL.toast('This Plex account has no other profiles'); return; }
-        var current = (PL.storage.get('profile', null) || {}).uuid;
-        PL.app.push(screens.sheet([{
-          heading: 'Who\'s watching?',
-          rows: users.map(function (u) {
-            return {
-              label: u.title, sub: u.protected ? 'PIN' : (u.admin ? 'Owner' : ''), checked: current ? u.uuid === current : !!u.admin,
-              action: function () {
-                if (u.protected) { PL.toast('PIN-protected profiles are not supported yet'); return; }
-                PL.toast('Switching to ' + u.title + '…');
-                PL.plex.switchUser(u).then(function () { PL.app.start(); }, function (err) { PL.toast(PL.errorMessage(err)); });
-              },
-            };
-          }),
-        }]));
-      }, function (err) { PL.toast(PL.errorMessage(err)); });
+      PL.firstrun.pickProfile();
     }
 
     function signOut() {

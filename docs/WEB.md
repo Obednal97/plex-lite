@@ -17,7 +17,9 @@ and on the TV `PL.isWeb` is false, so it behaves exactly as before.
 | --- | --- |
 | `web/env.js` | Marks the platform. |
 | `web/web.js` | Who we are to Plex (browser and OS), the 1920x1080 stage scaled to the window, keyboard and mouse for the remote's buttons, the browser's Back button, Chrome's local-network permission, Settings rows, ending sessions when the page goes away. |
-| `web/web-signin.js` | The sign-in screen (Plex's own sign-in page, or a plex.tv/link code). |
+| `web/web-signin.js` | Plex's own sign-in page in a popup, for the first-run screens ([docs/FIRSTRUN.md](FIRSTRUN.md)). |
+| `web/firstrun-web.css` | The first-run screens' full-window, responsive layout (phones included). |
+| `web/fonts/` | Inter (OFL), the web build's typeface, self-hosted. |
 | `web/web-media.js` | What this browser can decode, the client profile for the Plex transcoder, HLS through hls.js or the browser. |
 | `web/plugin-frame.html` | The sandboxed frame external plugins run in (see [Plugins](#plugins)). |
 | `web/signed-in.html` | Where Plex's sign-in popup lands; it closes itself. |
@@ -31,17 +33,22 @@ same rules (only `web/vendor/` is skipped).
 
 ## Signing in
 
+The first-run screens (welcome, sign-in, Who's watching, PIN, connecting, errors) are drawn outside
+the scaled stage, at the window's own size, with a layout for desktops, phones in either orientation
+and ultrawide screens: see [docs/FIRSTRUN.md](FIRSTRUN.md).
+
 **Sign in with Plex** asks plex.tv for a PIN and opens Plex's own sign-in page
 (`app.plex.tv/auth`, with the PIN's code, this browser's client identifier and "Plex Lite" as the
 product) in a popup. Plex Lite polls the PIN every 2 seconds until Plex hands over the sign-in, then
-closes the popup. If the browser blocks the popup, the same page opens in the tab and Plex sends the
-browser back to Plex Lite afterwards, which finishes the sign-in (the PIN waits in
-`sessionStorage`). **Use a link code** shows the TV's four-character code for plex.tv/link, for
-signing in from another device.
+closes the popup. If the browser blocks the popup, Plex Lite says so and offers **Continue in this
+tab**: Plex's page opens in the tab and sends the browser back afterwards, which finishes the sign-in
+(the PIN waits in `sessionStorage`). **Use a code instead** shows the TV's four-character code for
+plex.tv/link and a QR code that opens that page with the code filled in.
 
 - Each browser is its own Plex device: a random client identifier in `localStorage`, shown in Plex as
   "Plex Lite (Chrome on macOS)" (product Plex Lite, platform the browser, device the OS).
-- Plex Home profiles switch under Settings → Profile, as on the TV (not PIN-protected ones yet).
+- Plex Home: Who's watching? follows the sign-in when the account has profiles (PIN-protected ones
+  ask for the PIN), and Settings → Profile opens it again.
 - The Plex token is kept in this browser's `localStorage` and sent only to plex.tv and to your Plex
   servers, in the query string as Plex's own web app does. It never reaches Vercel or any other server.
 - **Sign out** removes everything Plex Lite stored in the browser (sign-in, server, settings,
@@ -71,7 +78,8 @@ non-Plex web site:
 
 **Local network access (Chrome 142 and later).** A public web site that reaches a device on your
 home network needs your permission: the first time Plex Lite tries the server's local address, Chrome
-asks to let the site "look for and connect to any device on your local network". Allow it to stream
+asks to let the site "look for and connect to any device on your local network". Plex Lite explains
+this first, and the request waits for Continue (Skip uses Remote Access). Allow it to stream
 straight from the server at home. Until then, or if you block it, Plex Lite uses Remote Access or the
 relay. When you allow it later, Plex Lite moves to the local address by itself. Settings → Local
 network access shows the state and how to change it (site settings, the icon left of the address).
