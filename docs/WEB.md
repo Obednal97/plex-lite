@@ -18,10 +18,9 @@ and on the TV `PL.isWeb` is false, so it behaves exactly as before.
 | `web/env.js` | Marks the platform. |
 | `web/web-input.js` | The input mode: remote, mouse and keyboard, or touch (see [Input modes](#input-modes)). |
 | `web/web-desktop.js` | Laptop and desktop: the Back [Esc] button, tooltips that name their key, the `/` `M` `N` `?` keys and the `?` shortcuts overlay. |
-| `web/web-player.js` | The player with a mouse. |
-| `web/web-cards.js` | Cards and rows with a mouse. |
-| `web/web.js` | Who we are to Plex (browser and OS), the 1920x1080 stage scaled to the window, keyboard and mouse for the remote's buttons, the browser's Back button, Chrome's local-network permission, Settings rows, ending sessions when the page goes away. |
+| `web/web.js` | Who we are to Plex (browser and OS), the stage fitted to the window, keyboard and mouse for the remote's buttons, the browser's Back button, Chrome's local-network permission, Settings rows, ending sessions when the page goes away. |
 | `web/web-player.js` | The player with a mouse: transport row, volume, full screen, tooltips, hiding after 3 s, M and N (see [Player with a mouse](#player-with-a-mouse)). |
+| `web/web-cards.js` | Cards and rows with a mouse: hover cards with ▶ and "…", row arrows, the hero following the mouse (see [Cards and rows with a mouse](#cards-and-rows-with-a-mouse)). |
 | `web/web-signin.js` | The sign-in screen (Plex's own sign-in page, or a plex.tv/link code). |
 | `web/web-media.js` | What this browser can decode, the client profile for the Plex transcoder, HLS through hls.js or the browser. |
 | `web/plugin-frame.html` | The sandboxed frame external plugins run in (see [Plugins](#plugins)). |

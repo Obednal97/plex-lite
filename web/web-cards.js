@@ -100,7 +100,7 @@
     var inner = card.querySelector('.card-inner');
     if (!inner) return;
     var acts = PL.el('div', 'web-acts');
-    var play = PL.el('div', 'web-play');
+    var play = PL.el('div', 'web-card-play');
     play.appendChild(web.glyph(G.play, 30));
     play.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -109,7 +109,7 @@
     });
     acts.appendChild(play);
     if (menuFor(list, item)) {
-      var more = PL.el('div', 'web-more');
+      var more = PL.el('div', 'web-card-more');
       more.appendChild(web.glyph(G.more, 24));
       web.tip(more, 'More options', 'Hold OK', 'above');
       more.addEventListener('click', function (e) {
