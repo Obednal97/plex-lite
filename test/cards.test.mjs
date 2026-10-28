@@ -37,6 +37,7 @@ test('cards: Continue Watching and Recently Released episodes play, other shelve
   assert.equal(plays(mcw, 'movie'), true);
   assert.equal(plays(rel, 'episode'), true);
   assert.equal(plays(deck, 'episode'), true);
+  assert.equal(plays({ hubIdentifier: 'movie.ondeck.1', title: 'On Deck' }, 'movie'), false);
   assert.equal(plays({ hubIdentifier: 'home.continue', title: 'Continue Watching' }, 'episode'), true);
   // by title when the identifier says nothing
   assert.equal(plays({ title: 'Recently Released Episodes' }, 'episode'), true);

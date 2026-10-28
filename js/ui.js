@@ -57,10 +57,11 @@
     if (!hub || !item) return false;
     var id = String(hub.hubIdentifier || '');
     var title = String(hub.title || '');
-    var resume = /inprogress|continue|ondeck/i.test(id) || /^(continue watching|on deck)\b/i.test(title);
+    var watching = /inprogress|continue/i.test(id) || /^continue watching\b/i.test(title);
+    var deck = /ondeck/i.test(id) || /^on deck\b/i.test(title);
     var released = /recentlyaired|recentlyreleased/i.test(id) || /^recently released episodes\b/i.test(title);
-    if (item.type === 'episode') return resume || released;
-    if (item.type === 'movie') return resume;
+    if (item.type === 'episode') return watching || deck || released;
+    if (item.type === 'movie') return watching;
     return false;
   };
 
