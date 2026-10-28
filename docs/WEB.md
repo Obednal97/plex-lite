@@ -202,13 +202,57 @@ key hints on screen use these names (Enter, Esc, Y, right-click) in the mouse an
 the remote's names in remote mode ([Input modes](#input-modes)). The browser's Back button goes back
 inside the app; at the top level with the tab bar focused, Back leaves the site as usual.
 
-**Phones and tablets.** Not designed for yet. In portrait the whole TV layout shrinks to the
-screen's width, so it is usable (tap is click, a long press is hold OK, pinch to zoom) but small. A
-proper mobile layout would need: a layout that reflows below ~900 px (one-column details page,
-a smaller hero, two or three posters across, a bottom tab bar instead of the top pill), touch scrolling
-of rows and grids instead of focus-driven translation, a touch player (tap to show controls, drag the
-bar, double-tap to skip), larger hit targets, no hover-only focus, and testing on iOS Safari (native
-HLS only, no Media Source) and Android Chrome.
+## Phones and tablets
+
+Phones and tablets get their own layout instead of the scaled TV stage: one column on a phone
+(under 600 px wide), two columns on a tablet, four bottom tabs (Movies, TV Shows, Live TV, Search),
+the profile picture at the top right for Settings, rows that scroll sideways with the next card
+peeking in, a Back chevron, sheets from the bottom, the system keyboard for Search, no key hints,
+44 px touch targets and the screen's safe areas. It lives in `web/touch/` and is a separate layer:
+the TV never loads it and the 1920x1080 screens are not reflowed. It reuses the shared Plex and
+data code (`js/plex.js`, `js/ui.js`'s item helpers, `PL.liveGuide`, `PL.plugins`, `PL.az`...).
+
+**When it takes over.** Windows under 1100 px wide (phones, portrait tablets, a narrow browser
+window), and touch-first devices up to 1400 px (an iPad in landscape: the TV layout doesn't scroll
+by touch). Wider windows and Settings → Controls → Remote keep the TV stage. It is decided again when
+the window changes size or the Controls setting changes, but never while a stage screen (the
+player) is open. Sign-in and the first-run screens stay as they are.
+
+| File | What it does |
+| --- | --- |
+| `web/touch/manifest.json` | The layer's scripts and stylesheets, in load order (`tools/build-web.mjs` adds them after everything else). |
+| `web/touch/logic.js` | Pure decisions, tested in `test/touch.test.mjs`: when to take over, phone or tablet, the tabs, Back at the top, image sizes, quick actions. |
+| `web/touch/kit.js` | Building blocks (`PL.touch.ui`): icons, buttons, chips, poster and wide cards, shelves, the endless grid, top bar, Back bar. |
+| `web/touch/shell.js` | Taking over from the stage, the tabs, a stack of pages per tab, Back, the hand-off to the player and other stage screens. |
+| `web/touch/sheets.js` | Bottom sheets (a centred card on a tablet), a title's quick actions, toasts, confirmations. |
+| `web/touch/screens/*.js` | The screens. A screen not built yet opens the TV's version on the stage. |
+
+**How it sits on the app.** While the layer is in charge, the stage's root screen is a stand-in
+that passes Back to the layer, `<html>` has the class `pl-touch` (the stage is hidden, the page
+scrolls like a web page) and `t-phone` or `t-tablet` (and `t-short` on a phone on its side). The
+layer wraps `PL.app.selectTab`, `setRoot`, `push`, `pop` and `replaceTop`; the wrappers pass straight
+through unless the layer is wanted or in charge, so the laptop and TV paths never run them. A stage
+screen pushed on top (the player, the TV guide) shows the stage again, scaled as before, until it
+closes; then the layer comes back and the page refreshes its progress. The browser's Back button,
+Android's Back and Esc go through `web/web.js` to the stand-in: a sheet closes, then a page pops,
+then the top of another tab goes to the start tab, then the browser may leave the site.
+
+**For the touch player and the phone guide (phases 3 and 4).**
+
+```js
+PL.touch.play(item, opts)   // plays a title; opts as PL.screens.player ({offset})
+PL.touch.playLive(live)     // tunes a channel; live as js/screens/livetv.js playList builds it
+PL.touch.screens.live()     // the Live TV tab's root page
+```
+
+Today `play` and `playLive` push the TV player on the stage. Replace them (and the Live TV tab's
+page) and everything in the layer uses the new ones. A page is `{el, onShow({back}), onHide(),
+destroy(), onReselect()}`; `PL.touch.push(page)`, `PL.touch.back()`, `PL.touch.sheet({...})`,
+`PL.touch.menu(item)` and `PL.touch.toast(text)` are the rest of the shell.
+
+**Long press.** `web/web.js` turns a 550 ms press into a `contextmenu` event (Android sends its own);
+`PL.touch.ui.onHold` opens the title's quick actions from it, and the click at the end of the press
+is swallowed. Every title also has a "…" button.
 
 ## Plugins
 
@@ -279,7 +323,7 @@ HLS only, no Media Source) and Android Chrome.
 - The server's local address needs Chrome's local-network permission; without it streams go through
   Remote Access or the relay.
 - No Chromecast/AirPlay, no picture-in-picture button, no offline downloads.
-- Phones: usable but not designed for (see above).
+- Phones and tablets: the touch player and the phone guide are still the TV's, scaled to the screen (see above).
 
 ## Building and deploying
 

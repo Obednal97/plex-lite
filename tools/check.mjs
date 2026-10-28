@@ -5,7 +5,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const APP = fileURLToPath(new URL('..', import.meta.url));
@@ -40,6 +40,10 @@ const BAD_CSS = [
   [/\bfit-content\b/, 'fit-content'],
 ];
 
+// web/touch/ is the phone and tablet layer (docs/WEB.md, "Phones and tablets"): web only, never
+// loaded by the TV, so it may use modern JS and CSS. Exactly that folder and nothing else.
+const isTouch = (rel) => rel.split(sep).join('/') === 'web/touch' || rel.split(sep).join('/').startsWith('web/touch/');
+
 // web/vendor holds third-party code shipped only in the web build (hls.js, see
 // THIRD-PARTY-NOTICES.md): it isn't ours to rewrite for Chrome 53, and the TV never loads it.
 function files(dir, ext) {
@@ -47,6 +51,7 @@ function files(dir, ext) {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
     if (relative(APP, p) === join('web', 'vendor')) continue;
+    if (isTouch(relative(APP, p))) continue; // web/touch: checked by its own rules below
     if (statSync(p).isDirectory()) out = out.concat(files(p, ext));
     else if (p.endsWith(ext) && !name.startsWith('dev-config')) out.push(p);
   }
@@ -92,6 +97,49 @@ for (const file of [...files(join(APP, 'css'), '.css'), ...files(join(APP, 'plug
   text.split('\n').forEach((code, i) => {
     for (const [re, msg] of BAD_CSS) if (re.test(code)) report(file, i + 1, msg);
   });
+}
+
+// ---- web/touch/: modern JS and CSS, but still parsed, strict, and fenced in -------------------------
+
+const TOUCH_DIR = join(APP, 'web', 'touch');
+function allFiles(dir, exts) {
+  let out = [];
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) out = out.concat(allFiles(p, exts));
+    else if (exts.some((e) => name.endsWith(e))) out.push(p);
+  }
+  return out;
+}
+if (existsSync(TOUCH_DIR)) {
+  for (const file of allFiles(TOUCH_DIR, ['.js'])) {
+    const src = readFileSync(file, 'utf8');
+    try {
+      acorn.parse(src, { ecmaVersion: 'latest', sourceType: 'script', locations: true });
+    } catch (e) {
+      report(file, e.loc ? e.loc.line : '?', `syntax error: ${e.message}`);
+      continue;
+    }
+    if (!/^\s*(\/\/.*\n)*\s*'use strict';/m.test(src)) report(file, 1, "missing 'use strict'");
+  }
+}
+// Self-check: the exemption covers web/touch/ only. Every other .js and .css file the app ships
+// (js, css, plugins, catalog, examples, web) must have gone through the Chrome 53 rules above.
+for (const probe of ['web/touch.js', 'web/touchy/a.js', 'js/web/touch/a.js', 'web/touch-x/a.css']) {
+  if (isTouch(probe)) report(join(APP, 'tools/check.mjs'), '-', `self-check: ${probe} must not be exempt`);
+}
+{
+  const checked = new Set([
+    ...['js', 'plugins', 'catalog', 'examples', 'web'].flatMap((d) => files(join(APP, d), '.js')),
+    ...['css', 'plugins', 'web'].flatMap((d) => files(join(APP, d), '.css')),
+  ]);
+  for (const d of ['js', 'css', 'plugins', 'catalog', 'examples', 'web']) {
+    for (const file of allFiles(join(APP, d), ['.js', '.css'])) {
+      const rel = relative(APP, file).split(sep).join('/');
+      if (rel.startsWith('web/vendor/') || isTouch(rel) || /(^|\/)dev-config[^/]*\.js$/.test(rel)) continue;
+      if (!checked.has(file)) report(file, '-', 'self-check: escaped the Chrome 53 rules');
+    }
+  }
 }
 
 const html = readFileSync(join(APP, 'index.html'), 'utf8');

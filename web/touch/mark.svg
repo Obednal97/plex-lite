@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Plex Lite app icon (original artwork, MIT like the rest of the repo).
+       A play mark with speed lines: "a fast way to play". Render with tools/make-icons.py. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#262a35"/>
+      <stop offset="1" stop-color="#14161c"/>
+    </linearGradient>
+    <linearGradient id="fg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7cf2dc"/>
+      <stop offset="1" stop-color="#2fb5e8"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="512" height="512" rx="112" ry="112" fill="url(#bg)"/>
+  <g transform="translate(9 0)">
+  <!-- play mark: a triangle with softened corners -->
+  <path d="M214 134 C214 112 238 99 257 110 L404 236 C421 247 421 265 404 276 L257 402 C238 413 214 400 214 378 Z"
+        fill="url(#fg)"/>
+  <!-- speed lines -->
+  <rect x="78" y="186" width="104" height="32" rx="16" fill="#7cf2dc" fill-opacity="0.9"/>
+  <rect x="112" y="240" width="70" height="32" rx="16" fill="#5ad6e2" fill-opacity="0.75"/>
+  <rect x="140" y="294" width="42" height="32" rx="16" fill="#2fb5e8" fill-opacity="0.6"/>
+  </g>
+</svg>
