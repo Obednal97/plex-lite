@@ -278,15 +278,23 @@
           var r = routes()[g];
           if (r !== 'trying') report(g, r);
         };
+        // just asked: the browser's prompt may sit unanswered, so the local address doesn't hold up
+        // a route that answered (once it's allowed, the web build moves to the local address)
+        var lanAsked = gate === 'asked';
         var decide = function () {
           if (settled) return;
+          var waiting = false;
           for (var i = 0; i < state.length; i++) {
-            if (state[i] === 'pending') return;
+            if (state[i] === 'pending') {
+              if (lanAsked && routeOf(cands[i].kind) === 'lan') { waiting = true; continue; }
+              return;
+            }
             if (state[i] === 'ok') {
               settled = true;
               return resolve({ machineId: resource.clientIdentifier, name: resource.name, uri: cands[i].uri, token: token, kind: cands[i].kind });
             }
           }
+          if (waiting) return;
           settled = true;
           var err = new Error('Could not reach ' + resource.name + ' at any of its addresses');
           err.code = 'UNREACHABLE';
@@ -383,7 +391,7 @@
     opts = opts || {};
     var cached = plex.server;
     var rediscover = function (quiet) {
-      var o = quiet ? { quiet: true, prefer: opts.prefer, isCurrent: opts.isCurrent } : opts;
+      var o = quiet ? { quiet: true, prefer: opts.prefer } : opts;
       return plex.listServers().then(function (servers) {
         if (!servers.length) {
           var e = new Error('No Plex servers are linked to this account');
@@ -399,6 +407,12 @@
           throw err;
         });
       }).then(function (server) {
+        // an attempt that was dropped meanwhile (Back, Cancel) keeps its hands off the server in use
+        if (o.isCurrent && !o.isCurrent()) {
+          var dropped = new Error('dropped');
+          dropped.cancelled = true;
+          throw dropped;
+        }
         plex.useServer(server);
         return server;
       });

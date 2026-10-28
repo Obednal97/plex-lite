@@ -338,6 +338,26 @@ test('connect: the local-network gate holds the local request until it decides',
   assert.ok(timeouts.some(([h, t]) => h.startsWith('203-0-113-5') && t === 4000));
 });
 
+test('connect: after the explainer, an unanswered prompt does not hold up Remote Access', async () => {
+  const PL = load('web');
+  fakeHttp(PL, { '10-0-0-2': () => new Promise(() => {}), '203-0-113-5': 'ok' });
+  PL.plex.lanGate = () => Promise.resolve('asked');
+  assert.equal((await PL.plex.connect(RESOURCE)).kind, 'remote');
+  // and when nothing else answers, it still waits for the local address
+  fakeHttp(PL, { '10-0-0-2': () => new Promise((r) => setTimeout(() => r({}), 20)), '203-0-113-5': 'fail', '198-51-100-7': 'fail' });
+  assert.equal((await PL.plex.connect(RESOURCE)).kind, 'lan');
+});
+
+test('ensureServer: a dropped attempt leaves the server in use alone', async () => {
+  const PL = load('web');
+  PL.plex.token = 't';
+  const before = { machineId: 'old', name: 'Old', uri: 'https://old', token: 'x', kind: 'remote' };
+  PL.plex.server = before;
+  fakeHttp(PL, { '/api/v2/resources': () => Promise.resolve([{ ...RESOURCE, provides: 'server' }]), 'plex.direct': 'ok' });
+  await assert.rejects(PL.plex.ensureServer(true, { isCurrent: () => false }), (e) => e.cancelled === true);
+  assert.equal(PL.plex.server, before);
+});
+
 test('connect: a dropped attempt never asks (isCurrent is passed to the gate)', async () => {
   const PL = load('web');
   fakeHttp(PL, { '203-0-113-5': 'ok' });

@@ -1131,7 +1131,8 @@
     var switched = Promise.resolve(null);
     if (chosen && L.needsSwitch(chosen.user, this.currentUuid)) {
       switched = (chosen.token ? Promise.resolve(chosen.token) : plex.switchToken(chosen.user)).then(null, function (err) {
-        if (err) err.plexTv = true; // plex.tv refused or couldn't be reached: not the server
+        // plex.tv couldn't be reached: not the server's fault (a refusal shows as it is)
+        if (err && (!err.status || err.status >= 500)) err.plexTv = true;
         throw err;
       });
     }
