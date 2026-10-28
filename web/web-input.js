@@ -47,8 +47,11 @@
   var state = {
     setting: SETTINGS.indexOf(saved) >= 0 ? saved : 'auto',
     detected: startMode({ ua: navigator.userAgent, mq: mq }),
+    // a TV or console browser: its pointer (a Magic Remote, a gamepad's cursor) is the remote's
+    tv: TV_UA.test(navigator.userAgent || ''),
     mode: null,
     nav: null,
+    last: null, // the last touch or mouse input: 'touch' | 'pointer'
   };
   var listeners = [];
 
@@ -81,7 +84,7 @@
   // Keycaps made with PL.keycap carry the button's name (data-key) and are relabelled in place.
   function relabel() {
     PL.keyLabels = labels();
-    var caps = document.querySelectorAll('[data-key]');
+    var caps = document.querySelectorAll('.keycap[data-key]');
     for (var i = 0; i < caps.length; i++) {
       var text = PL.keyLabel(caps[i].getAttribute('data-key'));
       if (caps[i].textContent !== text) caps[i].textContent = text;
@@ -116,8 +119,14 @@
   // the mode); keys only bring up the focus plate and key hints, never a different layout.
   function used(kind) {
     var mode = state.mode;
-    if (!pinned() && kind !== 'keys') mode = kind;
+    if (kind !== 'keys') state.last = kind;
+    if (!pinned() && kind !== 'keys' && !(state.tv && kind === 'pointer')) mode = kind;
     apply(mode, kind);
+  }
+
+  // the mouse is already in charge: nothing to switch
+  function mouseInCharge() {
+    return state.nav === 'pointer' && (pinned() || state.tv || state.mode === 'pointer');
   }
 
   // ---- Listening ----------------------------------------------------------------------------------
@@ -136,12 +145,12 @@
   function mouseUsed() {
     if (Date.now() - lastTouchAt < TOUCH_GHOST_MS) return;
     anchor = null;
-    if (state.nav === 'pointer' && (pinned() || state.mode === 'pointer')) return;
+    if (mouseInCharge()) return;
     used('pointer');
   }
 
   function moved(x, y) {
-    if (state.nav === 'pointer' && (pinned() || state.mode === 'pointer')) return;
+    if (mouseInCharge()) return;
     if (Date.now() - lastTouchAt < TOUCH_GHOST_MS) return;
     if (!anchor) {
       anchor = { x: x, y: y };
@@ -171,7 +180,12 @@
     }, opts);
     // browsers without pointer events
     document.addEventListener('touchstart', touched, opts);
-    document.addEventListener('mousemove', function (e) { moved(e.clientX, e.clientY); }, opts);
+    // a pen hovering sends mouse events too: with pointer events only a mouse's moves count
+    if (window.PointerEvent) {
+      document.addEventListener('pointermove', function (e) { if (e.pointerType === 'mouse') moved(e.clientX, e.clientY); }, opts);
+    } else {
+      document.addEventListener('mousemove', function (e) { moved(e.clientX, e.clientY); }, opts);
+    }
     // a wheel or a trackpad swipe: only mice and trackpads send them
     document.addEventListener('wheel', mouseUsed, opts);
     document.addEventListener('keydown', keyed, true);
@@ -189,7 +203,9 @@
       if (SETTINGS.indexOf(value) < 0) return;
       state.setting = value;
       PL.storage.set('input', value);
-      var mode = value === 'auto' ? state.detected : value;
+      // back to Automatic: what was used last (a touch or a mouse), else what the browser said
+      var mode = value !== 'auto' ? value
+        : state.last && !(state.tv && state.last === 'pointer') ? state.last : state.detected;
       apply(mode, navFor(mode));
     },
     on: function (fn) { if (listeners.indexOf(fn) < 0) listeners.push(fn); },

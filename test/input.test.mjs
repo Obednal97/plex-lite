@@ -12,7 +12,7 @@ const ROOT = new URL('..', import.meta.url).pathname;
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 
 // A page with core.js (and web-input.js on the web). media: the media queries that match.
-function page({ platform = 'web', media = [], ua = 'Mozilla/5.0 (Macintosh) Chrome/150.0', stored = {} } = {}) {
+function page({ platform = 'web', media = [], ua = 'Mozilla/5.0 (Macintosh) Chrome/150.0', stored = {}, pointerEvents = false } = {}) {
   const store = {};
   for (const [k, v] of Object.entries(stored)) store['pl.' + k] = JSON.stringify(v);
   const handlers = {};
@@ -32,6 +32,7 @@ function page({ platform = 'web', media = [], ua = 'Mozilla/5.0 (Macintosh) Chro
     },
   };
   const window = {
+    PointerEvent: pointerEvents ? function PointerEvent() {} : undefined,
     PL_PLATFORM: platform,
     addEventListener() {},
     matchMedia: (q) => ({ matches: media.includes(q) }),
@@ -156,8 +157,10 @@ test('web: Settings -> Controls pins the mode, saved per browser', () => {
   assert.equal(p.PL.input.mode(), 'remote');
   assert.equal(page({ media: MOUSE, stored: { input: 'touch' } }).PL.input.mode(), 'touch');
   assert.equal(page({ media: MOUSE, stored: { input: 'bogus' } }).PL.input.setting(), 'auto');
+  // back to Automatic: the touch was the last input
   p.PL.input.set('auto');
-  assert.equal(p.PL.input.mode(), 'pointer');
+  assert.equal(p.PL.input.mode(), 'touch');
+  assert.equal(page({ media: MOUSE, stored: { input: 'remote' } }).PL.input.set('auto'), undefined);
 });
 
 test('web: key hints follow the mode (remote buttons, keycaps, nothing for touch)', () => {
@@ -189,4 +192,55 @@ test('web: change events carry the old and new state', () => {
   p.PL.input.off(fn);
   p.fire('pointerdown', { pointerType: 'touch' });
   assert.equal(seen.length, 1);
+});
+
+test('web: a click or the wheel is a mouse at once', () => {
+  const p = page({ media: TOUCH });
+  p.fire('pointerdown', { pointerType: 'mouse' });
+  assert.equal(p.PL.input.mode(), 'pointer');
+  const q = page({ media: [] });
+  q.fire('wheel', { clientX: 5, clientY: 5 });
+  assert.deepEqual([q.PL.input.mode(), q.PL.input.hints()], ['pointer', 'keys']);
+});
+
+test('web: on a TV or console browser the cursor only hides the focus plate', () => {
+  const p = page({ media: MOUSE, ua: 'Mozilla/5.0 (Web0S; Linux/SmartTV) Chrome/87' });
+  move(p, 0, 0);
+  move(p, 60, 60);
+  p.fire('wheel', {});
+  assert.deepEqual([p.PL.input.mode(), p.PL.input.nav(), p.PL.input.hints()], ['remote', 'pointer', 'remote']);
+  assert.equal(p.pointerOn(), true);
+  assert.equal(p.PL.keyLabel('OK'), 'OK');
+  p.fire('keydown', { keyCode: 40 });
+  assert.equal(p.pointerOn(), false);
+});
+
+test('web: back to Automatic picks the last input used', () => {
+  const p = page({ media: MOUSE });
+  p.fire('pointerdown', { pointerType: 'touch' });
+  p.PL.input.set('remote');
+  p.PL.input.set('auto');
+  assert.equal(p.PL.input.mode(), 'touch');
+});
+
+test('web: a pen hovering is not a mouse (pointer events)', () => {
+  const p = page({ media: TOUCH, pointerEvents: true });
+  p.fire('pointermove', { pointerType: 'pen', clientX: 0, clientY: 0 });
+  p.fire('pointermove', { pointerType: 'pen', clientX: 90, clientY: 90 });
+  p.fire('mousemove', { clientX: 200, clientY: 200 });
+  assert.equal(p.PL.input.mode(), 'touch');
+  p.fire('pointermove', { pointerType: 'mouse', clientX: 0, clientY: 0 });
+  p.fire('pointermove', { pointerType: 'mouse', clientX: 90, clientY: 90 });
+  assert.equal(p.PL.input.mode(), 'pointer');
+});
+
+test('TV: the stub has the same methods as the web module', () => {
+  const tv = page({ platform: 'webos' }).PL.input;
+  const webInput = page({ media: MOUSE }).PL.input;
+  for (const k of ['mode', 'nav', 'hints', 'setting', 'detected', 'set', 'label', 'on', 'off']) {
+    assert.equal(typeof tv[k], 'function', k);
+    assert.equal(typeof webInput[k], 'function', k);
+  }
+  tv.set('touch');
+  assert.equal(tv.mode(), 'remote');
 });

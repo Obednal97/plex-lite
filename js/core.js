@@ -51,6 +51,9 @@ PL.input = {
   nav: function () { return document.body && document.body.classList.contains('pointer') ? 'pointer' : 'keys'; },
   hints: function () { return 'remote'; },
   setting: function () { return 'remote'; },
+  detected: function () { return 'remote'; },
+  set: function () {},
+  label: function () { return 'Remote'; },
   on: function () {},
   off: function () {},
 };

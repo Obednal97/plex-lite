@@ -131,15 +131,18 @@ switches over anyway. The TV app never loads this file: it is always `remote` an
 `<html>`.
 
 **Switching by the last input used.** A touch switches to `touch`. A real mouse move switches to
-`pointer`: the mouse has to travel 8 px, and mouse events within a second of a touch are ignored
-(browsers send them after a tap). A click or the wheel counts at once. Arrow keys, Enter, Tab and Page
+`pointer`: the mouse has to travel 8 px, mouse events within a second of a touch are ignored
+(browsers send them after a tap), and a pen hovering doesn't count. A click or the wheel counts at
+once. On a TV or console browser a cursor (a Magic Remote, a gamepad's pointer) only hides the focus
+plate, as on the TV: the mode stays `remote`. Arrow keys, Enter, Tab and Page
 Up/Down bring up the focus plate and keyboard hints but **never change the layout**: a laptop
 stays in the mouse layout, a tablet with a keyboard stays in the touch layout until the next touch.
 Other keys (Space, letters) and keys typed into a field change nothing.
 
 **Settings → Controls** pins the mode: Automatic (the default), Remote, Mouse & keyboard or Touch,
 kept in this browser's `localStorage` (`pl.input`). Pinned, the layout no longer switches; the last
-input still decides whether the focus plate shows.
+input still decides whether the focus plate shows. Going back to Automatic picks what was used last
+(a touch or a mouse), else the starting mode.
 
 ### The contract (for the rest of the web layer)
 
@@ -157,13 +160,14 @@ PL.input.on(fn)     // fn({mode, nav, prevMode, prevNav}) after every change; PL
 - `body.pointer` (the Magic Remote's class in `js/app.js`: hover shows focus, the focus plate is
   hidden) is on whenever `nav` isn't `keys`.
 - `hints()` is `remote` in remote mode, `none` when the last input was a touch (outside remote mode),
-  else `keys`. With `none`, CSS hides the hint rows (`.osd-hints`, `.lb-hints`, `.text-hint`).
+  else `keys`. With `none`, CSS hides the hint rows (`.osd-hints`, `.lb-hints`). Text built on the
+  spot ("Press OK to save") keeps the names it was built with.
 - **Key hints relabel themselves.** Build a keycap with `PL.keycap(name)` (`'OK'`, `'Back'`,
   `'CH ±'`...): it keeps the button's name in `data-key` and its text is rewritten when the mode
   changes: OK, Enter or Tap; Back or Esc; Hold OK, Shift+Enter, Right-click or Long-press.
   `PL.keyLabel(name)` gives the current name for text built on the spot.
-- Shared code may call `PL.input.mode()` anywhere: on the TV `js/core.js` provides a stub that
-  always answers `remote` (and `nav()` from `body.pointer`).
+- Shared code may call any of these anywhere: on the TV `js/core.js` provides a stub with the same
+  methods that always answers `remote` (and `nav()` from `body.pointer`); `set()` does nothing.
 
 ## Keyboard, mouse and window
 
