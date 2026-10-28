@@ -38,8 +38,8 @@
 
   // The layout is 1920 stage px wide, scaled to the window's width, and its height follows the
   // window (--stage-h, PL.ui.SCREEN_H): no bars. Wider than 1920x900 (ultra-wide, or a short
-  // window) the stage stays 900 tall with bars at the sides; taller than 4:3 (a phone in portrait)
-  // it falls back to the 1920x1080 stage letterboxed until the touch layout takes over.
+  // window) the stage stays 900 tall with bars at the sides; narrower than 4:3 it falls back to the
+  // 1920x1080 stage letterboxed (phones and narrow windows get web/touch/ instead).
   var MIN_H = 900;
   var MAX_H = 1440;
   web.stage = { w: 1920, h: 1080, scale: 1 };
@@ -47,6 +47,11 @@
   // The layout viewport, not innerWidth: a phone's browser zooms out to show the 1920 px body
   // before it is scaled, which makes innerWidth that wide too.
   function fit() {
+    // the first-run screens draw outside the stage, at the window's own size (js/screens/firstrun.js)
+    if (document.documentElement.classList.contains('fr-on')) {
+      document.body.style.transform = '';
+      return;
+    }
     var w = document.documentElement.clientWidth || window.innerWidth;
     var h = document.documentElement.clientHeight || window.innerHeight;
     var s = w / 1920;
@@ -73,6 +78,7 @@
       if (ev) document.dispatchEvent(ev);
     }
   }
+  web.fit = fit;
   window.addEventListener('resize', PL.rafThrottle(fit));
   fit(); // this script runs at the end of <body>: scale before the first layout
   document.addEventListener('DOMContentLoaded', fit);
@@ -217,6 +223,14 @@
   window.addEventListener('popstate', function () {
     armed = false;
     var app = PL.app;
+    var top = app.top();
+    // the first-run screens step back through their own flow, then leave the site
+    if (top && top.ownsBack) {
+      if (!top.canBack()) { history.back(); return; }
+      app.press(K.BACK);
+      arm();
+      return;
+    }
     // the top level: this Back leaves the site (the entry it popped was only ours)
     if (app.stack.length <= 1 && (app.tabsFocused || !(app.top() && app.top().root))) {
       history.back();
@@ -240,25 +254,47 @@
   // Until it's allowed, Plex Lite uses Remote Access or the relay; when it's allowed later, it moves
   // to the local address. state: 'granted' | 'denied' | 'prompt' | null (no such permission here).
   web.lna = { state: null, status: null };
+  // settles once the browser has said what the permission is (or that it has none)
+  var lnaKnown;
+  web.lnaReady = new Promise(function (resolve) { lnaKnown = resolve; });
+  setTimeout(function () { lnaKnown(); }, 1500);
   function watchLna() {
-    if (!navigator.permissions || !navigator.permissions.query) return;
-    var names = ['local-network-access', 'local-network'];
+    if (!navigator.permissions || !navigator.permissions.query) { lnaKnown(); return; }
+    var names = PL.firstrunLogic.LNA_NAMES;
     var tryName = function (i) {
-      if (i >= names.length) return;
+      if (i >= names.length) { lnaKnown(); return; }
       var q;
       try { q = navigator.permissions.query({ name: names[i] }); } catch (e) { tryName(i + 1); return; }
       q.then(function (status) {
         web.lna.status = status;
         web.lna.state = status.state;
+        lnaKnown();
         status.onchange = function () {
           web.lna.state = status.state;
           PL.log('local network access', status.state);
+          if (status.state === 'granted') PL.storage.del('lnaSkipped');
           onLnaChange(status.state);
         };
       }, function () { tryName(i + 1); });
     };
     tryName(0);
   }
+
+  // Before the first request to the server's local address (js/plex.js lanGate): the explainer
+  // (board A5) when Chrome would ask, so Chrome's own prompt comes with a reason. Skipped when the
+  // permission is already granted or denied, or the explainer was skipped before (Settings, Local
+  // network access, asks again). o.quiet: a background check, which never asks.
+  web.lnaAsk = false;
+  PL.plex.lanGate = function (resource, o) {
+    return web.lnaReady.then(function () {
+      if (web.lnaAsk && web.lna.state === 'prompt') return 'allow';
+      var d = PL.firstrunLogic.lnaDecision({
+        platform: 'web', state: web.lna.state, hasLocal: true, skipped: !!PL.storage.get('lnaSkipped', false),
+      });
+      if (d !== 'ask') return d;
+      return PL.firstrun.askLna(o);
+    });
+  };
 
   function onLnaChange(state) {
     var s = PL.plex.server;
@@ -283,7 +319,7 @@
     switch (web.lna.state) {
       case 'granted': return 'Allowed';
       case 'denied': return 'Blocked';
-      case 'prompt': return 'Not asked yet';
+      case 'prompt': return PL.storage.get('lnaSkipped', false) ? 'Skipped' : 'Not asked yet';
       default: return 'Not needed here';
     }
   };
@@ -336,6 +372,22 @@
       lines.push(['Blocked for this site', 'To stream directly at home: site settings (the icon left of the address), Local network access, Allow; then reload']);
     } else if (web.lna.state === 'prompt') {
       lines.push(['Not asked yet', 'At home, the browser asks to let this site reach devices on your local network: allow it to stream straight from your server']);
+      // skipped on the first run: ask now (Chrome's prompt follows the next request at home)
+      if (s.kind !== 'lan') {
+        sheet('Local network access', lines.concat([['Away from home', 'Plex Lite uses Plex Remote Access, else the Plex relay (slower, limited quality)']]), [{
+          label: 'Look for my server at home',
+          action: function () {
+            PL.app.pop();
+            PL.storage.del('lnaSkipped');
+            web.lnaAsk = true;
+            PL.plex.ensureServer(true).then(function (server) {
+              web.lnaAsk = false;
+              PL.toast(server.kind === 'lan' ? 'Now streaming over your local network' : 'Still using ' + (server.kind === 'relay' ? 'the Plex relay' : 'Plex Remote Access'));
+            }, function () { web.lnaAsk = false; });
+          },
+        }]);
+        return;
+      }
     } else if (web.lna.state === 'granted') {
       lines.push(['Allowed', 'At home, Plex Lite streams straight from your server']);
     } else {

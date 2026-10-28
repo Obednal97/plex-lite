@@ -1,0 +1,362 @@
+/* First run: sign-in, Who's watching, PIN, connecting, errors (js/screens/firstrun.js, the boards of
+   Direction A "Poster wall"). This file is shared by the TV and the web build, so it follows the TV's
+   Chrome 53 rules (no flex gap, grid, clamp/min/max, inset, backdrop-filter; animate transform and
+   opacity only). It holds the looks and the desktop board's metrics (1440x900); .fr-tv sets the
+   TV boards' sizes, and web/firstrun-web.css makes the web layout responsive (phones, ultrawide). */
+
+.fr {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: hidden; z-index: 40;
+  background: #0c0c0f; color: #f7fafc; font-size: 16px; line-height: 1.4; text-align: left;
+  -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none;
+}
+.fr * { box-sizing: border-box; }
+.fr-title, .fr-lead, .fr-note, .fr-sheet-title, .fr-sheet-body, .fr-steps, .fr-steps-phone, .fr-who-title, .fr-who-note,
+.fr-pin-title, .fr-pin-help { margin: 0; padding: 0; }
+.fr b { color: #f7fafc; font-weight: 700; }
+.fr-hidden { display: none !important; }
+.fr-ic { display: block; flex: none; width: 1em; height: 1em; }
+
+/* ---- The wall: one pre-composed image (img/firstrun/), dimmed by flat and gradient scrims ----------- */
+
+.fr-wall { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: hidden; }
+.fr-wall-img {
+  position: absolute; left: -13px; top: -77px; width: 1786px; height: 1054px;
+  background-repeat: no-repeat; background-size: 100% 100%; opacity: 0; transition: opacity 500ms linear;
+}
+.fr-wall-sharp { background-image: url("../img/firstrun/wall.jpg"); }
+.fr-wall-soft { background-image: url("../img/firstrun/wall-soft.jpg"); left: -173px; }
+.fr-m-hero .fr-wall-sharp, .fr-m-side .fr-wall-sharp, .fr-m-soft .fr-wall-soft { opacity: 1; }
+/* the slow drift: transform only, one layer; the hidden copy stands still */
+.fr-drift.fr-m-hero .fr-wall-sharp, .fr-drift.fr-m-side .fr-wall-sharp, .fr-drift.fr-m-soft .fr-wall-soft {
+  animation: frDrift 90s ease-in-out infinite alternate; will-change: transform;
+}
+@keyframes frDrift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-48px, -28px, 0); }
+}
+
+.fr-veil, .fr-wedge, .fr-fade-bottom { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; transition: opacity 400ms linear; }
+.fr-veil { background: #0c0c0f; opacity: 0.58; }
+.fr-m-hero .fr-veil { opacity: 0.42; }
+.fr-m-side .fr-veil { opacity: 0.55; }
+.fr-v-lna .fr-veil, .fr-v-connecting .fr-veil { opacity: 0.55; }
+.fr-v-error .fr-veil, .fr-v-blocked .fr-veil, .fr-v-servers .fr-veil { opacity: 0.62; }
+/* the wedge behind the left column, with the top and bottom shades (boards: edge 0.6) */
+.fr-wedge {
+  opacity: 0;
+  background:
+    linear-gradient(0deg, rgba(12, 12, 15, 0.85) 0%, rgba(12, 12, 15, 0) 100%) left bottom / 100% 35% no-repeat,
+    linear-gradient(180deg, rgba(12, 12, 15, 0.6) 0%, rgba(12, 12, 15, 0) 100%) left top / 100% 22% no-repeat,
+    linear-gradient(90deg, rgba(12, 12, 15, 0.97) 0%, rgba(12, 12, 15, 0.94) 33%, rgba(12, 12, 15, 0.6) 60%, rgba(12, 12, 15, 0.15) 86%, rgba(12, 12, 15, 0) 100%);
+}
+.fr-m-hero .fr-wedge, .fr-m-side .fr-wedge { opacity: 1; }
+.fr-fade-bottom { opacity: 0; }
+
+/* ---- Wordmark ----------------------------------------------------------------------------------- */
+
+.fr-brand { position: absolute; left: 96px; top: 64px; display: flex; align-items: center; z-index: 2; }
+.fr-brand-mark { display: block; width: 48px; height: 48px; }
+.fr-brand-name { margin-left: 14px; font-size: 26px; line-height: 1; font-weight: 700; letter-spacing: -0.5px; white-space: nowrap; }
+.fr-brand-name span { color: #5ad6e2; }
+
+/* ---- Views and their parts ---------------------------------------------------------------------- */
+
+.fr-view, .fr-page { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.fr-page > * { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+
+/* the left column (welcome, waiting, code) */
+.fr-col { position: absolute; left: 96px; top: 0; bottom: 0; width: 600px; display: flex; flex-direction: column; justify-content: center; z-index: 1; }
+.fr-page > .fr-col { height: auto; width: 600px; left: 96px; top: 0; bottom: 0; }
+.fr-title { font-size: 48px; line-height: 1.08; font-weight: 700; letter-spacing: -1.1px; white-space: pre-line; }
+.fr-title-hero { font-size: 60px; line-height: 1.05; letter-spacing: -1.5px; }
+.fr-lead { margin-top: 20px; font-size: 20px; line-height: 1.5; color: #cdd3dd; max-width: 520px; }
+.fr-hero .fr-lead { margin-top: 22px; font-size: 21px; }
+.fr-note { margin-top: 28px; font-size: 15px; line-height: 1.5; color: #b8bfcc; max-width: 520px; }
+.fr-note b { font-weight: 600; }
+.fr-status { margin-top: 28px; display: flex; align-items: center; font-size: 18px; line-height: 1.45; color: #b8bfcc; }
+.fr-status .fr-spin { width: 22px; height: 22px; margin-right: 12px; }
+.fr-notice { margin-top: 18px; font-size: 15px; line-height: 1.5; color: #ffd27a; min-height: 0; }
+.fr-notice:empty { display: none; }
+
+.fr-trust { margin-top: 28px; display: flex; align-items: flex-start; max-width: 500px; font-size: 15px; line-height: 1.5; color: #b8bfcc; }
+.fr-trust-icon { width: 17px; height: 17px; margin: 2px 10px 0 0; color: #9499a3; }
+
+.fr-credit { position: absolute; left: 96px; bottom: 40px; width: auto; height: auto; top: auto; font-size: 13px; line-height: 1.45; color: #9499a3; z-index: 1; }
+.fr-credit-short { display: none; }
+/* the TV has no welcome screen: T1 carries the wall's credit, bottom right */
+.fr-credit-tv { left: auto; right: 96px; bottom: 60px; font-size: 18px; color: #7d828c; }
+
+/* spinner: a ring with a teal arc, turning */
+.fr-spin { display: block; flex: none; animation: frSpin 900ms linear infinite; }
+.fr-spin-ring { fill: none; stroke: rgba(255, 255, 255, 0.16); stroke-width: 2.6; }
+.fr-spin-arc { fill: none; stroke: #5ad6e2; stroke-width: 2.6; stroke-linecap: round; }
+@keyframes frSpin { to { transform: rotate(360deg); } }
+
+/* ---- Buttons: quiet glass; the focused one sits on the white plate (ui.Glider, css/motion.css) ---- */
+
+.fr-actions { position: relative; margin-top: 40px; display: flex; flex-wrap: nowrap; align-items: center; }
+.fr-actions .glide-plate { display: none; }
+.fr-actions .glide-cap {
+  top: 0; left: 0; border-radius: 999px; background: #f7fafc;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+  transition: transform var(--t-cap) var(--spring), width var(--t-cap) var(--spring), height var(--t-cap) var(--spring), opacity 200ms linear;
+}
+.fr-btn {
+  position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center;
+  height: 56px; padding: 0 31px; margin: 0 14px 0 0; border: 0; border-radius: 28px; outline: none;
+  font: inherit; font-size: 19px; font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer;
+  color: #f7fafc; background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition: color 140ms linear 60ms, background-color 120ms linear;
+  -webkit-tap-highlight-color: transparent;
+}
+.fr-btn:last-child { margin-right: 0; }
+.fr-btn-text { background: transparent; box-shadow: none; color: #b8bfcc; }
+.fr-btn-icon { width: 22px; height: 22px; margin-right: 10px; }
+.fr-btn-trail { width: 18px; height: 18px; margin-left: 10px; opacity: 0.7; }
+/* on the plate: no glass of its own, dark ink */
+.fr-actions .glide-cap.on ~ .fr-btn.focused { background: transparent; box-shadow: none; color: #08080a; }
+.fr-actions.glide-landing .fr-btn { transition: none; }
+/* a column of buttons (cards, phones): full width, 10 px apart */
+.fr-stack { flex-direction: column; align-items: stretch; }
+.fr-stack .fr-btn { width: 100%; margin: 0 0 10px; height: 50px; font-size: 17px; }
+.fr-stack .fr-btn:last-child { margin-bottom: 0; }
+
+/* ---- Sheets: glass cards over the soft wall ---------------------------------------------------- */
+
+.fr-sheet {
+  position: absolute; z-index: 1; width: 720px; height: auto; padding: 44px 52px 46px; border-radius: 30px;
+  background: linear-gradient(180deg, rgba(44, 45, 50, 0.94) 0%, rgba(30, 31, 35, 0.96) 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.24), 0 30px 70px rgba(0, 0, 0, 0.5);
+}
+/* centred in the window */
+.fr-page > .fr-lna, .fr-page > .fr-conn, .fr-page > .fr-err, .fr-page > .fr-card {
+  left: 50%; top: 50%; transform: translate3d(-50%, -50%, 0); height: auto;
+}
+.fr-badge {
+  width: 64px; height: 64px; border-radius: 18px; display: flex; align-items: center; justify-content: center; flex: none;
+  background: rgba(90, 214, 226, 0.14); box-shadow: inset 0 0 0 1px rgba(90, 214, 226, 0.35); color: #5ad6e2; font-size: 32px;
+}
+.fr-badge-grey { background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); color: #f7fafc; }
+.fr-sheet-head { display: flex; align-items: center; }
+.fr-eyebrow { margin-left: 18px; font-size: 15px; font-weight: 600; color: #5ad6e2; letter-spacing: 0.06em; text-transform: uppercase; }
+.fr-sheet-title { margin-top: 24px; font-size: 36px; line-height: 1.12; font-weight: 700; letter-spacing: -0.7px; white-space: pre-line; }
+.fr-sheet-body { margin-top: 16px; font-size: 18px; line-height: 1.55; color: #cdd3dd; }
+
+/* A5: before the browser's local-network prompt */
+.fr-lna { width: 720px; padding: 44px 52px 46px; }
+.fr-title-lna { margin-top: 26px; font-size: 38px; letter-spacing: -0.8px; }
+.fr-lna .fr-sheet-body { margin-top: 18px; font-size: 19px; }
+.fr-info { margin-top: 22px; padding: 16px 18px; border-radius: 16px; background: rgba(255, 255, 255, 0.06); display: flex; align-items: flex-start; font-size: 16px; line-height: 1.55; color: #b8bfcc; }
+.fr-info-icon { width: 18px; height: 18px; margin: 2px 12px 0 0; color: #9499a3; }
+.fr-lna-actions { margin-top: 32px; }
+.fr-lna-actions .fr-btn:first-of-type { padding: 0 40px; }
+
+/* A6: connecting, a row per route */
+.fr-conn { width: 640px; padding: 40px 48px; }
+.fr-conn .fr-badge { font-size: 32px; }
+.fr-conn-head { margin-left: 20px; }
+.fr-conn-small { font-size: 15px; color: #b8bfcc; }
+.fr-conn-name { font-size: 30px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.2; }
+.fr-conn-steps { margin-top: 28px; }
+.fr-step-row { display: flex; align-items: flex-start; padding: 15px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.fr-step-mark { width: 30px; height: 30px; margin-right: 18px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.fr-step-done .fr-step-mark { background: rgba(90, 214, 226, 0.16); color: #5ad6e2; font-size: 17px; }
+.fr-step-skip .fr-step-mark { background: rgba(255, 255, 255, 0.08); color: #b8bfcc; font-size: 15px; }
+.fr-step-busy .fr-step-mark .fr-spin { width: 30px; height: 30px; }
+.fr-step-title { font-size: 19px; line-height: 30px; font-weight: 600; }
+.fr-step-detail { font-size: 15px; line-height: 1.5; color: #b8bfcc; }
+.fr-conn-note { margin-top: 18px; padding-top: 18px; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 15px; line-height: 1.55; color: #b8bfcc; }
+.fr-conn-note b { font-weight: 600; }
+.fr-conn-actions { margin-top: 26px; }
+.fr-conn-actions .fr-btn { height: 50px; font-size: 18px; padding: 0 32px; }
+
+/* A7: the server isn't answering, with what was tried */
+.fr-err-wide { width: 760px; padding: 44px 50px; }
+.fr-tried { margin-top: 22px; }
+.fr-tried-row { display: flex; justify-content: space-between; padding: 11px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 16px; line-height: 1.4; }
+.fr-tried-result { color: #b8bfcc; text-align: right; margin-left: 16px; }
+.fr-short { display: none; }
+.fr-tried-hint { margin-top: 14px; font-size: 15px; line-height: 1.55; color: #b8bfcc; }
+.fr-err-actions { margin-top: 30px; flex-wrap: wrap; }
+.fr-err-actions .fr-btn { height: 54px; font-size: 18px; margin: 0 12px 10px 0; }
+.fr-err-actions .fr-btn-icon { width: 21px; height: 21px; }
+
+/* A8: one card (popup blocked, no server, no libraries) */
+.fr-card { width: 400px; padding: 36px; border-radius: 26px; }
+.fr-card .fr-badge { width: 56px; height: 56px; border-radius: 16px; font-size: 28px; }
+.fr-card .fr-sheet-title { font-size: 27px; letter-spacing: -0.5px; }
+.fr-card .fr-sheet-body { margin-top: 14px; font-size: 16px; }
+.fr-card .fr-actions { margin-top: 0; padding-top: 52px; }
+.fr-card .fr-btn-icon { width: 20px; height: 20px; }
+
+/* ---- A2 / T1: a code for plex.tv/link, and a QR code --------------------------------------------- */
+
+.fr-page > .fr-view-code { position: absolute; }
+.fr-view-code > .fr-col { width: 640px; }
+.fr-steps { margin-top: 34px; list-style: none; }
+.fr-step { display: flex; align-items: baseline; font-size: 20px; line-height: 1.4; color: #cdd3dd; }
+.fr-step + .fr-step { margin-top: 14px; }
+.fr-step-n { width: 34px; flex: none; color: #9499a3; font-weight: 600; }
+.fr-steps-phone { display: none; }
+.fr-tiles { margin: 22px 0 0 34px; display: flex; transition: opacity 200ms linear; }
+.fr-tiles-wait { opacity: 0.35; }
+.fr-tiles-new { animation: frIn 320ms var(--spring) both; }
+.fr-tile {
+  width: 100px; height: 124px; margin-right: 14px; border-radius: 16px; display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  font-size: 76px; line-height: 1; font-weight: 700; color: #5ad6e2; font-variant-numeric: tabular-nums;
+}
+.fr-tile:last-child { margin-right: 0; }
+.fr-view-code .fr-status { margin: 26px 0 0 34px; font-size: 16px; }
+.fr-view-code .fr-status .fr-spin { width: 20px; height: 20px; }
+.fr-view-code .fr-actions { margin-top: 38px; }
+.fr-qr-card { left: auto; right: 130px; top: 50%; width: 380px; padding: 40px 40px 38px; transform: translate3d(0, -50%, 0); text-align: center; }
+.fr-page > .fr-view-code > .fr-qr-card { height: auto; }
+.fr-qr-holder { display: flex; justify-content: center; }
+.fr-qr { width: 244px; height: 244px; padding: 18px; background: #ffffff; border-radius: 20px; }
+.fr-qr svg { display: block; width: 100%; height: 100%; }
+.fr-qr-title { margin-top: 26px; font-size: 20px; font-weight: 700; }
+.fr-qr-text { margin-top: 8px; font-size: 16px; line-height: 1.5; color: #b8bfcc; white-space: pre-line; }
+@keyframes frIn { from { opacity: 0; transform: translate3d(0, 8px, 0); } to { opacity: 1; transform: none; } }
+
+/* ---- A3 / T2: Who's watching ------------------------------------------------------------------- */
+
+.fr-who { display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 70px; }
+.fr-who-title { font-size: 48px; font-weight: 700; letter-spacing: -0.96px; line-height: 1.2; text-align: center; }
+.fr-profiles { margin-top: 64px; display: flex; justify-content: center; flex-wrap: wrap; }
+.fr-profile {
+  width: 236px; padding: 0; border: 0; background: none; color: inherit; font: inherit; outline: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; -webkit-tap-highlight-color: transparent;
+}
+.fr-avatar {
+  position: relative; width: 152px; height: 152px; border-radius: 50%; flex: none;
+  display: flex; align-items: center; justify-content: center; font-size: 64px; font-weight: 700; color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  transition: transform var(--t-pop) var(--spring), box-shadow 200ms linear;
+}
+.fr-avatar-initial { text-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); line-height: 1; }
+.fr-avatar-img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 50%; opacity: 0; transition: opacity 240ms linear; }
+.fr-has-img .fr-avatar-img { opacity: 1; }
+.fr-tint-0 { background: linear-gradient(140deg, #1b7fa8 0%, #3fc0d6 100%); }
+.fr-tint-1 { background: linear-gradient(140deg, #6a45c9 0%, #b8509f 100%); }
+.fr-tint-2 { background: linear-gradient(140deg, #d9771c 0%, #d9473a 100%); }
+.fr-tint-3 { background: linear-gradient(140deg, #4a4d55 0%, #6f737c 100%); }
+.fr-tint-4 { background: linear-gradient(140deg, #2f8f5b 0%, #8cc152 100%); }
+.fr-avatar-lock {
+  position: absolute; right: -3px; bottom: -3px; width: 30%; height: 30%; border-radius: 50%; z-index: 1;
+  background: #1d1e22; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2); color: #f7fafc;
+  display: flex; align-items: center; justify-content: center; font-size: 23px;
+}
+.fr-avatar-lock .fr-ic { width: 0.5em; height: 0.5em; font-size: 46px; }
+.fr-pname { margin-top: 21px; font-size: 21px; line-height: 1.25; font-weight: 500; color: #b8bfcc; transition: color 140ms linear, transform var(--t-pop) var(--spring); }
+.fr-pnote { margin-top: 2px; font-size: 16px; line-height: 1.3; color: #9499a3; min-height: 21px; transition: transform var(--t-pop) var(--spring); }
+/* focus: the avatar grows (1.09) with a white rim; the name turns white; labels never scale */
+.fr-profile.focused .fr-avatar { transform: scale(1.09); box-shadow: 0 0 0 4px #f7fafc, 0 24px 49px rgba(0, 0, 0, 0.5); }
+.fr-profile.focused .fr-pname { color: #f7fafc; font-weight: 700; transform: translate3d(0, 9px, 0); }
+.fr-profile.focused .fr-pnote { transform: translate3d(0, 9px, 0); }
+.fr-who-foot { margin-top: 116px; display: flex; flex-direction: column; align-items: center; }
+.fr-who-note { font-size: 16px; line-height: 1.5; color: #b8bfcc; text-align: center; }
+.fr-who-foot .fr-actions { margin-top: 18px; justify-content: center; }
+.fr-who-foot .fr-btn { height: 48px; font-size: 17px; padding: 0 26px; }
+
+/* ---- A4: PIN ----------------------------------------------------------------------------------- */
+
+.fr-pin { display: flex; align-items: center; justify-content: center; }
+.fr-pin-side { width: 440px; margin-right: 130px; margin-top: 46px; display: flex; flex-direction: column; align-items: flex-start; }
+.fr-avatar-big { width: 120px; height: 120px; font-size: 50px; }
+.fr-avatar-big .fr-avatar-lock .fr-ic { font-size: 36px; }
+.fr-pin-title { margin-top: 34px; font-size: 44px; line-height: 1.1; font-weight: 700; letter-spacing: -0.9px; }
+.fr-dots { margin-top: 28px; display: flex; }
+.fr-dot { width: 20px; height: 20px; margin-right: 22px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.45); transition: background-color 120ms linear; }
+.fr-dot:last-child { margin-right: 0; }
+.fr-dot-on { background: #f7fafc; box-shadow: none; }
+.fr-shake { animation: frShake 420ms linear; }
+@keyframes frShake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  15% { transform: translate3d(-12px, 0, 0); }
+  30% { transform: translate3d(10px, 0, 0); }
+  45% { transform: translate3d(-8px, 0, 0); }
+  60% { transform: translate3d(6px, 0, 0); }
+  75% { transform: translate3d(-3px, 0, 0); }
+}
+.fr-pin-help { margin-top: 32px; font-size: 16px; line-height: 1.55; color: #b8bfcc; max-width: 400px; min-height: 75px; }
+.fr-pin-wrong { color: #ffb4a8; }
+.fr-pin-other { margin-top: 28px; }
+.fr-pin-other .fr-btn { height: 48px; font-size: 17px; padding: 0 26px; }
+.fr-keypad { width: 332px; display: flex; flex-wrap: wrap; }
+.fr-key {
+  width: 96px; height: 96px; margin: 0 22px 22px 0; padding: 0; border: 0; border-radius: 50%; outline: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font: inherit; font-size: 32px; font-weight: 500; color: #f7fafc;
+  background: rgba(255, 255, 255, 0.1); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: background-color 120ms linear, color 120ms linear, transform var(--t-pop) var(--spring);
+  -webkit-tap-highlight-color: transparent;
+}
+.fr-key:nth-child(3n) { margin-right: 0; }
+.fr-key:nth-child(n+10) { margin-bottom: 0; }
+.fr-key-gap { background: transparent; box-shadow: none; cursor: default; }
+.fr-key .fr-ic { width: 30px; height: 30px; }
+.fr-key.focused { background: #f7fafc; color: #08080a; box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45); }
+.fr-key:active { transform: scale(0.94); }
+
+/* ---- Keycap hints (TV) --------------------------------------------------------------------------- */
+
+.fr-keys { position: absolute; left: 96px; bottom: 54px; z-index: 2; display: flex; align-items: center; }
+.fr-keycap { display: inline-flex; align-items: center; margin-right: 34px; font-size: 24px; color: #b8bfcc; font-weight: 500; }
+.fr-keycap-key {
+  display: inline-block; padding: 0 11px; height: 35px; line-height: 35px; border-radius: 7px; margin-right: 12px;
+  background: rgba(255, 255, 255, 0.14); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); color: #f7fafc; font-size: 19px; font-weight: 700;
+}
+
+/* ==== The TV: the T boards at 1920x1080 ============================================================ */
+
+.fr-tv .fr-wall-img { left: 183px; top: -72px; width: 2074px; height: 1224px; }
+.fr-tv .fr-wall-soft { left: -77px; }
+.fr-tv.fr-m-side .fr-veil { opacity: 0.5; }
+.fr-tv .fr-wedge {
+  background:
+    linear-gradient(0deg, rgba(12, 12, 15, 0.85) 0%, rgba(12, 12, 15, 0) 100%) left bottom / 100% 35% no-repeat,
+    linear-gradient(180deg, rgba(12, 12, 15, 0.6) 0%, rgba(12, 12, 15, 0) 100%) left top / 100% 22% no-repeat,
+    linear-gradient(90deg, rgba(12, 12, 15, 0.97) 0%, rgba(12, 12, 15, 0.94) 32%, rgba(12, 12, 15, 0.6) 58%, rgba(12, 12, 15, 0.15) 84%, rgba(12, 12, 15, 0) 100%);
+}
+.fr-tv .fr-brand { left: 96px; top: 72px; }
+.fr-tv .fr-brand-mark { width: 64px; height: 64px; }
+.fr-tv .fr-brand-name { margin-left: 19px; font-size: 36px; letter-spacing: -0.7px; }
+
+/* T1: sign in with a code */
+.fr-tv .fr-view-code > .fr-col { left: 96px; width: 980px; }
+.fr-tv .fr-view-code .fr-title { font-size: 72px; line-height: 1.05; letter-spacing: -1.6px; }
+.fr-tv .fr-steps { margin-top: 44px; }
+.fr-tv .fr-step { font-size: 32px; line-height: 1.35; }
+.fr-tv .fr-step + .fr-step { margin-top: 18px; }
+.fr-tv .fr-step-n { width: 52px; }
+.fr-tv .fr-tiles { margin: 30px 0 0 52px; }
+.fr-tv .fr-tile { width: 136px; height: 168px; margin-right: 20px; border-radius: 22px; font-size: 104px; }
+.fr-tv .fr-tile:last-child { margin-right: 0; }
+.fr-tv .fr-view-code .fr-status { margin: 34px 0 0 52px; font-size: 26px; }
+.fr-tv .fr-view-code .fr-status .fr-spin { width: 30px; height: 30px; margin-right: 12px; }
+.fr-tv .fr-qr-card { right: 96px; width: 488px; padding: 48px 52px 46px; border-radius: 34px; }
+.fr-tv .fr-qr { width: 348px; height: 348px; padding: 24px; border-radius: 26px; }
+.fr-tv .fr-qr-title { margin-top: 32px; font-size: 30px; }
+.fr-tv .fr-qr-text { margin-top: 10px; font-size: 26px; line-height: 1.4; }
+
+/* T2: Who's watching */
+.fr-tv .fr-who { justify-content: flex-start; padding-top: 260px; }
+.fr-tv .fr-who-title { font-size: 64px; letter-spacing: -1.3px; line-height: 1.2; }
+.fr-tv .fr-profiles { margin-top: 83px; }
+.fr-tv .fr-profile { width: 320px; }
+.fr-tv .fr-profile .fr-avatar { width: 200px; height: 200px; font-size: 84px; }
+.fr-tv .fr-profile .fr-avatar-lock { font-size: 30px; right: -4px; bottom: -4px; }
+.fr-tv .fr-profile .fr-avatar-lock .fr-ic { font-size: 60px; }
+.fr-tv .fr-profile.focused .fr-avatar { box-shadow: 0 0 0 5px #f7fafc, 0 32px 64px rgba(0, 0, 0, 0.5); }
+.fr-tv .fr-pname { margin-top: 28px; font-size: 28px; }
+.fr-tv .fr-pnote { font-size: 22px; min-height: 29px; }
+.fr-tv .fr-profile.focused .fr-pname, .fr-tv .fr-profile.focused .fr-pnote { transform: translate3d(0, 12px, 0); }
+.fr-tv .fr-who-foot { position: absolute; left: 0; right: 0; top: 830px; margin-top: 0; }
+.fr-tv .fr-who-note { font-size: 26px; }
+.fr-tv .fr-who-foot .fr-actions { margin-top: 22px; }
+.fr-tv .fr-who-foot .fr-btn { height: 60px; font-size: 26px; padding: 0 33px; border-radius: 30px; }
+
+/* the other views on the TV: the desktop metrics, a quarter larger */
+.fr-tv.fr-v-pin .fr-view, .fr-tv.fr-v-lna .fr-view, .fr-tv.fr-v-connecting .fr-view, .fr-tv.fr-v-error .fr-view,
+.fr-tv.fr-v-servers .fr-view { zoom: 1.25; }

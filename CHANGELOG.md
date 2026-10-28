@@ -19,6 +19,15 @@ releases are fixes only.
   After an arrow key the TV's focus marks and key hints come back. A one-time strip of the main keys
   the first time the player opens with a mouse. Live TV gets Back, hiding, M and double-click. Remote
   mode and the TV app are unchanged.
+- **New first run** (docs/FIRSTRUN.md), on the TV and the web: a poster-wall welcome screen (free-licence
+  posters, credited), Plex's sign-in page in a popup with a clear "blocked" path, a plex.tv/link code
+  with a QR code that fills the code in, Who's watching? for Plex Home accounts with PIN entry (PIN
+  profiles now work in Settings → Profile too), an explainer before the browser's local-network prompt,
+  a connecting sheet with a row per route, and error sheets for no server, an unreachable server (what
+  was tried per route), no libraries and plex.tv being down. On the web it fills the window with its own
+  layouts for desktops, phones (portrait and landscape) and ultrawide screens. Server discovery reports
+  error codes (`err.code`, `err.routes`) instead of message strings. The web build now uses Inter
+  (self-hosted) throughout.
 - **Input modes on the web** (docs/WEB.md, "Input modes"): the web build tells remote, mouse and
   keyboard, and touch apart. It starts from the browser's pointer media queries (TV browsers and
   anything unclear start as remote), then follows the last input used: a touch, a real mouse move,

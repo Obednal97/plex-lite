@@ -318,7 +318,7 @@ const SHOTS = {
     await settle(page, 1000);
   },
   signin: async (page) => {
-    await page.waitForSelector('.code-tile');
+    await page.waitForSelector('.fr-tile:not(:empty)');
     await page.waitForTimeout(1200);
   },
 };

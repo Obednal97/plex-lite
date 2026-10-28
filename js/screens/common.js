@@ -1,4 +1,4 @@
-// Small screens: loading, message, sign-in, and the glass sheet (pickers and track menu).
+// Small screens: loading, message, and the glass sheet (pickers and track menu).
 'use strict';
 
 (function () {
@@ -34,72 +34,6 @@
       el: el,
       show: function () { PL.app.backdrop.set(null, 'none'); },
       key: function (code) { return row.key(code); },
-    };
-  };
-
-  // ---- Sign-in with a plex.tv/link code ------------------------------------------------------
-
-  screens.signin = function (onDone) {
-    var el = PL.el('div', 'signin-screen');
-    var card = PL.el('div', 'center-card');
-    card.appendChild(PL.el('div', 'signin-wait', 'On your phone or computer, go to'));
-    card.appendChild(PL.el('div', 'signin-url', 'plex.tv/link'));
-    var tiles = PL.el('div', 'code-tiles');
-    card.appendChild(tiles);
-    var status = PL.el('div', 'signin-wait');
-    card.appendChild(status);
-    el.appendChild(card);
-    var pollTimer = null;
-    var pinTimer = null;
-    var alive = true;
-
-    function setStatus(text, spinning) {
-      PL.clear(status);
-      if (spinning) status.appendChild(PL.ui.spinner());
-      status.appendChild(document.createTextNode(text));
-    }
-
-    function newPin() {
-      clearTimeout(pollTimer);
-      clearTimeout(pinTimer);
-      PL.clear(tiles);
-      setStatus('Getting a code…', true);
-      PL.plex.createPin().then(function (pin) {
-        if (!alive) return;
-        PL.clear(tiles);
-        String(pin.code).split('').forEach(function (ch) { tiles.appendChild(PL.el('span', 'code-tile', ch)); });
-        setStatus('and enter this code. Waiting for you to sign in…', true);
-        // codes expire (about 15 minutes); get a fresh one before that
-        pinTimer = setTimeout(newPin, 14 * 60 * 1000);
-        poll(pin.id);
-      }, function (err) {
-        if (!alive) return;
-        setStatus('Could not reach plex.tv (' + PL.errorMessage(err) + '). Retrying…', false);
-        pinTimer = setTimeout(newPin, 5000);
-      });
-    }
-
-    function poll(id) {
-      pollTimer = setTimeout(function () {
-        PL.plex.checkPin(id).then(function (token) {
-          if (!alive) return;
-          if (token) {
-            clearTimeout(pinTimer);
-            PL.plex.setToken(token);
-            onDone();
-          } else {
-            poll(id);
-          }
-        }, function () { if (alive) poll(id); });
-      }, 2000);
-    }
-
-    newPin();
-    return {
-      el: el,
-      show: function () { PL.app.backdrop.set(null, 'none'); },
-      destroy: function () { alive = false; clearTimeout(pollTimer); clearTimeout(pinTimer); },
-      key: function (code) { return !PL.isBack(code); },
     };
   };
 
