@@ -89,6 +89,8 @@ html = html.replace('<title>Plex Lite</title>', [
 ].join('\n'));
 html = html.replace(/(\s*)<script src="js\/core\.js"><\/script>/, '$1<script src="web/env.js"></script>$1<script src="js/core.js"></script>');
 html = html.replace(/(\s*)(<\/head>)/, '\n  <link rel="stylesheet" href="web/web.css">$1$2');
+// the Overseerr plugin's browser path (instead of its webOS service), right after its shared core
+html = html.replace(/(\s*)<script src="plugins\/overseerr\/seerr\.js"><\/script>/, (m, ws) => `${m}${ws}<script src="plugins/overseerr/seerr-web.js"></script>`);
 html = html.replace(/(\s*)<script src="js\/app\.js"><\/script>/, (m, ws) => m + WEB_SCRIPTS.map((s) => `${ws}<script src="${s}"></script>`).join(''));
 html = html.replace('<html lang="en">', `<html lang="en" data-version="${version}">`);
 if (html === before) fail('index.html did not change: has its layout moved?');
@@ -104,7 +106,7 @@ html = html.replace(/(src|href)="((?:js|css|web|plugins|img)\/[^"?]+)"/g, (m, at
 // the CSP allows no inline script or handler: catch one before Vercel serves a broken page
 if (/<script(?![^>]*\bsrc=)[^>]*>/i.test(html)) fail('index.html has an inline <script>');
 if (/\son[a-z]+\s*=/i.test(html)) fail('index.html has an inline event handler');
-for (const s of ['web/env.js', 'js/core.js', 'web/web.js', 'web/web-media.js']) if (!html.includes(`"${s}?v=`)) fail(`index.html lacks ${s}`);
+for (const s of ['web/env.js', 'js/core.js', 'web/web.js', 'web/web-media.js', 'plugins/overseerr/seerr-web.js']) if (!html.includes(`"${s}?v=`)) fail(`index.html lacks ${s}`);
 if (html.indexOf('web/env.js') > html.indexOf('js/core.js')) fail('web/env.js must load before js/core.js');
 
 writeFileSync(join(OUT, 'index.html'), html);

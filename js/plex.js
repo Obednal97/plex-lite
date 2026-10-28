@@ -101,7 +101,13 @@
 
   // forget: the user chose Sign out (Settings). In the web build that also clears everything else
   // Plex Lite kept in the browser; a sign-in that expired or was revoked keeps the settings.
+  // fn(forget) for each, before anything is cleared (the web build's Overseerr path ends its session)
+  plex.onSignOut = [];
+
   plex.signOut = function (forget) {
+    plex.onSignOut.forEach(function (fn) {
+      try { fn(!!forget); } catch (e) { PL.warn('sign-out hook failed', e && e.message); }
+    });
     plex.token = null;
     plex.server = null;
     PL.storage.del('token');

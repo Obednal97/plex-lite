@@ -34,6 +34,7 @@ fork's services become `<its id>.…` automatically (README, "App id").
     apiVersion: 1,              // this document
     description: 'Request movies and shows that are not in your library.',
     services: ['com.bednal.plexlite.service'],   // optional
+    web: true,                  // optional: runs in the web build without its services (see below)
     // hooks below are all optional
   });
 })();
@@ -130,6 +131,12 @@ badge with `ctx.ui.badge(node, className, text)`.
 | `openItem(item)` | opens the details page for a Plex item (`{ratingKey, type, title}`) |
 | `push(screen)`, `pop()`, `backdrop(url)` | bundled plugins only: push a screen object (`{el, show, hide, key, destroy}`) built from `ctx.ui` (which also has `spinner`, `fadeInImage`, `KEY`, `isBack`) |
 | `service(method, params, serviceId?)` | calls one of the plugin's own `services` over the Luna bus |
+
+**Services on the web.** The web build ([WEB.md](WEB.md)) has no webOS services: a plugin with
+`services` is listed as "TV app only" there, unless its definition has `web: true`, which says it
+has a browser path of its own and doesn't call `ctx.service` on the web (`ctx.service` rejects there).
+Overseerr does this: `plugins/overseerr/seerr-web.js`, loaded only by the web build, answers the same
+methods as its service (see [OVERSEERR.md](OVERSEERR.md#on-the-web)).
 
 ## Tabs and screens (declarative)
 

@@ -185,7 +185,9 @@ and clicks, and the wheel moves between rows.
 - It uses your server's secure (`*.plex.direct`) addresses: at home Chrome asks once to allow access
   to your local network (allow it to stream directly), away from home it uses Plex Remote Access.
 - The browser direct plays what it can decode; anything else is converted by your Plex server.
-- The Overseerr plugin works on the TV only for now. Phones work but aren't designed for yet.
+- The Overseerr plugin works on the web only on your own copy, served from the same domain as your
+  Overseerr with CORS on its proxy ([docs/OVERSEERR.md](docs/OVERSEERR.md#on-the-web)); on
+  plexlite.vercel.app it can't. Phones work but aren't designed for yet.
 
 How it works, its limits and the security headers: [docs/WEB.md](docs/WEB.md). To build it:
 `node tools/build-web.mjs` (writes `dist/web/`), and `node tools/serve-web.mjs` to try it locally.

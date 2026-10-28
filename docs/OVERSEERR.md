@@ -11,6 +11,7 @@ to Overseerr only, never to Sonarr, Radarr or a download client: those stay on t
 | `downloads.js` | the Downloading screen, the Downloading shelf and the details badge |
 | `plugin.js` | Settings, Search requests, `register()` |
 | `service/service.js` | the webOS service that holds the Overseerr sessions (Node 0.12, ES5) |
+| `seerr-web.js` | the web build's browser path: the same methods as the service, with `fetch` from the page (see [On the web](#on-the-web)) |
 
 ## Sign-in follows the Plex profile
 
@@ -104,4 +105,152 @@ refused this Plex account), `network`, `bad_request`.
 | `lookup` | `key, mediaType, tmdbId` | `{title, year, posterPath, media: {mediaId, status, ratingKey, tvdbId, downloads, issues: [open issues]} \| null}` |
 | `logout` | `key` or `all: true` | `{}` |
 
-Tests: `node test/overseerr.test.mjs` (plugin logic, and the service against a fake Overseerr).
+Tests: `node test/overseerr.test.mjs` (plugin logic, and the service against a fake Overseerr) and
+`node --test test/overseerr-web.test.mjs` (the browser path behind a simulated browser: CORS,
+preflights, same-site cookies; and the same answers as the service for the same fake Overseerr).
+
+## On the web
+
+In the web build ([WEB.md](WEB.md)) there is no webOS service, so `seerr-web.js` answers the same
+methods from the page: `fetch` straight to your Overseerr with `credentials: 'include'`, signing in
+with the Plex token (`POST /api/v1/auth/plex`) so that Overseerr sets its session cookie in the
+browser. The Plex token goes only to your Overseerr, as on the TV. Requests, the Downloading screen,
+shelf and badge, and Report a problem work as on the TV, with the same messages.
+
+A browser only allows that when two things are true, and both are up to whoever runs Overseerr:
+
+1. **Plex Lite is served from the same site as Overseerr**, i.e. a subdomain of the same registrable
+   domain: `https://plexlite.example.com` with Overseerr at `https://overseerr.example.com`.
+   Overseerr's session cookie is `SameSite=Lax` (`Strict` with CSRF protection on), so the browser
+   sends it only to requests from pages on the same site. From any other site (for example the
+   public `plexlite.vercel.app`) the sign-in succeeds but the browser never sends the cookie back.
+   Third-party cookie settings don't matter here, because a same-site cookie is first-party.
+2. **Overseerr's reverse proxy allows that origin with credentials and answers preflights.**
+   Overseerr sends no CORS headers and answers `OPTIONS` with 405, so the proxy in front of it must,
+   for `/api/`:
+   - echo the one allowed origin in `Access-Control-Allow-Origin` (never `*`, which browsers refuse
+     with credentials), with `Access-Control-Allow-Credentials: true` and `Vary: Origin`;
+   - answer `OPTIONS` itself with 204, `Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS`
+     and the requested headers (Plex Lite sends `Content-Type: application/json` on changes).
+   Requests from other origins should pass through untouched.
+
+To use it: deploy the web build on your own subdomain (on Vercel: fork the repo, import it, add the
+domain; see [WEB.md](WEB.md#building-and-deploying)), set up the proxy as below, then in Plex Lite on
+that address go to Settings → Overseerr → Set up Overseerr and type Overseerr's https address. Each
+Plex Home profile signs in once, as on the TV.
+
+### Nginx (and Nginx Proxy Manager)
+
+In the `server` block for Overseerr (in Nginx Proxy Manager: the proxy host → Advanced → Custom Nginx
+Configuration; keep its own `location /` and add this one):
+
+```nginx
+location /api/ {
+    set $cors "";
+    if ($http_origin = "https://plexlite.example.com") { set $cors $http_origin; }
+
+    if ($request_method = OPTIONS) {
+        add_header Access-Control-Allow-Origin $cors always;
+        add_header Access-Control-Allow-Credentials true always;
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+        add_header Access-Control-Allow-Headers $http_access_control_request_headers always;
+        add_header Access-Control-Max-Age 600 always;
+        add_header Vary Origin always;
+        return 204;
+    }
+    add_header Access-Control-Allow-Origin $cors always;
+    add_header Access-Control-Allow-Credentials true always;
+    add_header Vary Origin always;
+
+    proxy_pass http://overseerr:5055;   # as in your location / block (NPM: $forward_scheme://$server:$port)
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+An empty `$cors` leaves the header out, so other origins get no CORS (as before). A preflight from
+another origin gets a 204 without CORS headers, which the browser treats as refused. Keep `always`:
+without it Nginx adds the headers to successful answers only, and the browser then can't read
+Overseerr's errors. Any `add_header` in this `location` stops `add_header` lines from the `server`
+block (HSTS, for example) applying to `/api/`; repeat them here if you have some.
+
+### Cloudflare Worker
+
+If Overseerr is behind Cloudflare, a Worker on the route `overseerr.example.com/api/*` does the same
+without touching the server:
+
+```js
+const ALLOWED = new Set(['https://plexlite.example.com']);
+
+export default {
+  async fetch(request) {
+    const origin = request.headers.get('Origin');
+    if (!origin || !ALLOWED.has(origin)) return fetch(request);
+    // Overseerr answers preflights with 405, so the edge answers them
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
+        Vary: 'Origin',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers') || 'Content-Type',
+        'Access-Control-Max-Age': '600' } });
+    }
+    const upstream = await fetch(request);
+    const response = new Response(upstream.body, upstream);
+    response.headers.set('Access-Control-Allow-Origin', origin);
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+    response.headers.append('Vary', 'Origin');
+    return response;
+  },
+};
+```
+
+### Overseerr's settings
+
+- **CSRF protection must be off** (Seerr: Settings → Network → "Enable CSRF Protection"; Overseerr:
+  Settings → General). It is off by default. When it is on, Overseerr requires a token from its
+  `XSRF-TOKEN` cookie on every sign-in and change; that cookie belongs to Overseerr's own host, so a
+  page on another host (even on the same site) can't read it, and Overseerr answers 403 "invalid csrf
+  token". Reading lists still works, but signing in, requesting and reporting don't. Plex Lite says
+  so instead of "this account can't sign in".
+- **Cookies.** With CSRF protection off the session cookie is `connect.sid`, `HttpOnly`,
+  `SameSite=Lax`, 30 days, and `Secure` when Overseerr sees https (behind a proxy only with
+  "Enable Proxy Support" on, so that it trusts `X-Forwarded-Proto`; without it the cookie lacks
+  `Secure`, which still works). The proxy must pass `Set-Cookie` on unchanged: no `Domain` rewriting
+  is needed (the cookie stays on Overseerr's host; same-site is what counts).
+- "Enable Plex Sign-In" (or new Plex users being allowed) works as on the TV: a profile Overseerr
+  doesn't know becomes a new Overseerr user on its first, explicit sign-in.
+
+### What Plex Lite shows when something is missing
+
+When a sign-in fails, Plex Lite works out why with a few requests to Overseerr's public
+`/api/v1/status` and shows it in a sheet (also listed at the top of Settings → Overseerr until a
+call works), with a link to this section:
+
+| Cause | How it's detected | Shown as |
+|---|---|---|
+| No CORS for this site | the request fails, a `no-cors` request reaches the server | "Overseerr doesn't allow this site" |
+| CORS without credentials (or `*`) | works without credentials, fails with them | "Overseerr needs one more setting" (Allow-Credentials) |
+| CORS on successful answers only | `/status` works, an error answer (`/auth/me` without the cookie) can't be read | "Overseerr needs one more setting" (`always`) |
+| No preflight answer | a simple GET works, the preflighted POST fails | "Overseerr needs one more setting" (OPTIONS) |
+| Not the same site | sign-in works but `/auth/me` is refused | "This browser didn't keep the sign-in", naming both sites |
+| CSRF protection on | 403 "invalid csrf token" | "Overseerr's CSRF protection is on" |
+| Unreachable | every request fails | "Could not reach Overseerr at …" |
+
+### Sessions in a browser
+
+A browser holds one Overseerr cookie per Overseerr address, not one per Plex Home profile, and
+Overseerr keeps one session per cookie, so whoever signed in last in that browser is who every call
+is made as: Plex Lite in any tab, and Overseerr's own pages too. Plex Lite remembers which profile
+the session belongs to; switching profile signs the new profile in again (only one that has signed
+in on this browser before, as on the TV). Before every change (a request, a report) Plex Lite waits
+until no sign-in is under way in any of its tabs and checks with `/api/v1/auth/me`, just before
+sending, that the session is still the profile's Overseerr user; if not, it signs in again first. A
+session ended elsewhere (signed out in Overseerr's pages) is noticed the same way and signed in again.
+
+It works both ways: switching profile in Plex Lite also changes who an Overseerr tab open in the same
+browser is signed in as (for example from the owner's account to a child's), and signing in to
+Overseerr's own pages changes who Plex Lite is until its next check. On a shared computer, sign out
+in both. Plex Lite's Sign out (Settings) signs the browser out of Overseerr too.

@@ -5,7 +5,9 @@
 // Overseerr's session cookie is HttpOnly + SameSite=Lax, so the app (a file:// page) can sign in but
 // can't send the cookie back. The bundled service (service/service.js) signs in with the Plex token
 // ("Sign in with Plex"), keeps one session per Plex profile and proxies API calls to that one
-// Overseerr server. Shared code: seerr.js; flows: report.js, downloads.js.
+// Overseerr server. In the web build seerr-web.js does the same from the browser (the page must be
+// on the same site as Overseerr, whose proxy must allow it). Shared code: seerr.js; flows:
+// report.js, downloads.js.
 'use strict';
 
 (function () {
@@ -96,7 +98,8 @@
       ctx.toast('Signed in to Overseerr as ' + user.displayName);
       refresh(ctx);
     }, function (err) {
-      ctx.toast(err.message, 5000);
+      // web: Overseerr doesn't allow this site yet; say why instead of a bare error
+      if (!(O.web && O.web.explain(ctx, err))) ctx.toast(err.message, 5000);
       refresh(ctx);
     });
   }
@@ -143,6 +146,10 @@
       value: value,
       action: function () {
         var rows = [];
+        var problem = O.web && O.web.problem;
+        if (problem) {
+          rows.push({ label: problem.explain.title, sub: 'Why Overseerr doesn\'t work on this site yet', action: function () { O.web.explain(ctx, problem); } });
+        }
         if (!cfg || !cfg.url) {
           rows.push({ label: 'Set up Overseerr', sub: 'Signs in with your Plex account', action: function () { editAddress(ctx); } });
         } else if (!user) {
@@ -189,6 +196,8 @@
     apiVersion: 1,
     description: 'Request titles from Search, see what is downloading and report problems with a title.',
     services: ['com.bednal.plexlite.service'],
+    // the web build runs it without the service (seerr-web.js)
+    web: true,
     settingsRows: settings,
 
     // "Report a problem" for viewers whose Overseerr account may create issues

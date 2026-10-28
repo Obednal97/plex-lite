@@ -283,7 +283,8 @@
 
   // A card of explanations: a title, then each line as a label with its text under it. Enter or
   // Back closes it.
-  function sheet(heading, lines) {
+  // An explanation card: [[label, text]] rows, Done, and any extra buttons ([{label, action}]).
+  function sheet(heading, lines, extra) {
     var el = PL.el('div', 'web-info-screen');
     var card = PL.el('div', 'center-card web-info');
     card.appendChild(PL.el('h1', '', heading));
@@ -295,7 +296,7 @@
       list.appendChild(row);
     });
     card.appendChild(list);
-    var row = new PL.ui.ButtonRow([{ label: 'Done', kind: 'primary', action: function () { PL.app.pop(); } }]);
+    var row = new PL.ui.ButtonRow([{ label: 'Done', kind: 'primary', action: function () { PL.app.pop(); } }].concat(extra || []));
     row.setFocused(true);
     card.appendChild(PL.el('div', { className: 'web-signin-buttons' }, [row.el]));
     el.appendChild(card);
@@ -332,10 +333,12 @@
     ]);
   }
 
+  web.info = sheet;
+
   web.explainPlugin = function (p) {
     sheet(p.name + ' works in the TV app only', [
-      ['It signs in through a background service on the TV', 'A browser can\'t run one, and a web page can\'t hold its server\'s sign-in cookie'],
-      ['Use it on the TV', 'Requests, downloads and problem reports work there as before'],
+      ['It runs a background service on the TV', 'A browser can\'t run one'],
+      ['Use it on the TV', 'It works there as before'],
     ]);
   };
 
