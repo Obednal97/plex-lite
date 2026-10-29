@@ -435,30 +435,33 @@
       }
     });
     on('seeked', function () { self.onSeeked(); });
-    // The web build: Plex's playlist covers the whole file and starts at the offset
-    // (#EXT-X-START), and browsers report that absolute time, where the TV's player counts from the
-    // start of the stream. Once the video says so, positions stop adding the offset.
+    // Plex's playlist covers the whole file and starts at the offset (#EXT-X-START). Browsers and
+    // the TV's own player (webOS 4.5, seen 2026-10-29) report that absolute time, so once the video
+    // says so, positions stop adding the offset. Without this a resumed or restarted stream (a
+    // subtitle change, a seek while converting) counted the offset twice: wrong bar, subtitles
+    // minutes ahead and the doubled position sent to Plex.
+    var rebase = function () {
+      // once per stream: a later canplay (after a stall) must not move the base again
+      if (self.rebased || self.mode !== 'transcode' || self.live || !(self.base > 3)) return;
+      // Safari's own HLS says canplay before it has moved to the playlist's start point
+      // (currentTime still 0): decide on the first event that has a position
+      if (!(v.currentTime > 0.5)) return;
+      self.rebased = true;
+      if (!L.countsFileTime(v.currentTime, self.base)) return;
+      PL.log('stream time is the file\'s time (offset ' + self.base + 's)');
+      self.base = 0;
+      // cues timed against the old base are dropped and fetched again
+      if (self.subs.kind === 'embedded') {
+        self.subs.cues = [];
+        self.subs.segs = {};
+        self.subs.timing = null;
+        self.renderSubs();
+      }
+    };
+    on('canplay', rebase);
+    on('playing', rebase);
+    on('timeupdate', rebase);
     if (PL.isWeb) {
-      var rebase = function () {
-        // once per stream: a later canplay (after a stall) must not move the base again
-        if (self.rebased || self.mode !== 'transcode' || self.live || !(self.base > 3)) return;
-        // Safari's own HLS says canplay before it has moved to the playlist's start point
-        // (currentTime still 0): decide on the first event that has a position
-        if (!(v.currentTime > 0.5)) return;
-        self.rebased = true;
-        if (!L.countsFileTime(v.currentTime, self.base)) return;
-        PL.log('stream time is the file\'s time (offset ' + self.base + 's)');
-        self.base = 0;
-        // cues timed against the old base are dropped and fetched again
-        if (self.subs.kind === 'embedded') {
-          self.subs.cues = [];
-          self.subs.segs = {};
-          self.subs.timing = null;
-        }
-      };
-      on('canplay', rebase);
-      on('playing', rebase);
-      on('timeupdate', rebase);
       // Safari's own HLS shows the stream's WebVTT rendition by itself, under the text subtitles
       // the player draws. While it draws some (and only then, so captions in a channel's stream
       // stay the viewer's), the stream's subtitle tracks are kept off, except the one for the
@@ -1644,9 +1647,9 @@
   Player.prototype.start = function (offsetMs) {
     var self = this;
     if (this.state === 'stopped') return;
-    // The web build: a restart (seek, track change) gets a new session id, so the old one is
-    // reported stopped where it was (Plex would list it as playing for minutes).
-    if (PL.isWeb && !this.live && this.session && this.full && this.lastReported && this.lastReported !== 'stopped') {
+    // A restart (seek, track change) gets a new session id, so the old one is reported stopped
+    // where it was (Plex would list it as playing for minutes; seen on the TV too).
+    if (!this.live && this.session && this.full && this.lastReported && this.lastReported !== 'stopped') {
       this.report(true, 'stopped', this.position());
     }
     this.rebased = false;
@@ -1824,7 +1827,8 @@
     var base = this.base;
     PL.http('GET', PL.plex.url(dir + sg.name), { text: true, timeout: 8000 }).then(function (text) {
       st.busy = false;
-      if (self.session !== session) return;
+      // a stream that turned out to count in the file's time (rebase) drops what was fetched before
+      if (self.session !== session || base !== self.base) return;
       var cues = parseSubtitles(text);
       if (!cues.length) return; // empty until the transcoder reaches it, or a silent stretch
       st.done = true;
