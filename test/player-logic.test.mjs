@@ -239,3 +239,19 @@ test('web streams: which clock a resumed HLS stream counts in', () => {
   assert.equal(L.countsFileTime(11, 12), true);
   assert.equal(L.countsFileTime(1, 12), false);
 });
+
+test('TV streams: the webOS player counts a resumed HLS stream in the file\'s time too', () => {
+  // seen on the TV (webOS 4.5), 2026-10-29: a subtitle change restarted Tires at 214 s
+  // (#EXT-X-START:TIME-OFFSET=214); currentTime read 233.9 twenty seconds later
+  assert.equal(L.countsFileTime(214.6, 214), true);
+  assert.equal(L.countsFileTime(233.9, 214), true);
+  // so the player rebases on every platform, not only in the web build
+  const src = readFileSync(here + '../js/screens/player.js', 'utf8');
+  const wired = src.indexOf("on('timeupdate', rebase);");
+  const webOnly = src.indexOf('if (PL.isWeb) {', src.indexOf('var rebase = function'));
+  assert.ok(wired > 0 && webOnly > wired, 'the rebase is wired before (outside) the web-only block');
+  // a restart reports the old session stopped on the TV too
+  assert.match(src, /if \(!this\.live && this\.session && this\.full && this\.lastReported && this\.lastReported !== 'stopped'\)/);
+  // subtitle segments fetched before a rebase are dropped (they were timed against the old base)
+  assert.match(src, /self\.session !== session \|\| base !== self\.base/);
+});
