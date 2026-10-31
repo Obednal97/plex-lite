@@ -251,6 +251,11 @@ inside the app and are reviewed like any other code. Each one can be switched of
   creates an Overseerr issue under your own account. It signs in with your Plex profile through a
   small webOS background service, because the app itself can't hold Overseerr's session cookie.
   See [docs/OVERSEERR.md](docs/OVERSEERR.md).
+- **Home Assistant** (`plugins/home-assistant/`): Movie mode. Tells your Home Assistant, through a
+  webhook, when a film or show starts, pauses or stops, so an automation can dim the lights while it
+  plays and bring them back afterwards. It sends what is playing (title, type, genres, rating) only
+  to the webhook URLs you enter, and nothing until you set one. See
+  [plugins/home-assistant/README.md](plugins/home-assistant/README.md).
 
 To write your own, see [docs/PLUGINS.md](docs/PLUGINS.md).
 

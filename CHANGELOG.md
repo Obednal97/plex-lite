@@ -29,6 +29,23 @@ releases are fixes only.
 
 ### Added
 
+- **Home Assistant plugin: Movie mode** (`plugins/home-assistant/`, its README): tells Home Assistant
+  through a webhook when a film or show starts, pauses or stops, so an automation there can dim the
+  lights while it plays and bring them back afterwards. Settings → Plugins → Home Assistant: a local
+  webhook URL and an optional remote one (your https address or a Nabu Casa cloudhook; the TV tries
+  the local one first and remembers which worked; a browser uses the remote one only), Movie mode
+  on/off, what dims the lights (Films only · Films and shows · Everything, including Live TV), how long
+  a pause waits before the lights come back (at once, 5 or 15 s, so a quick pause doesn't flash them),
+  Send a test, and the last event sent or the last error. Nothing is shown over the picture if Home
+  Assistant can't be reached.
+- **Playback events for plugins** (`onPlayback`, docs/PLUGINS.md): play, pause, resume, stop, ended
+  (Up Next counts as ended, then play) and buffering, from the player and the Live TV player, with
+  what is playing: type and kind (movie, series, live), title, show, season and episode, year,
+  duration, content rating, up to three genres, whether it's for children, and for Live TV the channel
+  and its category. Nothing that identifies the server or the account. Plugins hear about it after the
+  frame, never while a key press is handled, and a slow or failing plugin can't affect playback.
+  Catalogue plugins need the new `playback` permission ("See what you're watching and when it plays or
+  pauses").
 - **Phones and tablets** (docs/WEB.md, "Phones and tablets"): the web build has its own layout under
   1100 px wide and on touch tablets: bottom tabs (Movies, TV Shows, Live TV, Search), Settings under
   the profile picture, a full-bleed hero and rows that scroll sideways, Library with sort, filters and
