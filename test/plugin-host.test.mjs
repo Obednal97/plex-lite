@@ -381,6 +381,79 @@ test('revoke: grants removed, definition gone, plugin back to pending; token hol
   eq(host.pending, ['com.example.t']);
 });
 
+// ---- onPlayback for external plugins (the "playback" permission) ---------------------------------
+
+// Writes each event it hears into its own storage.
+const WATCHER = `var seen = [];
+PlexLitePlugin.register({ id: 'com.example.plexlite.watcher', name: 'Watcher', version: '1.0.0', apiVersion: 1,
+  onPlayback: function (ev, ctx) { seen.push(ev); return ctx.storage.set('seen', seen); } });`;
+const WATCHER_MANIFEST = { id: 'com.example.plexlite.watcher', title: 'Watcher', version: '1.0.0', apiVersion: 1, entry: 'plugin.js', permissions: ['playback'] };
+const EVENT = {
+  event: 'play', at: 1700000000000, positionMs: 1000,
+  item: { type: 'movie', kind: 'movie', title: 'Sintel', year: 2010, genres: ['Animation', 'Fantasy'], isKids: false, contentRating: 'PG-13', ratingKey: '901', thumb: '/library/metadata/901/thumb?X-Plex-Token=' + TOKEN },
+};
+
+test('playback permission: listed with its consent text, medium risk', () => {
+  const { I } = makeHost();
+  const p = I.parsePermissions({ permissions: ['playback'] }).list[0];
+  eq([p.id, p.risk, p.text], ['playback', 'medium', 'See what you\'re watching and when it plays or pauses']);
+});
+
+test('playback: a plugin that doesn\'t ask for it has no onPlayback; one not allowed it never starts', async () => {
+  const h = makeHost();
+  const { rt } = runtimeFor(h, HELLO_MANIFEST, HELLO);
+  assert.equal(h.I.toDefinition(rt).onPlayback, undefined, 'no "playback" permission, no hook: the registry never wakes its frame');
+  const w = runtimeFor(h, WATCHER_MANIFEST, WATCHER);
+  const def = h.I.toDefinition(w.rt);
+  assert.equal(typeof def.onPlayback, 'function');
+  assert.equal(def.onPlayback(EVENT), null, 'not granted: nothing sent');
+  w.grants.set(WATCHER_MANIFEST.id, { granted: ['playback'], origins: [], denied: true });
+  assert.equal(def.onPlayback(EVENT), null, 'denied: nothing sent');
+  assert.equal(w.rt.frame, null, 'the frame was never started');
+});
+
+test('e2e: with the grant, the plugin hears the event, cleaned to the documented fields', async () => {
+  const h = makeHost();
+  const { rt, grants } = runtimeFor(h, WATCHER_MANIFEST, WATCHER);
+  grants.set(WATCHER_MANIFEST.id, { granted: ['playback'], origins: [], denied: false });
+  const def = h.I.toDefinition(rt);
+  await def.onPlayback(EVENT);
+  await def.onPlayback({ event: 'pause', at: 1700000005000, positionMs: 6000, item: EVENT.item });
+  assert.equal(def.onPlayback({ event: 'rewind', item: EVENT.item }), null, 'unknown events are dropped');
+  const seen = h.store['plugin.com.example.plexlite.watcher'].seen;
+  eq(seen.map((e) => e.event), ['play', 'pause']);
+  eq(seen[0].item, { type: 'movie', kind: 'movie', title: 'Sintel', contentRating: 'PG-13', year: 2010, genres: ['Animation', 'Fantasy'], isKids: false });
+  assert.ok(!JSON.stringify(seen).includes(TOKEN) && !JSON.stringify(seen).includes('901'), 'no keys, paths or token');
+  rt.stop();
+});
+
+test('e2e: playback events through the registry reach a granted external plugin, in order, never synchronously', async () => {
+  const store = {};
+  const PL = {
+    warn() {}, log() {}, toast() {}, el() {}, http() {},
+    storage: { get: (k, d) => (k in store ? clone(store[k]) : d), set: (k, v) => { store[k] = clone(v); }, del: (k) => { delete store[k]; } },
+    plex: { token: TOKEN, get: () => Promise.resolve({}) },
+  };
+  const win = { PL, ...TIMERS };
+  win.window = win;
+  vm.createContext(win);
+  for (const f of ['js/plugins.js', 'js/plugin-host.js']) vm.runInContext(read(f), win);
+  const host = PL.pluginHost;
+  host.init({ sdkSource: SDK, createFrame: makeFrameFactory(WATCHER) });
+  host.grants.set(WATCHER_MANIFEST.id, { version: '1.0.0', granted: ['playback'], origins: [], denied: false });
+  host.addRuntime({ manifest: WATCHER_MANIFEST, source: WATCHER });
+  assert.equal(PL.plugins.hasPlayback(), true);
+  const s = PL.plugins.playbackSession();
+  s.playing('901', { type: 'movie', title: 'Sintel', ratingKey: '901', Genre: [{ tag: 'Animation' }] }, false, 0);
+  s.paused(3000);
+  s.playing('901', { type: 'movie', title: 'Sintel' }, false, 3000);
+  s.stopped(4000);
+  assert.equal(host.runtimes[WATCHER_MANIFEST.id].frame, null, 'nothing starts in the reporting task');
+  await new Promise((r) => setTimeout(r, 500));
+  eq(store['plugin.com.example.plexlite.watcher'].seen.map((e) => [e.event, e.positionMs]), [['play', 0], ['pause', 3000], ['resume', 3000], ['stop', 4000]]);
+  host.removeRuntime(WATCHER_MANIFEST.id);
+});
+
 // ---- catalogue, hashes, installs (js/sha256.js + js/plugin-store.js) -----------------------------
 
 const sha = (t) => createHash('sha256').update(t, 'utf8').digest('hex');

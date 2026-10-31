@@ -7,6 +7,7 @@
 //   def.actions(item, ctx)       -> [{label, icon?, run()}]                  details pills + hold-OK menu
 //   def.badges(item, ctx)        -> Promise<[{label, tone?}]>                 keyline badges on a details page
 //   def.onSelect(item, ctx)      OK on an item that came from one of its shelves
+//   def.onPlayback(event, ctx)   playback events (play, pause, resume, stop, ended, buffering-*), fire-and-forget
 //   def.services                 [luna service ids] bundled in plugins/<id>/service/
 //   def.web                      true: runs in the web build without its services (its own browser path)
 //   def.tabs                     [{id, title}] tabs it adds (max 2 plugin tabs in total)
@@ -224,6 +225,177 @@
   plugins.select = function (item) {
     var d = item && find(item.plugin);
     if (d && d.onSelect && plugins.isEnabled(d.id)) safe(d, 'onSelect', null, function () { d.onSelect(item, d.ctx); });
+  };
+
+  // ---- onPlayback: playback events (docs/PLUGINS.md, "onPlayback") -------------------------------
+  //
+  // The player tells a session tracker (plugins.playbackSession) what its <video> did; the tracker
+  // turns that into play / pause / resume / stop / ended / buffering-start / buffering-end and
+  // queues them. Plugins hear about them later, in a timer of their own, never in the task that
+  // handles a key press or a media event, and nobody waits for them: a plugin that throws, rejects or
+  // never answers changes nothing for playback.
+
+  var PLAYBACK_DEFER_MS = 200;     // after the frame that showed the controls has been drawn
+  var BUFFERING_AFTER_MS = 2000;   // a stall shorter than this (a seek, a hiccup) isn't news
+  var playbackQueue = [];
+  var playbackTimer = null;
+
+  plugins.hasPlayback = function () {
+    return defs.some(function (d) { return typeof d.onPlayback === 'function' && plugins.isEnabled(d.id); });
+  };
+
+  function hiddenPage() {
+    return !!PL.leaving || (typeof document !== 'undefined' && !!document.hidden);
+  }
+
+  function copyEvent(ev) {
+    var item = {};
+    Object.keys(ev.item).forEach(function (k) { item[k] = Array.isArray(ev.item[k]) ? ev.item[k].slice() : ev.item[k]; });
+    return { event: ev.event, at: ev.at, item: item, positionMs: ev.positionMs };
+  }
+
+  function flushPlayback() {
+    clearTimeout(playbackTimer);
+    playbackTimer = null;
+    var list = playbackQueue;
+    playbackQueue = [];
+    var targets = active().filter(function (d) { return typeof d.onPlayback === 'function'; });
+    list.forEach(function (ev) {
+      targets.forEach(function (d) {
+        // each plugin gets its own copy, so one can't change what the next one sees
+        safe(d, 'onPlayback', null, function () {
+          var r = d.onPlayback(copyEvent(ev), d.ctx);
+          if (r && typeof r.then === 'function') {
+            r.then(null, function (err) { PL.warn('plugin ' + d.id + ' onPlayback failed: ' + (err && err.message)); });
+          }
+        });
+      });
+    });
+  }
+
+  // Queues one event. Cheap enough for the player to call from its media event handlers. While the
+  // page goes away (the TV app leaving the foreground, a browser tab closing) the queue is delivered
+  // at once: timers may not run after that.
+  plugins.playback = function (ev) {
+    if (!ev || !plugins.hasPlayback()) return;
+    playbackQueue.push(ev);
+    if (hiddenPage()) flushPlayback();
+    else if (!playbackTimer) playbackTimer = setTimeout(flushPlayback, PLAYBACK_DEFER_MS);
+  };
+
+  // Ratings for children (country prefixes like "gb/" are ignored). PG counts for films only:
+  // TV-PG covers a lot of grown-up television.
+  var KIDS_RATINGS = ['G', 'U', 'UC', 'TV-Y', 'TV-Y7', 'TV-Y7-FV', 'TV-G'];
+  var KIDS_LIBRARY = /\b(kids|children'?s?)\b/i;
+  var KIDS_GENRE = /^(children'?s?|kids)$/i;
+  // the Live TV guide's categories (js/livetv-browse.js) in the words plugins get
+  var LIVE_CATEGORY = { sport: 'sports', news: 'news', kids: 'kids', movies: 'movie', entertainment: 'series', documentaries: 'series' };
+
+  function tags(list) {
+    return (Array.isArray(list) ? list : []).map(function (g) { return g && g.tag; }).filter(function (t) { return typeof t === 'string' && t; });
+  }
+
+  function isKids(rating, type, genres, library) {
+    var r = String(rating || '').replace(/^[a-z]{2}\//i, '').toUpperCase();
+    if (KIDS_RATINGS.indexOf(r) !== -1 || (r === 'PG' && type === 'movie')) return true;
+    if (library && KIDS_LIBRARY.test(library)) return true;
+    return genres.some(function (g) { return KIDS_GENRE.test(g); });
+  }
+
+  // What plugins learn about what is playing: plain facts from metadata the player already has,
+  // nothing that identifies the server or the account (no keys, paths, URLs or ids).
+  // meta: the Plex item (or, for Live TV, {channel, now}: the channel and the tune's programme).
+  plugins.playbackItem = function (meta, live) {
+    var out;
+    var genres;
+    if (live) {
+      var ch = (meta && meta.channel) || {};
+      var now = (meta && meta.now) || null;
+      genres = tags(now && now.Genre);
+      var B = PL.liveBrowse;
+      var cat = (B && genres.length && B.categoryOfGenres(genres)) ||
+        (PL.liveGuide && PL.liveGuide.cats && PL.liveGuide.cats[ch.identifier]) ||
+        (B && B.categoryOfName(ch.title)) || null;
+      out = {
+        type: 'live', kind: 'live',
+        title: (now && (now.grandparentTitle || now.title)) || ch.title || 'Live TV',
+        channel: ch.title || '',
+        liveCategory: LIVE_CATEGORY[cat] || null,
+      };
+      if (now && now.contentRating) out.contentRating = String(now.contentRating);
+      out.genres = genres.slice(0, 3);
+      out.isKids = cat === 'kids' || isKids(out.contentRating, now && now.type, genres, null);
+      return out;
+    }
+    meta = meta || {};
+    var type = meta.type === 'movie' || meta.type === 'episode' ? meta.type : 'clip';
+    genres = tags(meta.Genre);
+    out = { type: type, kind: type === 'movie' ? 'movie' : type === 'episode' ? 'series' : null, title: String(meta.title || '') };
+    if (type === 'episode') {
+      if (meta.grandparentTitle) out.showTitle = String(meta.grandparentTitle);
+      if (typeof meta.parentIndex === 'number') out.season = meta.parentIndex;
+      if (typeof meta.index === 'number') out.episode = meta.index;
+    }
+    if (typeof meta.year === 'number') out.year = meta.year;
+    if (typeof meta.duration === 'number') out.durationMs = meta.duration;
+    if (meta.contentRating) out.contentRating = String(meta.contentRating);
+    out.genres = genres.slice(0, 3);
+    out.isKids = isKids(meta.contentRating, type, genres, meta.librarySectionTitle);
+    return out;
+  };
+
+  // One per player. The player reports what its video did; this decides which event that is.
+  //   playing(key, meta, live, posMs)  the video is playing (a new item when key changes)
+  //   paused(posMs)                    paused by the viewer (not a scrub)
+  //   waiting()                        stalled while playing
+  //   stopped(posMs) / ended(posMs)    left the player or failed / finished (credits count)
+  // A seek (a direct seek, or a stream restart) leaves the session playing and sends nothing.
+  plugins.playbackSession = function () {
+    var cur = null; // {key, item, state: 'playing'|'paused'|'buffering'}
+    var stallTimer = null;
+    var send = function (event, posMs) {
+      plugins.playback({ event: event, at: Date.now(), item: cur.item, positionMs: posMs == null ? null : posMs });
+    };
+    var end = function (event, posMs) {
+      clearTimeout(stallTimer);
+      if (!cur) return;
+      send(event, posMs);
+      cur = null;
+    };
+    return {
+      playing: function (key, meta, live, posMs) {
+        clearTimeout(stallTimer);
+        if (cur && cur.key !== key) end('stop', null); // another channel, or an item we never heard end
+        if (!cur) {
+          if (!plugins.hasPlayback()) return;
+          cur = { key: key, item: plugins.playbackItem(meta, live), state: 'playing' };
+          send('play', posMs);
+          return;
+        }
+        var was = cur.state;
+        cur.state = 'playing';
+        if (was === 'paused') send('resume', posMs);
+        else if (was === 'buffering') send('buffering-end', posMs);
+      },
+      paused: function (posMs) {
+        clearTimeout(stallTimer);
+        if (!cur || cur.state === 'paused') return;
+        cur.state = 'paused';
+        send('pause', posMs);
+      },
+      waiting: function (posFn) {
+        if (!cur || cur.state !== 'playing') return;
+        clearTimeout(stallTimer);
+        stallTimer = setTimeout(function () {
+          if (!cur || cur.state !== 'playing') return;
+          cur.state = 'buffering';
+          send('buffering-start', posFn ? posFn() : null);
+        }, BUFFERING_AFTER_MS);
+      },
+      stopped: function (posMs) { end('stop', posMs); },
+      ended: function (posMs) { end('ended', posMs); },
+      state: function () { return cur ? cur.state : 'idle'; },
+    };
   };
 
   // ---- ctx: what a plugin may use ---------------------------------------------------------------
