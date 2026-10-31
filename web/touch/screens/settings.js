@@ -748,7 +748,7 @@
           if (c.tvOnly) return { label: e.name, sub: e.description, value: 'TV app only', next: true, action: () => PL.web.explainPlugin({ name: e.name, reason: 'tv-service' }) };
           return { label: e.name, sub: c.sub, next: true, action: () => entrySheet(e) };
         });
-        if (!rows.length) rows.push({ label: 'No plugins available', sub: cat.errors[0] || '' });
+        if (!rows.length) rows.push({ label: cat.errors.length ? 'No plugins available' : 'No plugins to add yet', sub: cat.errors[0] || 'Overseerr is built in: it\'s in Settings → Plugins' });
         const custom = st.catalogUrl() !== st.DEFAULT_URL;
         return {
           sections: [

@@ -179,7 +179,8 @@ re-asked on every update and revocable in Settings → Plugins.
 - **Web plugin** (most plugins): one JS file using `PlexLitePlugin.register({...})` with the same hooks.
   Put `plugin.js` + `plugin.json` (the catalogue entry without `bundleUrl`/`sha256`) in a folder and
   run `node tools/build-plugin.mjs <folder>`; it copies the code to `catalog/bundles/` and pins the
-  hash. Example: `examples/plugins/hello-shelf`.
+  hash. Example: `examples/plugins/hello-shelf` (an example for plugin authors: it isn't published in the
+  catalogue, and neither is any other example or test plugin).
 - **Service plugin** (needs a background service, like Overseerr): an `.ipk` with the service, installed
   by Plex Lite through Homebrew Channel (`ipkUrl` + `sha256`), plus a web bundle for the hooks
   (`bundleUrl` + `bundleSha256`). How Overseerr would move there: PLUGINS-v2-design.md → Distribution.

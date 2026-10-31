@@ -2,7 +2,8 @@
 // Publishes a web plugin into the catalogue: copies <dir>/plugin.js to
 // catalog/bundles/<id>-<version>.js, pins its SHA-256 and adds/updates the entry in
 // catalog/plugins.json from <dir>/plugin.json (the entry without bundleUrl/sha256).
-//   node tools/build-plugin.mjs examples/plugins/hello-shelf
+//   node tools/build-plugin.mjs <plugin folder>
+// Don't publish examples/plugins: they're for tests and docs, and the tests fail if one is published.
 // A published version is immutable: building the same version with different code fails; bump it.
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';

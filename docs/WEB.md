@@ -452,7 +452,7 @@ that track instead (kept hidden), and keeps every other track it didn't add off.
 
 ## Plugins
 
-- **External web plugins** (Settings → Browse plugins, e.g. Hello Shelf) work. The page's
+- **External web plugins** (Settings → Browse plugins) work. The page's
   Content-Security-Policy forbids inline scripts, and a `srcdoc` frame would inherit it, so on the web
   each plugin runs in `web/plugin-frame.html`: a sandboxed frame without `allow-same-origin` (an opaque
   origin with no access to the app's storage or page) and its own policy allowing inline script but

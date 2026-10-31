@@ -11,6 +11,9 @@ releases are fixes only.
 
 ### Changed
 
+- **Browse plugins no longer lists Hello Shelf.** It was an example plugin for testing the catalogue;
+  the catalogue now publishes no example or test plugins (the tests use a fixture copy instead), and
+  an empty catalogue says Overseerr is built in.
 - **Settings is grouped** under section headings: Account & server, This browser (web), Playback,
   Surprise Me, Plugins, Advanced and About. The headings are labels only: Up and Down skip them.
   Advanced holds Performance stats (the developer overlay: frames a second, the longest frame, JS

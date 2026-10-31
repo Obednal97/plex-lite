@@ -384,7 +384,9 @@ test('revoke: grants removed, definition gone, plugin back to pending; token hol
 // ---- catalogue, hashes, installs (js/sha256.js + js/plugin-store.js) -----------------------------
 
 const sha = (t) => createHash('sha256').update(t, 'utf8').digest('hex');
-const CATALOG = read('catalog/plugins.json');
+// The tests publish Hello Shelf in a fixture catalogue; the real one (catalog/plugins.json) ships no
+// example or test plugins.
+const CATALOG = read('test/fixtures/catalog/plugins.json');
 const HELLO_ENTRY = JSON.parse(CATALOG).plugins[0];
 
 function makeStoreEnv({ files = {}, luna } = {}) {
@@ -426,8 +428,14 @@ test('sha256: pure JS matches node crypto (empty, block edges, unicode, 1 MB, th
   for (const t of ['', 'abc', 'a'.repeat(55), 'a'.repeat(56), 'a'.repeat(64), 'Amélie 😀 字', 'x'.repeat(1 << 20), HELLO]) {
     assert.equal(win.PL.sha256(t), sha(t), JSON.stringify(t.slice(0, 12)));
   }
-  assert.equal(HELLO_ENTRY.sha256, sha(read(BUNDLED_HELLO)), 'catalogue pins the published bundle');
-  assert.equal(read(BUNDLED_HELLO), HELLO, 'published bundle is the example source');
+  assert.equal(HELLO_ENTRY.sha256, sha(HELLO), 'the fixture catalogue pins the example source');
+});
+
+test('catalogue: the shipped copy parses and publishes no example or test plugins', () => {
+  const { I } = makeStoreEnv();
+  const c = I.parseCatalog(read('catalog/plugins.json'), 'catalog/plugins.json');
+  eq(c.errors, []);
+  eq(c.plugins.filter((p) => /^com\.example\./.test(p.id)).map((p) => p.id), []);
 });
 
 test('catalogue: bundled copy parses; URLs resolve against the catalogue; bad entries skipped', () => {
