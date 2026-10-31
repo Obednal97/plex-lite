@@ -74,12 +74,15 @@
     };
   };
 
-  // For the touch layout, which draws an item's badge itself (it doesn't use makeCard).
-  function withBadge(item) {
-    var label = O.badgeText(item);
+  // For the touch layout, which draws an item's badge itself (it doesn't use makeCard) on posters a
+  // third the width of the TV's: the short words ("45%", as the Downloading shelf's badge).
+  var SHORT = { 2: 'Requested', 3: 'Processing', 4: 'Partial' };
+  O.withBadge = function (item) {
+    var label = item.status === 5 ? '' : item.downloading != null ? item.downloading + '%' : SHORT[item.status] || '';
     item.badge = label ? { label: label, tone: item.downloading != null ? 'accent' : 'status-' + item.status } : null;
     return item;
-  }
+  };
+  var withBadge = O.withBadge;
 
   // OK on a discover card: a title in the library opens in Plex (checked first: Overseerr's
   // ratingKey is from the Plex server it watches), anything else the request sheet.

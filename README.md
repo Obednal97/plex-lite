@@ -246,7 +246,8 @@ inside the app and are reviewed like any other code. Each one can be switched of
 **Settings → Plugin · <name>**.
 
 - **Overseerr** (`plugins/overseerr/`, also works with Seerr): request movies and shows that aren't
-  in your library, from Search; see what's downloading (a Downloading screen, a shelf and a badge on
+  in your library, from Search, Trending/Popular/Upcoming rows or a show's missing seasons; follow
+  your requests (Your requests) and what's downloading (a Downloading screen, a shelf and a badge on
   title pages); and report a problem with a title (bad quality, wrong language, out of sync…), which
   creates an Overseerr issue under your own account. It signs in with your Plex profile through a
   small webOS background service, because the app itself can't hold Overseerr's session cookie.

@@ -737,9 +737,8 @@ const DEMO_HOOKS = `
 window.PalmServiceBridge = function () {};
 window.PalmServiceBridge.prototype.call = function (url, params) {
   var self = this;
-  var m = /^luna:\/\/[^/]+\/(\w+)$/.exec(url);
   var x = new XMLHttpRequest();
-  x.open('POST', '/seerr-service/' + (m ? m[1] : 'none'));
+  x.open('POST', '/seerr-service/' + String(url).split('/').pop());
   x.onload = function () { if (self.onservicecallback) self.onservicecallback(x.responseText); };
   x.onerror = function () { if (self.onservicecallback) self.onservicecallback('{"returnValue":false,"errorText":"demo service unreachable"}'); };
   x.send(params);

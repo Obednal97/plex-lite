@@ -542,6 +542,12 @@
     return d.getDate() + ' ' + MONTHS[d.getMonth()] + (d.getFullYear() !== today.getFullYear() ? ' ' + d.getFullYear() : '');
   };
 
+  // "19 Jan 2027"
+  O.date = function (iso) {
+    var m = /^(\d{4})-(\d\d)-(\d\d)/.exec(String(iso || ''));
+    return m ? Number(m[3]) + ' ' + MONTHS[Number(m[2]) - 1] + ' ' + m[1] : '';
+  };
+
   // What a request has come to, as a viewer would put it. r: a `requests` item (service.js).
   // -> {state, label, tone, progress (0–1 while downloading, else null)}
   O.requestState = function (r) {

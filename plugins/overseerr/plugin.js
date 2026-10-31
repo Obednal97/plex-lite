@@ -112,16 +112,18 @@
       var rows = [];
       if (open.length) {
         rows.push({
-          label: open.length === seasons.length ? 'Request all seasons' : open.length === 1 ? 'Request Season ' + open[0] : 'Request the missing seasons',
-          sub: open.length === seasons.length || open.length === 1 ? '' : O.seasonsLabel(open),
+          // "Request all seasons", "Request Season 3", "Request Seasons 4 and 5"
+          label: open.length === seasons.length ? 'Request all seasons' : 'Request ' + O.seasonsLabel(open),
           action: function () { submit(ctx, item, open); },
         });
       }
+      var today = new Date().toISOString().slice(0, 10);
       seasons.forEach(function (s) {
         var st = seasonText(s);
+        var soon = s.airDate && s.airDate > today ? 'Starts ' + O.date(s.airDate) : '';
         rows.push({
           label: s.name || ('Season ' + s.season),
-          sub: st || (s.episodes ? s.episodes + ' episodes' : ''),
+          sub: st || soon || (s.episodes ? s.episodes + ' episodes' : ''),
           action: st ? noop : function () { submit(ctx, item, [s.season]); },
         });
       });
@@ -370,10 +372,7 @@
         var items = ((data && data.results) || []).filter(function (r) {
           return (r.mediaType === 'movie' || r.mediaType === 'tv') && !(r.mediaInfo && r.mediaInfo.status === 5);
         }).slice(0, 20).map(toItem);
-        items.forEach(function (it) {
-          var label = O.badgeText(it);
-          it.badge = label ? { label: label, tone: it.downloading != null ? 'accent' : 'status-' + it.status } : null;
-        });
+        items.forEach(O.withBadge);
         return {
           id: 'requests',
           title: 'Request on Overseerr',

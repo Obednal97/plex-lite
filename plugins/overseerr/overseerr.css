@@ -66,7 +66,9 @@
 .osp-label { position: absolute; left: 28px; top: 18px; right: 360px; font-size: 28px; line-height: 38px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .osp-sub { position: absolute; left: 28px; top: 58px; right: 360px; font-size: 24px; line-height: 32px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row.osp-row .osp-value { top: 0; line-height: 108px; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.osp-single .osp-label { top: 35px; }
 .osp-danger .osp-label { color: #ff8a80; }
 .osp-warn .osp-sub { color: #f0b44c; }
 .row.osp-row.focused .osp-sub { color: rgba(8, 8, 10, 0.55); }
-.row.osp-row.focused.osp-danger .osp-label { color: #b3261e; }
+.row.osp-row.focused.osp-single .osp-label { top: 35px; }
+.osp-danger .osp-label { color: #b3261e; }

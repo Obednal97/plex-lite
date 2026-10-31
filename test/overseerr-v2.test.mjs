@@ -281,7 +281,7 @@ test('discover rows: three per library among Plex\'s own, badged, cached and sha
     assert.ok(movies.some((s) => s.id === 'downloading' && s.at == null), 'Downloading stays at the end');
     const trending = discover[0];
     const kid = trending.items.find((i) => i.title === 'The Kid');
-    eq([O.badgeText(kid), kid.badge.label, kid.badge.tone], ['Downloading 45%', 'Downloading 45%', 'accent']);
+    eq([O.badgeText(kid), kid.badge.label, kid.badge.tone], ['Downloading 45%', '45%', 'accent']);
     const met = trending.items.find((i) => i.title === 'Metropolis');
     eq([met.badge.label, met.badge.tone], ['Requested', 'status-2']);
     const bbb = trending.items.find((i) => i.title === 'Big Buck Bunny');
@@ -350,8 +350,7 @@ test('Request seasons: on a show missing aired seasons, from the season sheet', 
     again[0].run();
     await tick(20);
     const rows = env.sheets[0][0].rows;
-    assert.equal(rows[0].label, 'Request the missing seasons');
-    assert.equal(rows[0].sub, 'Seasons 1–4');
+    assert.equal(rows[0].label, 'Request Seasons 1–4');
     eq(rows.slice(1).map((r) => r.sub), ['5 episodes', '6 episodes', '7 episodes', '8 episodes', 'Available']);
     rows[0].action();
     await tick(50);
@@ -369,8 +368,9 @@ test('Request seasons: on a show missing aired seasons, from the season sheet', 
     seasonActions[0].run();
     await tick(20);
     const s2 = env.sheets[env.sheets.length - 1][0].rows;
-    assert.equal(s2[0].label, 'Request the missing seasons');
-    assert.equal(s2[0].sub, 'Seasons 4 and 5');
+    assert.equal(s2[0].label, 'Request Seasons 4 and 5');
+    assert.equal(s2[5].sub, 'Starts ' + s2[5].sub.slice(7), 'an unaired season says when it starts');
+    assert.match(s2[5].sub, /^Starts \d+ \w{3} \d{4}$/);
     assert.equal(s2[3].sub, 'Requested · waiting for approval');
     // films and episodes never ask
     assert.ok(Array.isArray(PL.def.actions({ type: 'movie' }, ctx)));

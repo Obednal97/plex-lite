@@ -50,7 +50,7 @@
         }
         g.rows.forEach(function (d) {
           var i = rows.length;
-          var n = el('div', 'row osp-row' + (d.danger ? ' osp-danger' : '') + (d.tone ? ' osp-' + d.tone : ''));
+          var n = el('div', 'row osp-row' + (d.sub ? '' : ' osp-single') + (d.danger ? ' osp-danger' : '') + (d.tone ? ' osp-' + d.tone : ''));
           n.appendChild(el('div', 'osp-label', d.label));
           if (d.sub) n.appendChild(el('div', 'osp-sub', d.sub));
           if (d.value) n.appendChild(el('span', 'row-value osp-value', d.value));
