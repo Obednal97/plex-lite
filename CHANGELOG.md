@@ -69,6 +69,20 @@ releases are fixes only.
   frame, never while a key press is handled, and a slow or failing plugin can't affect playback.
   Catalogue plugins need the new `playback` permission ("See what you're watching and when it plays or
   pauses").
+- **Home server helper** (Settings → Plugins): the address of the helper on your home server and its
+  status ("Connected · Sonarr, Radarr, Bazarr"). Overseerr's "Download queue address" moves into it.
+  On the web it says when the browser can't reach an `http` helper. See
+  [docs/HOME-HELPER.md](docs/HOME-HELPER.md).
+- **What's coming**: "New episodes this week" on TV libraries (shows in that library, "S2 E5 · Tonight
+  21:00", tagged New or Premiere) and "Films arriving soon" on movie libraries ("Digital release
+  Friday"), from Sonarr and Radarr through the helper. A show's page says "3 episodes missing" and
+  offers **Search for missing episodes**.
+- **Subtitles**: **Subtitles…** on films and episodes (details and hold OK) lists the subtitles a title
+  has, finds missing ones with Bazarr ("Found English subtitles") and fixes their timing; a "No English
+  subtitles" badge when a language is missing. Dry runs on the helper are said as such.
+- The demo server has a fake home server helper at `/helper` (`tools/demo/helper.mjs`), and the demo
+  library's titles carry made-up TMDB/TVDB ids.
+
 - **Phones and tablets** (docs/WEB.md, "Phones and tablets"): the web build has its own layout under
   1100 px wide and on touch tablets: bottom tabs (Movies, TV Shows, Live TV, Search), Settings under
   the profile picture, a full-bleed hero and rows that scroll sideways, Library with sort, filters and

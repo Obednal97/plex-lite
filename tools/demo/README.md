@@ -33,7 +33,10 @@ without artwork get generated posters until `fetch-media.mjs` has run.
 
 Settings: `PORT` (8930), `PLEXLITE_DEMO_MEDIA`, `PLEXLITE_DEMO_LIVETV=0` (no Live TV tab),
 `PLEXLITE_DEMO_TUNE_DELAY` (milliseconds before a tune answers, default 600 so "Tuning…" shows; 0 for
-none) and `PLEXLITE_DEMO_SEED` (repeatable `sort=random`, for Surprise Me and Shuffle).
+none), `PLEXLITE_DEMO_SEED` (repeatable `sort=random`, for Surprise Me and Shuffle),
+`PLEXLITE_DEMO_HELPER=0` (no fake home server helper) and `PLEXLITE_DEMO_NOW` (a local date and time
+the fake helper's calendar is built around, e.g. `2026-10-30T15:00`, for screenshots taken with the
+browser's clock set to it).
 
 Titles with a video advertise preview thumbnails: the server answers Plex's index-frame requests
 (`/library/parts/<id>/indexes/sd/<ms>`) with frames from `PLEXLITE_DEMO_MEDIA/previews/<video>/<seconds>.jpg`
@@ -58,6 +61,19 @@ download in progress, new requests and reports. The demo titles carry made-up `t
 plugin's luna:// calls to `/seerr-service/<method>`, where the plugin's real webOS service
 (`plugins/overseerr/service/service.js`) runs against the fake. To try it: Settings → Overseerr →
 Set up Overseerr → `http://127.0.0.1:8930`.
+
+## Home server helper
+
+`helper.mjs` is a fake home server helper ([docs/HOME-HELPER.md](../../docs/HOME-HELPER.md)) that
+follows the helper's API: `/healthz`, `/coming`, `/missing`, `/missing/search`, `/subtitles`,
+`/subtitles/search` and `/subtitles/sync`, with CORS, `X-Plex-Token` on actions (any `demo…`
+token), the rate limit, dry run and the error answers. The demo server mounts it at `/helper`: set
+Settings → Plugins → Home server helper to `http://127.0.0.1:8930/helper`. Its calendar is made from
+the demo library relative to now (an episode that aired yesterday, a premiere tonight, three made-up
+films with generated art), NASA Explorers has three missing episodes, and Nosferatu and The General
+have no subtitles (Bazarr "finds" English, never Spanish). Every demo title carries made-up
+`tmdb://`/`tvdb://` Guids (99xxxx) for it. The tests start it on their own port with data of their
+own.
 
 ## Live TV
 

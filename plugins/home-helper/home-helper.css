@@ -1,0 +1,6 @@
+/* Home server helper: the spinner in a "working" toast (Finding English subtitles…). */
+.toast .hh-spin {
+  display: inline-block; vertical-align: middle; width: 24px; height: 24px; margin: -4px 16px 0 -6px; border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.22); border-top-color: #fff; animation: spin 0.9s linear infinite;
+}
+html.pl-touch .toast .hh-spin { width: 14px; height: 14px; border-width: 2px; margin: -2px 8px 0 0; }

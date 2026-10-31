@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="css/livetv.css">
   <link rel="stylesheet" href="css/details.css">
   <link rel="stylesheet" href="plugins/overseerr/overseerr.css">
+  <link rel="stylesheet" href="plugins/home-helper/home-helper.css">
+  <link rel="stylesheet" href="plugins/whats-coming/whats-coming.css">
   <link rel="stylesheet" href="css/theme.css">
   <link rel="stylesheet" href="css/motion.css">
   <link rel="stylesheet" href="css/surprise.css">
@@ -52,7 +54,8 @@
   <script src="js/screens/surprise.js"></script>
   <script src="js/vendor/qrcodegen.js"></script>
   <script src="js/screens/firstrun.js"></script>
-  <!-- plugins: each registers itself with PL.plugins -->
+  <!-- plugins: each registers itself with PL.plugins (the home helper core first: Overseerr reads it) -->
+  <script src="plugins/home-helper/helper.js"></script>
   <script src="plugins/overseerr/seerr.js"></script>
   <script src="plugins/overseerr/report.js"></script>
   <script src="plugins/overseerr/downloads.js"></script>
@@ -60,6 +63,9 @@
   <script src="plugins/overseerr/screens.js"></script>
   <script src="plugins/overseerr/plugin.js"></script>
   <script src="plugins/home-assistant/plugin.js"></script>
+  <script src="plugins/home-helper/plugin.js"></script>
+  <script src="plugins/whats-coming/plugin.js"></script>
+  <script src="plugins/bazarr/plugin.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
