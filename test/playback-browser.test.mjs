@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -17,10 +18,14 @@ import test from 'node:test';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const RUN = process.env.PLEXLITE_BROWSER_TESTS === '1';
-const PORT = Number(process.env.PORT || 8936);
-const BASE = `http://127.0.0.1:${PORT}`;
 const expand = (p) => (p && p.startsWith('~/') ? join(homedir(), p.slice(2)) : p);
 const MAC_CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+
+// A free port (other demo servers may be running): PORT to choose one.
+function freePort() {
+  if (process.env.PORT) return Promise.resolve(Number(process.env.PORT));
+  return new Promise((resolve) => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); }); });
+}
 
 // Home Assistant's webhook handling, as in test/home-assistant.test.mjs: form fields → trigger.data.
 function fakeHomeAssistant() {
@@ -44,8 +49,10 @@ test('browser: playback events from the real player, and Movie mode to a fake Ho
   const { chromium } = require('playwright-core');
   const exe = expand(process.env.CHROMIUM) || (existsSync(MAC_CHROME) ? MAC_CHROME : undefined);
   const ha = await fakeHomeAssistant();
+  const PORT = await freePort();
+  const BASE = `http://127.0.0.1:${PORT}`;
   const demo = spawn(process.execPath, [join(ROOT, 'tools/demo/server.mjs')], { env: { ...process.env, PORT: String(PORT), PLEXLITE_DEMO_TUNE_DELAY: '0' }, stdio: ['ignore', 'pipe', 'inherit'] });
-  await new Promise((ok) => demo.stdout.once('data', ok));
+  await new Promise((ok, fail) => { demo.stdout.once('data', ok); demo.once('exit', (code) => fail(new Error('the demo server stopped: ' + code))); });
   const browser = await chromium.launch({ executablePath: exe, args: ['--autoplay-policy=no-user-gesture-required'] });
   try {
     const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
