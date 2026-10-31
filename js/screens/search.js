@@ -35,6 +35,10 @@
   // TV rows follow the typing by this much: matching and two more shelves cost ~35 ms a keystroke on
   // a 2019 TV, so the key's own frame (field, titles) comes first and a fast typist pays once
   var TV_DEBOUNCE_MS = 150;
+  // plugin rows for an empty query: asked this long after Search shows (its first frames come
+  // first), and again when they are older than a minute
+  var IDLE_DELAY_MS = 300;
+  var IDLE_STALE_MS = 60000;
   // Channels row: a quiet tile with the logo plate, number, name and what's on (DESIGN.md)
   var CHANNEL_GEO = { w: 360, h: 202, pitch: 388, scale: 1.09 };
 
@@ -98,6 +102,11 @@
     this.pluginRows = [];
     this.pluginSeq = 0;
     this.runPlugins = PL.debounce(function (q) { self.pluginSearch(q); }, 450);
+    // before anything is typed, plugins may fill the space next to the keyboard (e.g. Overseerr's
+    // Trending); asked a moment after Search shows and while the query is empty, never while typing
+    this.idleRows = [];
+    this.idleAt = 0;
+    this.idleSeq = 0;
     this.ambient = PL.debounce(function (item) {
       var path = item && (ui.artPath(item) || item.thumb);
       if (path) PL.app.backdrop.set(ui.ambient(path), 'ambient');
@@ -263,6 +272,7 @@
       this.server = { titles: [], people: [], episodes: [] };
       this.serverDone = false;
       this.render();
+      if (this.visible) this.loadIdle();
       return;
     }
     var t0 = Date.now();
@@ -407,6 +417,24 @@
     return true;
   };
 
+  // Plugins' rows for an empty query, kept a minute (the plugins cache their own answers longer).
+  SearchScreen.prototype.loadIdle = function () {
+    if (!PL.plugins.hasSearchIdle || !PL.plugins.hasSearchIdle()) {
+      this.idleRows = [];
+      return;
+    }
+    if (this.idleAt && Date.now() - this.idleAt < IDLE_STALE_MS) return;
+    this.idleAt = Date.now();
+    var self = this;
+    var seq = ++this.idleSeq;
+    PL.plugins.searchIdleRows().then(function (rows) {
+      if (!self.alive || seq !== self.idleSeq) return;
+      self.idleRows = rows || [];
+      if (!rows || !rows.length) self.idleAt = 0;
+      if (!self.query.trim()) self.render();
+    }, function () { self.idleAt = 0; });
+  };
+
   // Stale answers (the query moved on, or the screen went away) are dropped.
   SearchScreen.prototype.pluginSearch = function (q) {
     var self = this;
@@ -522,6 +550,8 @@
       }
       if (this.server.episodes.length) sections.push({ id: 'episodes', title: 'Episodes', kind: 'wide', items: this.server.episodes });
       this.pluginRows.forEach(function (row) { if (row.items.length) sections.push(row); });
+    } else {
+      this.idleRows.forEach(function (row) { if (row.items.length) sections.push(row); });
     }
     this.renderStatus(q, sections.length);
     this.renderZones(sections);
@@ -531,7 +561,8 @@
     var text = '';
     if (!q) {
       var what = liveTv() ? 'Search movies, shows, episodes, people and live TV' : 'Search movies, shows, episodes and people';
-      text = this.indexError ? 'Search is limited: ' + PL.errorMessage(this.indexError) : what;
+      // (the idle rows take the space)
+      text = this.indexError ? 'Search is limited: ' + PL.errorMessage(this.indexError) : count ? '' : what;
     }
     else if (!count && !PL.fuzzy.ready && PL.fuzzy.isBuilding()) text = 'Indexing your library…';
     else if (!count && this.serverDone) text = 'No results for “' + q + '”';
@@ -559,6 +590,7 @@
       if (shelf && shelf.srcItems === s.items) return shelf;
       if (shelf) {
         shelf.srcItems = s.items;
+        shelf.srcSelect = s.onSelect;
         if (!sameQuery) shelf.index = 0;
         shelf.replaceItems(s.items, s.items.length);
         if (!sameQuery && shelf.index !== 0) {
@@ -577,10 +609,15 @@
         geometry: s.geometry,
         onLongPress: s.onLongPress,
         onFocusItem: function (item) { self.focusedItem(item); },
-        onSelect: function (item) { self.open(item); },
+        // a plugin row's own onSelect (PL.plugins wraps it), else Search's
+        onSelect: function (item) {
+          if (item.plugin && shelf.srcSelect) shelf.srcSelect(item);
+          else self.open(item);
+        },
       });
       shelf.sectionId = s.id;
       shelf.srcItems = s.items;
+      shelf.srcSelect = s.onSelect;
       return shelf;
     });
     var key = ids.join(',');
@@ -698,11 +735,16 @@
     }
     this.serverStale = false;
     if (this.query.trim() && !this.pluginRows.length && PL.plugins.hasSearch()) this.runPlugins(this.query.trim());
+    if (!this.query.trim()) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = setTimeout(function () { if (self.alive && self.visible && !self.query.trim()) self.loadIdle(); }, IDLE_DELAY_MS);
+    }
   };
 
   SearchScreen.prototype.hide = function () {
     this.visible = false;
     clearTimeout(this.guideTimer);
+    clearTimeout(this.idleTimer);
     if (this.tvSoon) this.tvSoon.cancel();
     if (this.runTv) this.runTv.cancel();
     this.ambient.cancel();
@@ -735,6 +777,8 @@
     this.runServer.cancel();
     this.runPlugins.cancel();
     this.pluginSeq++;
+    this.idleSeq++;
+    clearTimeout(this.idleTimer);
     this.ambient.cancel();
     this.abortServer();
   };

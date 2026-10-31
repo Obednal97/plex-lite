@@ -82,9 +82,9 @@
       const first = list[0] && list[0].Metadata && list[0].Metadata[0];
       page.el.classList.toggle('t-has-hero', !!first);
       if (first) heroHost.appendChild(hero(first, () => load(true)));
-      list.forEach((hub) => {
+      plexShelves = list.map((hub) => {
         const more = !!hub.more || (hub.size || 0) > hub.Metadata.length;
-        shelves.appendChild(ui.shelf({
+        return shelves.appendChild(ui.shelf({
           title: hub.title,
           kind: shelfKind(hub),
           items: hub.Metadata,
@@ -101,18 +101,31 @@
       addPluginShelves();
     }
 
-    // Plugins may add shelves after Plex's (e.g. "Trending on Trakt"); a failure never shows.
+    // Plugins may add shelves among Plex's (shelf.at: after that many of them, else at the end;
+    // e.g. Overseerr's Trending films); a failure never shows. An item's badge goes on its card.
+    let plexShelves = [];
     function addPluginShelves() {
       if (!PL.plugins || !PL.plugins.shelfRows) return;
+      const mine = plexShelves;
       PL.plugins.shelfRows(section).then((list) => {
-        if (!alive || !list) return;
+        if (!alive || !list || mine !== plexShelves) return;
         list.filter((sh) => sh && sh.items && sh.items.length).forEach((sh) => {
-          shelves.appendChild(ui.shelf({
+          const node = ui.shelf({
             title: sh.title,
             kind: sh.kind === 'wide' ? 'wide' : 'poster',
             items: sh.items,
-            card: (item) => (sh.kind === 'wide' ? ui.wide : ui.poster)(item, { onSelect: sh.onSelect || T.open, caption: sh.kind !== 'wide' && !item.ratingKey }),
-          }));
+            card: (item) => {
+              const n = (sh.kind === 'wide' ? ui.wide : ui.poster)(item, { onSelect: sh.onSelect || T.open, caption: sh.kind !== 'wide' && !item.ratingKey });
+              if (item.badge && item.badge.label) {
+                const frame = n.querySelector('.t-card-frame') || n;
+                frame.appendChild(h('span.t-pbadge' + (item.badge.tone ? '.t-pbadge-' + item.badge.tone : ''), { text: item.badge.label }));
+              }
+              return n;
+            },
+          });
+          // before the Plex row that comes after it (rows placed at the same point keep their order)
+          const after = typeof sh.at === 'number' ? mine[sh.at] : null;
+          shelves.insertBefore(node, after && after.parentNode === shelves ? after : null);
         });
       }, () => {});
     }

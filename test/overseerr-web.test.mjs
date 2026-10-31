@@ -106,7 +106,7 @@ function webPlugin(b) {
       set: (k, v) => { store[k] = JSON.stringify(v); },
       del: (k) => { delete store[k]; },
     },
-    el: () => ({ appendChild() {}, style: {}, classList: { toggle() {}, add() {}, remove() {} } }),
+    el: () => ({ appendChild() {}, addEventListener() {}, style: {}, classList: { toggle() {}, add() {}, remove() {} } }),
     clear() {}, translate() {}, clamp: (v, lo, hi) => Math.max(lo, Math.min(hi, v)),
     warn() {},
     plex: { onSignOut: [] },
@@ -115,7 +115,7 @@ function webPlugin(b) {
   const window = { location: { origin: ORIGIN }, open: (url) => opened.push(url) };
   const sandbox = { PL, window, console, setTimeout, clearTimeout, Promise, Date, JSON, Math };
   vm.createContext(sandbox);
-  for (const f of ['seerr.js', 'seerr-web.js', 'report.js', 'downloads.js', 'plugin.js']) {
+  for (const f of ['seerr.js', 'seerr-web.js', 'touch.js', 'report.js', 'downloads.js', 'discover.js', 'screens.js', 'plugin.js']) {
     vm.runInContext(read('plugins/overseerr/' + f), sandbox, { filename: f });
   }
   const O = PL.overseerr;
@@ -449,14 +449,16 @@ test('Settings: sign-in failures open the explanation, and the problem stays lis
   const { PL, O, ctx, sheets, toasts } = webPlugin(b);
   ctx.textEntry = (title, initial, placeholder, done) => { ctx.placeholder = placeholder; done('overseerr.example.com'); };
   ctx.refreshSettings = () => {};
-  PL.def.settingsRows(ctx)[0].action();
-  sheets[0][0].rows[0].action(); // Set up Overseerr
+  const pushed = [];
+  ctx.push = (screen) => pushed.push(screen);
+  PL.def.settingsRows(ctx)[0].action(); // the Overseerr page
+  assert.equal(pushed.length, 1, 'Settings opens the Overseerr page');
+  O.pageModel(ctx).groups[0].rows[0].action(); // Set up Overseerr
   assert.equal(ctx.placeholder, 'e.g. https://overseerr.example.com');
   await new Promise((r) => setTimeout(r, 20));
-  assert.equal(sheets[1][0].heading, 'Overseerr doesn\'t allow this site');
+  assert.equal(sheets[0][0].heading, 'Overseerr doesn\'t allow this site');
   assert.ok(!toasts.some((t) => /allow/.test(t)), 'a sheet, not a toast');
-  PL.def.settingsRows(ctx)[0].action();
-  assert.equal(sheets[2][0].rows[0].label, 'Overseerr doesn\'t allow this site');
+  assert.equal(O.pageModel(ctx).groups[0].rows[0].label, 'Overseerr doesn\'t allow this site', 'listed at the top of the page');
   // fixed on the proxy: the next sign-in works and the row goes
   b.opts.allowOrigin = ORIGIN;
   b.opts.preflight = true;

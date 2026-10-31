@@ -2,7 +2,7 @@
 //
 // On the TV the plugin talks to Overseerr through its webOS service (service/service.js). A browser
 // has no such service, so this file answers the same methods (login, status, request, downloads,
-// lookup, logout) with the same answers and error codes, calling the user's own Overseerr straight
+// lookup, requests, discover, logout) with the same answers and error codes, calling the user's own Overseerr straight
 // from the page with fetch and credentials: 'include'. That only works when Overseerr's reverse
 // proxy allows this page's origin with credentials and answers preflights, and when the page is on
 // the same site as Overseerr (otherwise the browser won't send its SameSite=Lax session cookie back).
@@ -542,7 +542,7 @@
       var mi = d.mediaInfo;
       var t = titleOf(d);
       cacheTitle(ctx, type + ':' + id, t);
-      return {
+      var answer = {
         returnValue: true,
         title: t.title,
         year: t.year,
@@ -558,6 +558,122 @@
           }),
         } : null,
       };
+      if (type === 'tv') answer.seasons = trimSeasons(d, mi);
+      return answer;
+    });
+  };
+
+  // A show's seasons with Overseerr's status of each and whether an open request asks for it.
+  function trimSeasons(d, mi) {
+    var known = {};
+    ((mi && mi.seasons) || []).forEach(function (s) { known[s.seasonNumber] = s.status; });
+    var asked = {};
+    ((mi && mi.requests) || []).forEach(function (r) {
+      if (r.status !== 1 && r.status !== 2) return;
+      (r.seasons || []).forEach(function (s) { asked[s.seasonNumber] = r.status === 1 ? 'pending' : 'approved'; });
+    });
+    return (d.seasons || []).filter(function (s) { return s && s.seasonNumber > 0; }).slice(0, 100).map(function (s) {
+      return {
+        season: s.seasonNumber,
+        name: String(s.name || '').slice(0, 80),
+        episodes: Number(s.episodeCount) || 0,
+        airDate: s.airDate || null,
+        status: known[s.seasonNumber] || 1,
+        requested: asked[s.seasonNumber] || null,
+      };
+    });
+  }
+
+  function trimRequest(r) {
+    var m = r.media || {};
+    return {
+      id: r.id,
+      status: r.status,
+      createdAt: r.createdAt || null,
+      updatedAt: r.updatedAt || null,
+      mediaType: r.type === 'tv' || m.mediaType === 'tv' ? 'tv' : 'movie',
+      tmdbId: m.tmdbId,
+      tvdbId: m.tvdbId || null,
+      ratingKey: m.ratingKey || null,
+      mediaStatus: m.status || 1,
+      is4k: !!r.is4k,
+      seasons: (r.seasons || []).slice(0, 100).map(function (s) { return { season: s.seasonNumber, status: s.status }; }),
+      mediaSeasons: (m.seasons || []).slice(0, 100).map(function (s) { return { season: s.seasonNumber, status: s.status }; }),
+      downloads: (m.downloadStatus || []).slice(0, 60).map(trimDownload),
+    };
+  }
+
+  // The viewer's own requests (the session's Overseerr user, never someone else's), newest first.
+  M.requests = function (ctx, p) {
+    var key = p.key || 'default';
+    if (!KEY_RE.test(key)) return Promise.reject(error('bad_request', 'Bad profile key'));
+    var take = Math.max(1, Math.min(50, Math.floor(Number(p.take)) || 30));
+    var s = session(ctx, key);
+    if (!s) return Promise.reject(unauthenticated());
+    var uid = Number(s.userId) > 0 ? Number(s.userId) : null;
+    var path = '/request?take=' + take + '&skip=0&sort=added&filter=all' + (uid ? '&requestedBy=' + uid : '');
+    return apiGet(ctx, key, path).then(function (data) {
+      var items = ((data && data.results) || []).filter(function (r) { return r && r.media; }).map(trimRequest);
+      return eachLimit(items, 4, function (item) {
+        return titleFor(ctx, key, item.mediaType, item.tmdbId).then(function (t) {
+          item.title = t.title;
+          item.year = t.year;
+          item.posterPath = t.posterPath;
+          item.backdropPath = t.backdropPath;
+        });
+      }).then(function () {
+        return { returnValue: true, items: items, total: (data && data.pageInfo && data.pageInfo.results) || items.length, at: Date.now() };
+      });
+    });
+  };
+
+  var DISCOVER = {
+    'trending-movie': { path: '/discover/trending?mediaType=movie&page=1', type: 'movie' },
+    'trending-tv': { path: '/discover/trending?mediaType=tv&page=1', type: 'tv' },
+    'popular-movie': { path: '/discover/movies?page=1', type: 'movie' },
+    'popular-tv': { path: '/discover/tv?page=1', type: 'tv' },
+    'upcoming-movie': { path: '/discover/movies/upcoming?page=1', type: 'movie' },
+    'upcoming-tv': { path: '/discover/tv/upcoming?page=1', type: 'tv' },
+  };
+
+  function percentOf(downloads) {
+    var size = 0;
+    var left = 0;
+    (downloads || []).forEach(function (d) { size += Number(d.size) || 0; left += Math.min(Number(d.sizeLeft) || 0, Number(d.size) || 0); });
+    return size > 0 ? Math.floor(((size - left) / size) * 100) : null;
+  }
+
+  function trimResult(r) {
+    var mi = r.mediaInfo || null;
+    var active = mi && (mi.requests || []).some(function (q) { return q && (q.status === 1 || q.status === 2); });
+    return {
+      id: r.id,
+      mediaType: r.mediaType,
+      title: String(r.title || r.name || '').slice(0, 200),
+      year: String(r.releaseDate || r.firstAirDate || '').slice(0, 4),
+      date: r.releaseDate || r.firstAirDate || null,
+      posterPath: r.posterPath || null,
+      backdropPath: r.backdropPath || null,
+      overview: String(r.overview || '').slice(0, 400),
+      status: mi && mi.status ? mi.status : 1,
+      ratingKey: (mi && mi.ratingKey) || null,
+      requested: !!active,
+      downloading: mi && mi.downloadStatus && mi.downloadStatus.length ? percentOf(mi.downloadStatus) : null,
+    };
+  }
+
+  M.discover = function (ctx, p) {
+    var key = p.key || 'default';
+    var spec = DISCOVER.hasOwnProperty(p.list) ? DISCOVER[p.list] : null;
+    if (!KEY_RE.test(key) || !spec) return Promise.reject(error('bad_request', 'Bad discover list'));
+    return apiGet(ctx, key, spec.path).then(function (data) {
+      var items = ((data && data.results) || []).filter(function (r) {
+        return r && r.id > 0 && (r.mediaType || spec.type) === spec.type;
+      }).slice(0, 20).map(function (r) {
+        if (!r.mediaType) r.mediaType = spec.type;
+        return trimResult(r);
+      });
+      return { returnValue: true, list: p.list, items: items, at: Date.now() };
     });
   };
 

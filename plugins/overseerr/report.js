@@ -14,7 +14,10 @@
     { id: 'out-of-sync', label: 'Audio out of sync', type: 2 },
     { id: 'corrupt', label: 'Stutters or looks corrupt', type: 1 },
     { id: 'wrong-item', label: 'Wrong film', tvLabel: 'Wrong episode', type: 4 },
-    { id: 'subtitles', label: 'Subtitles missing or burned in', type: 3 },
+    // missing: the home server helper asks Bazarr for subtitles (nothing is deleted); burned in: it
+    // replaces the file, as for the other reasons (notes on the helper, reason=subs-missing|subs-burned)
+    { id: 'subs-missing', label: 'Subtitles missing', type: 3 },
+    { id: 'subs-burned', label: 'Subtitles burned in', type: 3 },
     { id: 'other', label: 'Something else…', type: 4, note: true },
   ];
 

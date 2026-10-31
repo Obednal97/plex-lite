@@ -27,13 +27,13 @@ function webContext() {
       set: (k, v) => { store[k] = JSON.stringify(v); },
       del: (k) => { delete store[k]; },
     },
-    el: () => ({ appendChild() {}, style: {}, classList: { toggle() {}, add() {}, remove() {} } }),
+    el: () => ({ appendChild() {}, addEventListener() {}, style: {}, classList: { toggle() {}, add() {}, remove() {} } }),
     clear() {}, translate() {}, clamp: (v, lo, hi) => Math.max(lo, Math.min(hi, v)),
     plugins: { register: (def) => { PL.def = def; } },
   };
   const sandbox = { PL, console, setTimeout, clearTimeout, Promise, Date, JSON, Math };
   vm.createContext(sandbox);
-  for (const f of ['seerr.js', 'report.js', 'downloads.js', 'plugin.js']) {
+  for (const f of ['seerr.js', 'report.js', 'downloads.js', 'discover.js', 'screens.js', 'plugin.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'plugins/overseerr', f), 'utf8'), sandbox, { filename: f });
   }
   return { PL, O: PL.overseerr, store };
@@ -217,7 +217,11 @@ await (async () => {
   const m2 = O.message(other, { season: 0, episode: 0, plexItem: null }, 'no sound', { type: 'movie' });
   eq(m2.split('\n')[0], 'Something else: no sound', 'note text');
   ok(/scope=movie$/.test(m2), 'movie scope');
-  eq(O.REASONS.map((r) => r.type), [1, 2, 2, 1, 4, 3, 4], 'issue types per reason');
+  eq(O.REASONS.map((r) => r.type), [1, 2, 2, 1, 4, 3, 3, 4], 'issue types per reason');
+  // subtitles: two reasons, so the helper can fetch missing ones from Bazarr instead of re-downloading
+  eq(O.REASONS.filter((r) => r.type === 3).map((r) => [r.id, r.label]), [['subs-missing', 'Subtitles missing'], ['subs-burned', 'Subtitles burned in']], 'subtitle reasons');
+  const sub = O.REASONS.filter((r) => r.id === 'subs-missing')[0];
+  ok(/reason=subs-missing; scope=movie/.test(O.message(sub, { season: 0, episode: 0, plexItem: null }, null, { type: 'movie' })), 'subs-missing tail');
 }
 
 {

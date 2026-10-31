@@ -28,13 +28,17 @@
     return O.fmtSize(done) + ' of ' + O.fmtSize(e.size);
   }
 
-  // ---- The Downloading screen ---------------------------------------------------------------------
+  // ---- A list screen: one row per title (Downloading, Your requests) -------------------------------
 
-  // opts: {focusId}
-  O.downloadsScreen = function (ctx, opts) {
-    opts = opts || {};
+  // Quiet rows on the ground with a poster, title, sub line, a state on the right (and a size line
+  // under it), and a progress rail; the focused row is the white plate. Live while open: it reloads
+  // every refreshMs and stops when hidden. spec: {title, load(maxAge) -> Promise<{entries, meta}>,
+  // fill(entry) -> {title, sub, state, tone, size, progress (0–1, or null: no rail)}, open(entry),
+  // empty: [title, sub], failed: title, refreshMs, focusId}. Entries need a stable `id`.
+  O.listScreen = function (ctx, spec) {
+    var refreshMs = spec.refreshMs || REFRESH_MS;
     var root = el('div', 'osdl-screen');
-    root.appendChild(el('div', 'osdl-title', 'Downloading'));
+    root.appendChild(el('div', 'osdl-title', spec.title));
     var meta = el('div', 'osdl-meta', '');
     root.appendChild(meta);
     var status = el('div', 'loading');
@@ -46,7 +50,7 @@
     root.appendChild(view);
     var rows = [];
     var index = 0;
-    var focusId = opts.focusId || null;
+    var focusId = spec.focusId || null;
     var visible = false;
     var alive = true;
     var timer = null;
@@ -70,7 +74,7 @@
         poster.appendChild(img);
       }
       n.appendChild(poster);
-      var title = el('div', 'osdl-row-title', e.title);
+      var title = el('div', 'osdl-row-title', '');
       var sub = el('div', 'osdl-row-sub', '');
       var state = el('div', 'osdl-state', '');
       var size = el('div', 'osdl-size', '');
@@ -78,20 +82,22 @@
       var fill = el('div', 'osdl-fill');
       rail.appendChild(fill);
       [title, sub, state, size, rail].forEach(function (x) { n.appendChild(x); });
-      var r = { node: n, entry: e, title: title, sub: sub, state: state, size: size, fill: fill };
-      n.addEventListener('click', function () { index = rows.indexOf(r); paint(); open(r.entry); });
+      var r = { node: n, entry: e, title: title, sub: sub, state: state, size: size, rail: rail, fill: fill };
+      n.addEventListener('click', function () { index = rows.indexOf(r); paint(); spec.open(r.entry); });
       update(r, e);
       return r;
     }
 
     function update(r, e) {
+      var f = spec.fill(e);
       r.entry = e;
-      r.title.textContent = e.title;
-      r.sub.textContent = subtitle(e);
-      r.state.textContent = O.progressLine(e);
-      r.state.className = 'osdl-state tone-' + e.state;
-      r.size.textContent = sizeLine(e);
-      r.fill.style.transform = 'scaleX(' + e.progress.toFixed(3) + ')';
+      r.title.textContent = f.title;
+      r.sub.textContent = f.sub || '';
+      r.state.textContent = f.state || '';
+      r.state.className = 'osdl-state tone-' + (f.tone || 'plain');
+      r.size.textContent = f.size || '';
+      r.rail.style.display = f.progress == null ? 'none' : '';
+      if (f.progress != null) r.fill.style.transform = 'scaleX(' + f.progress.toFixed(3) + ')';
     }
 
     function paint() {
@@ -105,15 +111,12 @@
 
     function render(res) {
       if (!alive) return;
-      var entries = res.list;
-      var when = new Date(res.at);
-      meta.textContent = (entries.length ? entries.length + (entries.length === 1 ? ' title' : ' titles') + ' · ' : '') +
-        (res.source === 'helper' ? 'from the download queue' : 'from Overseerr') + ' · updated ' +
-        ('0' + when.getHours()).slice(-2) + ':' + ('0' + when.getMinutes()).slice(-2);
+      var entries = res.entries;
+      meta.textContent = res.meta || '';
       if (!entries.length) {
         PL.clear(list);
         rows = [];
-        setStatus('Nothing is downloading', 'Requests and replacements show up here while they download.');
+        setStatus(spec.empty[0], spec.empty[1]);
         return;
       }
       status.style.display = 'none';
@@ -136,12 +139,12 @@
       paint();
     }
 
-    // maxAge: how old a cached list may be (the shelf and badges keep one warm)
+    // maxAge: how old a cached list may be (shelves, badges and pages keep one warm)
     function load(maxAge) {
-      return O.downloads(ctx, maxAge).then(render, function (err) {
+      return spec.load(maxAge).then(render, function (err) {
         if (!alive) return;
-        if (!rows.length) setStatus('Couldn\'t load downloads', err && err.message);
-        else ctx.warn('downloads refresh failed: ' + (err && err.message));
+        if (!rows.length) setStatus(spec.failed, err && err.message);
+        else ctx.warn('list refresh failed: ' + (err && err.message));
       });
     }
 
@@ -149,18 +152,8 @@
       clearTimeout(timer);
       timer = setTimeout(function () {
         if (!alive || !visible) return;
-        load(REFRESH_MS - 2000).then(schedule, schedule);
-      }, REFRESH_MS);
-    }
-
-    function open(e) {
-      if (e.ratingKey && /^\d+$/.test(e.ratingKey)) {
-        ctx.openItem({ ratingKey: e.ratingKey, type: e.mediaType === 'tv' ? 'show' : 'movie', title: e.title });
-        return;
-      }
-      var rows2 = e.releases.map(function (t) { return { label: t, action: function () {} }; });
-      if (!rows2.length) rows2.push({ label: O.progressLine(e), action: function () {} });
-      ctx.sheet([{ heading: e.title + ' · not in your library yet', rows: rows2 }]);
+        load(refreshMs - 2000).then(schedule, schedule);
+      }, refreshMs);
     }
 
     return {
@@ -169,10 +162,10 @@
         visible = true;
         ctx.backdrop(null);
         paint();
-        // draw the list the shelf already has at once; the next refresh brings it up to date
+        // draw the list already in memory at once; the next refresh brings it up to date
         var first = !rows.length;
-        load(first ? 60000 : REFRESH_MS - 2000).then(function () {
-          if (first && alive && visible) load(REFRESH_MS - 2000).then(schedule, schedule);
+        load(first ? 60000 : refreshMs - 2000).then(function () {
+          if (first && alive && visible) load(refreshMs - 2000).then(schedule, schedule);
           else schedule();
         }, schedule);
       },
@@ -187,7 +180,7 @@
           return true;
         }
         if (code === K.ENTER) {
-          if (rows[index]) open(rows[index].entry);
+          if (rows[index]) spec.open(rows[index].entry);
           return true;
         }
         return false;
@@ -195,8 +188,57 @@
     };
   };
 
+  function clock(at) {
+    var when = new Date(at);
+    return ('0' + when.getHours()).slice(-2) + ':' + ('0' + when.getMinutes()).slice(-2);
+  }
+
+  // "3 titles · from the download queue · updated 21:04"
+  O.downloadsMeta = function (res) {
+    var n = res.list.length;
+    return (n ? n + (n === 1 ? ' title' : ' titles') + ' · ' : '') +
+      (res.source === 'helper' ? 'from the download queue' : 'from Overseerr') + ' · updated ' + clock(res.at);
+  };
+
+  // OK on a download: the title in Plex when it's there, else what is coming
+  O.openDownload = function (ctx, e) {
+    if (e.ratingKey && /^\d+$/.test(e.ratingKey)) {
+      ctx.openItem({ ratingKey: e.ratingKey, type: e.mediaType === 'tv' ? 'show' : 'movie', title: e.title });
+      return;
+    }
+    var rows = e.releases.map(function (t) { return { label: t, action: function () {} }; });
+    if (!rows.length) rows.push({ label: O.progressLine(e), action: function () {} });
+    ctx.sheet([{ heading: e.title + ' · not in your library yet', rows: rows }]);
+  };
+
+  O.downloadSubtitle = subtitle;
+  O.downloadSize = sizeLine;
+
+  // ---- The Downloading screen ---------------------------------------------------------------------
+
+  // What the Downloading list shows (the TV screen here, the touch page in touch.js). opts: {focusId}
+  O.downloadsSpec = function (ctx, opts) {
+    return {
+      title: 'Downloading',
+      focusId: (opts && opts.focusId) || null,
+      load: function (maxAge) {
+        return O.downloads(ctx, maxAge).then(function (res) { return { entries: res.list, meta: O.downloadsMeta(res) }; });
+      },
+      fill: function (e) {
+        return { title: e.title, sub: subtitle(e), state: O.progressLine(e), tone: e.state, size: sizeLine(e), progress: e.progress };
+      },
+      open: function (e) { O.openDownload(ctx, e); },
+      empty: ['Nothing is downloading', 'Requests and replacements show up here while they download.'],
+      failed: 'Couldn\'t load downloads',
+    };
+  };
+
+  O.downloadsScreen = function (ctx, opts) { return O.listScreen(ctx, O.downloadsSpec(ctx, opts)); };
+
+  // The touch layer's page when it is showing (touch.js, web build), else the TV screen.
   O.openDownloads = function (ctx, focusId) {
-    ctx.push(O.downloadsScreen(ctx, { focusId: focusId }));
+    if (O.touchUi && O.touchUi.active()) O.touchUi.downloads(ctx, focusId);
+    else ctx.push(O.downloadsScreen(ctx, { focusId: focusId }));
   };
 
   // ---- Shelf on Recommended -------------------------------------------------------------------------
