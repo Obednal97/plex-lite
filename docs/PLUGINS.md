@@ -123,6 +123,71 @@ Up to two keyline badges added to a details page's meta line once they're known 
 
 OK on an item from one of the plugin's shelves. A shelf can also carry its own `onSelect(item, ctx)`.
 
+### onPlayback(event, ctx)
+
+What the player is doing, for plugins that react to it (the Home Assistant plugin dims the lights).
+Fire-and-forget: the player never waits for it, and its return value is ignored.
+
+| `event.event` | when |
+|---|---|
+| `play` | a new item started playing: the video is rendering, not just loading (also the next episode after Up Next, and a new channel) |
+| `pause` / `resume` | the viewer paused or resumed (also when another full screen covers the player). A seek or a scrub sends nothing |
+| `stop` | playback ended early: the viewer left the player, it failed, a Next episode press early in an episode, or another channel was tuned |
+| `ended` | it finished: the video ended, Skip Credits, or Up Next from the credits (then `play` for the next one) |
+| `buffering-start` / `buffering-end` | a stall of more than 2 s while playing (waiting for a seek doesn't count) |
+
+```js
+{
+  event: 'play',
+  at: 1761940800000,          // ms since 1970
+  positionMs: 0,              // null for Live TV
+  item: {
+    type: 'movie',            // 'movie' | 'episode' | 'live' | 'clip' (trailers and extras)
+    kind: 'movie',            // 'movie' | 'series' | 'live' | null (clips)
+    title: 'Sintel',          // the episode's own title; Live TV: the programme, else the channel
+    showTitle: 'Caminandes',  // episodes: the show, season and episode numbers
+    season: 1, episode: 2,
+    year: 2010, durationMs: 888000, contentRating: 'PG-13',   // when Plex has them
+    genres: ['Animation', 'Fantasy'],                        // up to 3, may be empty
+    isKids: false,
+    channel: 'Open Movie Channel',                           // Live TV only
+    liveCategory: 'movie',    // Live TV only: 'sports' | 'news' | 'kids' | 'movie' | 'series' | null
+  },
+}
+```
+
+- **Nothing identifies the server or the account**: no rating keys, paths, image URLs, file names,
+  tokens, server names or profile.
+- **`isKids`** is true when the content rating is one for children (`G`, `U`, `Uc`, `TV-Y`, `TV-Y7`,
+  `TV-Y7-FV`, `TV-G`, and `PG` for films; a country prefix like `gb/` is ignored), the library's name
+  says Kids or Children, a genre is Children or Kids, or a Live TV programme is in the guide's Kids
+  category.
+- **`liveCategory`** is the Live TV guide's own category (docs/LIVETV-browse-design.md): from the
+  programme's genres, else the channel's category in the loaded guide, else the channel's name.
+  Entertainment and documentaries count as `series`; music, shopping and religious channels are `null`.
+- Everything comes from metadata the player already has: no requests are made for an event.
+- **Delivery**: the player only queues the event; plugins get it about 200 ms later in a timer of
+  their own, in order, never in the task that handled a key press. Each plugin gets its own copy. A
+  plugin that throws, rejects or never answers is logged and changes nothing for playback or the other
+  plugins. While the page goes away (the TV app leaving the foreground, a browser tab closing) the
+  queue is delivered at once, because timers may not run after that.
+- Keep it cheap and asynchronous: it still runs on the TV's one main thread. Do network calls without
+  waiting on them in the hook, and debounce (a pause followed by a resume a second later is common).
+- **External plugins** need the `playback` permission ("See what you're watching and when it plays or
+  pauses", medium risk) in their catalogue entry and the user's consent. They get the same fields
+  (strings capped). Only plugins that ask for it are woken: a sandboxed plugin's frame starts on its
+  first event, which costs ~50 ms on the TV once, after the `play` has been delivered.
+
+```js
+PL.plugins.register({
+  id: 'now-playing-log', name: 'Now playing', version: '1.0.0', apiVersion: 1,
+  onPlayback: function (ev, ctx) {
+    if (ev.event !== 'play') return;
+    ctx.log('playing', ev.item.kind, ev.item.title, ev.item.genres.join(', '));
+  },
+});
+```
+
 ### Shelves and items
 
 A shelf is `{id, title, kind: 'poster' | 'wide', items, makeCard?, onSelect?, at?}`. Items need

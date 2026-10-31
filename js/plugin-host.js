@@ -30,6 +30,8 @@
     'plex:token': { risk: 'high', text: 'Use your Plex sign-in (full access to your Plex account)' },
     'service': { risk: 'medium', text: 'Run its own background service on the TV' },
     'tabs': { risk: 'low', text: 'Add its own tab to Plex Lite' },
+    // onPlayback: what is playing (title, type, genres, rating) and when it plays, pauses or stops
+    'playback': { risk: 'medium', text: 'See what you\'re watching and when it plays or pauses' },
   };
 
   function originOf(url) {
@@ -474,6 +476,23 @@
     };
   }
 
+  // A playback event as an external plugin gets it (onPlayback): the documented fields only.
+  var PLAYBACK_EVENTS = ['play', 'pause', 'resume', 'stop', 'ended', 'buffering-start', 'buffering-end'];
+  function sanitizePlayback(ev) {
+    if (!ev || PLAYBACK_EVENTS.indexOf(ev.event) === -1) return null;
+    var it = ev.item || {};
+    var item = { type: str(it.type, 12), kind: typeof it.kind === 'string' ? str(it.kind, 12) : null, title: str(it.title, 200) };
+    ['showTitle', 'contentRating', 'channel'].forEach(function (k) { if (typeof it[k] === 'string') item[k] = str(it[k], 200); });
+    ['season', 'episode', 'year', 'durationMs'].forEach(function (k) { if (typeof it[k] === 'number' && isFinite(it[k])) item[k] = it[k]; });
+    if (it.type === 'live') item.liveCategory = typeof it.liveCategory === 'string' ? str(it.liveCategory, 12) : null;
+    item.genres = (Array.isArray(it.genres) ? it.genres : []).slice(0, 3).map(function (g) { return str(g, 40); }).filter(Boolean);
+    item.isKids = it.isKids === true;
+    return {
+      event: ev.event, at: typeof ev.at === 'number' ? ev.at : Date.now(), item: item,
+      positionMs: typeof ev.positionMs === 'number' && isFinite(ev.positionMs) ? ev.positionMs : null,
+    };
+  }
+
   function toDefinition(rt, deps) {
     var rec = function () { return rt.grant(); };
     var shelfItems = function (shelf) {
@@ -537,6 +556,15 @@
         return rt.call('screen', [str(tabId, 40)]).then(function (m) { return sanitizeModel(m, rec(), rt); });
       },
     };
+    // Playback events only for plugins that ask for them ("playback") and were allowed to: the
+    // registry then never wakes the others' frames while something plays.
+    if ((rt.manifest.permissions || []).indexOf('playback') !== -1) {
+      def.onPlayback = function (event) {
+        if (!hasGrant(rec(), 'playback')) return null;
+        var clean = sanitizePlayback(event);
+        return clean ? rt.call('onPlayback', [clean]).then(function () { return null; }) : null;
+      };
+    }
     if (deps && deps.onDefinition) deps.onDefinition(def);
     return def;
   }
@@ -811,7 +839,7 @@
     API_VERSION: API_VERSION, originOf: originOf, parsePermissions: parsePermissions, Grants: Grants, hasGrant: hasGrant,
     originAllowed: originAllowed, projectItem: projectItem, sanitizeShelf: sanitizeShelf, sanitizeList: sanitizeList,
     plexPathAllowed: plexPathAllowed, cleanParams: cleanParams, scrubToken: scrubToken, Rpc: Rpc, Runtime: Runtime,
-    sanitizeModel: sanitizeModel,
+    sanitizeModel: sanitizeModel, sanitizePlayback: sanitizePlayback,
     buildSrcdoc: buildSrcdoc, toDefinition: toDefinition,
   };
 })();
