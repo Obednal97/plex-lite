@@ -250,9 +250,10 @@ and treat `ctx` methods as async. Then the same code runs in both phases.
 - `js/plugin-store.js`: catalogue load/parse/cache, install/update/remove/connect, state.
 - `js/sha256.js`: pure-JS SHA-256 (tested against Node's crypto).
 - `js/plugin-sdk.js`: the in-frame SDK. `js/screens/plugin-screen.js`: declarative screens.
-- `catalog/plugins.json`, `catalog/bundles/`: the catalogue, with Hello Shelf published.
+- `catalog/plugins.json`, `catalog/bundles/`: the catalogue. Hello Shelf was published there for the Phase 2
+  tests and removed on 2026-10-31; the tests now use `test/fixtures/catalog/plugins.json`.
 - `tools/build-plugin.mjs`: publishes a web plugin into the catalogue.
-- `examples/plugins/hello-shelf` (published) and `examples/plugins/probe` (escape tests, unpublished).
+- `examples/plugins/hello-shelf` (tests and docs only) and `examples/plugins/probe` (escape tests, unpublished).
 - `test/plugin-host.test.mjs`: 28 Node tests (permissions, sanitising, Plex allow-list, RPC limits,
   end-to-end SDK ↔ host runs, SHA-256, catalogue parsing, tampered/oversized bundles and quota,
   install → connect → update → remove, Plex sign-in re-ask on update, HBC install/uninstall).

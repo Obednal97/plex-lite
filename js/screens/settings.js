@@ -204,7 +204,7 @@
           }
           return { label: e.name, sub: sub, action: function () { catalogueEntrySheet(e); } };
         });
-        if (!rows.length) rows.push({ label: 'No plugins available', sub: c.errors[0] || '', action: function () {} });
+        if (!rows.length) rows.push({ label: c.errors.length ? 'No plugins available' : 'No plugins to add yet', sub: c.errors[0] || 'Overseerr is built in: it\'s in Settings → Plugins', action: function () {} });
         var custom = store.catalogUrl() !== store.DEFAULT_URL;
         rows.push({ label: 'Catalogue address', sub: (custom ? store.catalogUrl() : 'Default') + ' · ' + c.source, action: editCatalogUrl });
         PL.app.push(screens.sheet([{ heading: 'Plugins', rows: rows }], { closeOnSelect: false }));
