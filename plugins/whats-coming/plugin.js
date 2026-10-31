@@ -258,7 +258,7 @@
         };
       });
       if (!out.length) return null;
-      return { id: 'episodes', title: 'New episodes this week', kind: 'wide', items: out, makeCard: makeCard(ctx), onSelect: function (it) { open(ctx, it); } };
+      return { id: 'episodes', title: 'New episodes this week', at: 1, kind: 'wide', items: out, makeCard: makeCard(ctx), onSelect: function (it) { open(ctx, it); } };
     });
   }
 
@@ -271,6 +271,7 @@
     return {
       id: 'films',
       title: 'Films arriving soon',
+      at: 3,
       kind: 'wide',
       items: films.map(function (f) {
         var d = W.parseDate(f.releaseDate);

@@ -135,8 +135,6 @@ class Model {
       Country: (m.country ? [m.country] : []).map((c) => this.tag('Country', c)),
       _id: id, _decade: Math.floor(m.year / 10) * 10, _section: '1', _src: m,
     };
-    // made-up external ids (the fake home server helper, tools/demo/helper.mjs, uses them)
-    item.Guid = [{ id: `tmdb://${990001 + this.movies.length}` }];
     const logo = m.logo ? `media:${m.logo}` : m.genLogo ? `gen:logo/${id}` : null;
     if (logo) item.Image = [{ type: 'clearLogo', url: this.imagePath(`/library/metadata/${rk}/clearLogo/${this.nextId++}`, logo) }];
     item.Media = this.media(rk, durationMs, m.video);
@@ -180,7 +178,8 @@ class Model {
       Role: (s.cast || []).map((c) => ({ ...this.person(c.name), role: c.role })),
       _id: id, _decade: Math.floor(s.year / 10) * 10, _section: '2', _src: s, _seasons: [],
     };
-    show.Guid = [{ id: `tvdb://${991001 + this.shows.length}` }, { id: `tmdb://${992001 + this.shows.length}` }];
+    // made-up external ids, shared by the fake Overseerr (seerr.mjs) and the fake helper (helper.mjs)
+    show.Guid.unshift({ id: `tvdb://${991001 + this.shows.length}` });
     const logo = s.logo ? `media:${s.logo}` : s.genLogo ? `gen:logo/${id}` : null;
     if (logo) show.Image = [{ type: 'clearLogo', url: this.imagePath(`/library/metadata/${rk}/clearLogo/${this.nextId++}`, logo) }];
     this.items.set(rk, show);
