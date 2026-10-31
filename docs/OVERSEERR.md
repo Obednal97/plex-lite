@@ -61,8 +61,9 @@ Reported from Plex Lite (S1 E6).
 plexlite: reason=audio-language; scope=episode; season=1; episode=6; plex=<ratingKey>; file=<file name>
 ```
 
-What happens next is up to the server: Overseerr sends its usual "issue reported" notifications, and a
-helper can act on the webhook (e.g. blocklist the release, delete the file, search again, resolve).
+What happens next is up to the server: Overseerr sends its usual "issue reported" notifications, and the
+[home server helper](HELPER.md) can act on its webhook: blocklist the release, delete the file, search
+again and resolve the issue (or ask Bazarr for missing subtitles), with dry run and safety limits.
 
 ## Downloading
 
@@ -78,7 +79,7 @@ helper can act on the webhook (e.g. blocklist the release, delete the file, sear
 
 Source, in order:
 
-1. **A download-queue helper**, when Settings → Overseerr → "Download queue address" is set: `GET
+1. **A download-queue helper** (the [home server helper](HELPER.md) serves it), when Settings → Overseerr → "Download queue address" is set: `GET
    <address>/queue` (read-only, CORS `*`), one row per Sonarr/Radarr queue record:
    `{version: 1, updatedAt, items: [{source, mediaType: 'movie'|'tv', tmdbId, tvdbId, title, year,
    season, episode, episodeTitle, releaseTitle, status, size, sizeLeft, timeLeftSeconds, eta,

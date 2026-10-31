@@ -236,3 +236,7 @@ Full notes: [OVERSEERR.md](OVERSEERR.md).
   (`POST /api/v1/request`).
 - **Downloading:** `shelfRows` (a Downloading shelf), `badges` (details) and a Downloading screen.
 - **Report a problem:** `actions` (details pill + hold-OK) → `POST /api/v1/issue`.
+
+The **home server helper** ([HELPER.md](HELPER.md)) is the server-side half: it acts on those reports
+through Seerr's webhook and serves `/queue`, `/coming`, `/missing` and `/subtitles` for the bundled
+plugins. It's a separate Node service for the media server, not a plugin.

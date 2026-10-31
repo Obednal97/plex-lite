@@ -1,0 +1,29 @@
+[Unit]
+Description=Plex Lite home helper (report fixes, download queue, What's coming, Bazarr)
+Documentation=https://github.com/Obednal97/plex-lite/blob/main/docs/HELPER.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# install.sh rewrites /opt/plex-lite to wherever the repo is
+ExecStart=/usr/bin/node /opt/plex-lite/helper/helper.mjs
+EnvironmentFile=/etc/plexlite-helper/helper.env
+DynamicUser=yes
+# /var/lib/plexlite-helper: state.json (handled issues, limits) and the optional PAUSED file
+StateDirectory=plexlite-helper
+StateDirectoryMode=0700
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
