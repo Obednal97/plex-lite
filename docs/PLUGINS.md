@@ -51,7 +51,8 @@ cheap; the TV has a 1.1 GHz CPU and Chrome 53.
 
 ### settingsRows(ctx) → rows
 
-Rows appended to Settings (before Sign out). Call `ctx.refreshSettings()` after changing state.
+Rows in Settings' Plugins group, after the plugins' On/Off rows. Call `ctx.refreshSettings()` after
+changing state.
 
 ```js
 settingsRows: function (ctx) {

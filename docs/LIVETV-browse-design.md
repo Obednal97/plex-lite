@@ -184,8 +184,9 @@ Cards exist only for the shelves near the focus (two each way), so art loads onl
 | Player | Blue | the Browse rail over the picture |
 | | Up / Down, CH+ / CH− | the mini guide and zapping stay inside the filter |
 
-Blue used to toggle a developer frame-time overlay everywhere; it still does outside the Live TV tab
-and the live player.
+Blue used to toggle a developer frame-time overlay everywhere, and still did outside the Live TV tab
+and the live player until a stray press turned it on during a film. Blue now does nothing outside
+Live TV; the overlay is Settings → Advanced → Performance stats.
 
 ## Data and speed
 

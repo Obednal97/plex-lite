@@ -137,7 +137,7 @@ Spin again, Details and Cancel are on screen. Moving between them stops the coun
 cancels.
 
 - It picks from unwatched titles. If everything has been watched, it picks from all of them and
-  says it's a rewatch. Settings has "Surprise Me: include watched" and "Surprise Me: autoplay
+  says it's a rewatch. Settings → Surprise Me has "Include watched titles" and "Autoplay
   countdown".
 - In the Library view it uses the active Genre and Decade filters (the pill shows them), and the
   Unwatched filter makes "unwatched only" strict.

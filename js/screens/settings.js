@@ -1,4 +1,5 @@
-// Settings: server connection, frame-rate meter, sign out, about.
+// Settings: grouped rows (account and server, this browser on the web, playback, Surprise Me,
+// plugins, advanced, about) under section headings that the focus skips.
 'use strict';
 
 (function () {
@@ -30,27 +31,18 @@
       return { label: label, value: on ? 'On' : 'Off', action: function () { PL.storage.set(key, !on); build(); } };
     }
 
+    // Rows are grouped under section headings (quiet labels that never take the focus). Heights
+    // match css/theme.css (.row, .settings-heading): positions are worked out here, not measured.
+    var ROW = 84;
+    var HEAD = 72;
+    var height = 0;
+    var stops = []; // the top of every heading and row: the list scrolls to one of them
+
     function build() {
       var s = server();
-      var defs = [
-        { label: 'Profile', value: (PL.storage.get('profile', null) || { title: 'Account owner' }).title, action: pickProfile },
-        { label: 'Server', value: (s.name || '—') + ' · ' + (KIND_LABEL[s.kind] || 'Unknown'), action: reconnect },
-        // a browser on an https page can only use https addresses: one row, tried before discovery
-        PL.isWeb ? null : addressRow('Local server address', 'local', 'e.g. http://192.168.0.10:32400'),
-        addressRow(PL.isWeb ? 'Server address' : 'Remote server address', 'remote', 'e.g. https://plex.example.com:32400'),
-        PL.isWeb ? PL.web.settingsRows(build) : null,
-        toggle('Autoplay next episode', 'autoplayNext', true),
-        toggle('Skip intros automatically', 'autoSkipIntro', false),
-        toggle('Skip credits automatically', 'autoSkipCredits', false),
-        toggle('Surprise Me: include watched', 'surprise.includeWatched', false),
-        toggle('Surprise Me: autoplay countdown', 'surprise.autoplay', true),
-        { label: 'Frame-rate meter', value: PL.app.perf.on ? 'On' : 'Off', action: function () { PL.app.perf.toggle(); build(); } },
-        { label: 'Refresh search index', value: '', action: function () { if (PL.fuzzy && PL.fuzzy.rebuild) { PL.fuzzy.rebuild(); PL.toast('Rebuilding the search index…'); } } },
-        { label: 'Sign out', value: '', action: signOut },
-        { label: 'About', value: 'Plex Lite ' + PL.VERSION, action: function () {} },
-      ];
-      // Plugins: an On/Off row per installed plugin, then the enabled plugins' own rows; all before
-      // Sign out / About.
+      // Plugins: an On/Off row per installed plugin, then the enabled plugins' own rows, the ones this
+      // build can't run (the web build: a TV background service) saying why, installed sandboxed
+      // plugins, and Browse plugins.
       var pluginToggles = PL.plugins.list().filter(function (p) { return !p.external; }).map(function (p) {
         return {
           label: 'Plugin · ' + p.name,
@@ -62,30 +54,78 @@
           },
         };
       });
-      // plugins this build can't run (the web build: ones with a TV background service) say why
       var unavailable = PL.plugins.unavailable.map(function (p) {
         return { label: 'Plugin · ' + p.name, value: 'TV app only', action: function () { PL.web.explainPlugin(p); } };
       });
-      defs.splice(defs.length - 2, 0, pluginToggles, unavailable, externalPluginRows(), PL.plugins.settingsRows(build));
-      defs = [].concat.apply([], defs).filter(Boolean);
+      var groups = [
+        ['Account & server', [
+          { label: 'Profile', value: (PL.storage.get('profile', null) || { title: 'Account owner' }).title, action: pickProfile },
+          { label: 'Server', value: (s.name || '—') + ' · ' + (KIND_LABEL[s.kind] || 'Unknown'), action: reconnect },
+          // a browser on an https page can only use https addresses: one row, tried before discovery
+          PL.isWeb ? null : addressRow('Local server address', 'local', 'e.g. http://192.168.0.10:32400'),
+          addressRow(PL.isWeb ? 'Server address' : 'Remote server address', 'remote', 'e.g. https://plex.example.com:32400'),
+        ]],
+        PL.isWeb ? ['This browser', PL.web.settingsRows(build)] : null,
+        ['Playback', [
+          toggle('Autoplay next episode', 'autoplayNext', true),
+          toggle('Skip intros automatically', 'autoSkipIntro', false),
+          toggle('Skip credits automatically', 'autoSkipCredits', false),
+        ]],
+        ['Surprise Me', [
+          toggle('Include watched titles', 'surprise.includeWatched', false),
+          toggle('Autoplay countdown', 'surprise.autoplay', true),
+        ]],
+        ['Plugins', [pluginToggles, PL.plugins.settingsRows(build), unavailable, externalPluginRows()]],
+        ['Advanced', [
+          // the overlay in js/app.js: frames a second, the longest frame, JS heap and DOM nodes
+          { label: 'Performance stats', value: PL.app.perf.on ? 'On' : 'Off', action: function () { PL.app.perf.toggle(); build(); } },
+          { label: 'Refresh search index', value: '', action: function () { if (PL.fuzzy && PL.fuzzy.rebuild) { PL.fuzzy.rebuild(); PL.toast('Rebuilding the search index…'); } } },
+        ]],
+        ['About', [
+          { label: 'Plex Lite', value: PL.VERSION, action: function () {} },
+          { label: 'Sign out', value: '', action: signOut },
+        ]],
+      ];
       PL.clear(panel);
-      rows = defs.map(function (d, i) {
-        var n = PL.el('div', 'row', d.label);
-        if (d.value) n.appendChild(PL.el('span', 'row-value', d.value));
-        n.addEventListener('click', function () { index = i; d.action(); });
-        panel.appendChild(n);
-        return { node: n, def: d };
+      rows = [];
+      stops = [];
+      height = 0;
+      groups.forEach(function (g) {
+        var list = g ? [].concat.apply([], g[1]).filter(Boolean) : [];
+        if (!list.length) return;
+        panel.appendChild(PL.el('div', 'settings-heading', g[0]));
+        stops.push(height);
+        height += HEAD;
+        list.forEach(function (d) {
+          var i = rows.length;
+          var n = PL.el('div', 'row', d.label);
+          if (d.value) n.appendChild(PL.el('span', 'row-value', d.value));
+          n.addEventListener('click', function () { index = i; d.action(); });
+          panel.appendChild(n);
+          rows.push({ node: n, def: d, top: height });
+          stops.push(height);
+          height += ROW;
+        });
       });
+      // a rebuild can have fewer rows (a plugin removed)
+      index = Math.max(0, Math.min(index, rows.length - 1));
       paint();
     }
 
-    // the panel shows ~8 rows; longer lists scroll to keep the focused row in view
+    // The panel shows 630 px (~7.5 rows); a longer list scrolls so the focused row's bottom edge stays
+    // within the first seven rows' height, so a half row always peeks under the fade, and the top edge
+    // lands on a heading or row (no sliver of the one above). At least 420 px stay in view above the
+    // focused row, so a group's heading always shows above its first row.
     function paint() {
       rows.forEach(function (r, i) { r.node.classList.toggle('focused', area === 'panel' && !PL.app.tabsFocused && i === index); });
-      // ~7.5 rows show (690 px panel), so a half row always peeks under the fade
-      var shift = Math.max(0, (index + 1) * 84 - 84 * 7);
+      var r = rows[index];
+      var need = r ? r.top + ROW - ROW * 7 : 0;
+      var shift = 0;
+      for (var i = 0; need > 0 && i < stops.length; i++) {
+        if (stops[i] >= need) { shift = stops[i]; break; }
+      }
       PL.translate(panel, 0, -shift);
-      panelBox.classList.toggle('more', rows.length * 84 - shift > 630);
+      panelBox.classList.toggle('more', height - shift > 630);
     }
 
     function reconnect() {
@@ -136,16 +176,16 @@
     }
 
     // Separately installed (sandboxed) plugins: status row → a sheet with permissions, enable
-    // (consent), its own settings, turn off, and remove access.
+    // (consent), its own settings, turn off, and remove access. Browse plugins comes last.
     function externalPluginRows() {
       var host = PL.pluginHost;
       if (!host || !host.list || !host.grants) return [];
       var browse = PL.pluginStore ? [{ label: 'Browse plugins', value: '', action: browsePlugins }] : [];
-      return browse.concat(host.list().map(function (p) {
+      return host.list().map(function (p) {
         var on = p.active && PL.plugins.isEnabled(p.id);
         var value = p.disabled ? 'Error' : !p.active ? (host.grants.get(p.id) ? 'Needs permission' : 'Off') : on ? (p.holdsToken ? 'On · Plex sign-in' : 'On') : 'Off';
         return { label: 'Plugin · ' + p.title, value: value, action: function () { externalPluginSheet(p); } };
-      }));
+      }).concat(browse);
     }
 
     var STATE_TEXT = { 'not-installed': 'Not installed', installed: 'Installed', connected: 'Connected' };
