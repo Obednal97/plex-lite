@@ -1,6 +1,7 @@
 // The Search tab on a phone or tablet (board P5): a rounded field with the system keyboard, filter
 // chips, then the results in rows: Movies & Shows (posters), Channels and On TV (with Live TV),
-// People and Episodes, then plugin rows. Before typing: recent searches and Continue Watching.
+// People and Episodes, then plugin rows. Before typing: recent searches, Continue Watching, and
+// plugins' rows for an empty query (PL.plugins.searchIdleRows, e.g. Overseerr's Trending).
 //
 // The matching is the TV's (js/screens/search.js): titles from the local fuzzy index (PL.fuzzy) on
 // every keystroke, Plex's /hubs/search for episodes, people and titles the index missed (debounced),
@@ -367,6 +368,7 @@
         pluginRows = [];
         filter = 'all';
         render();
+        loadIdle();
         return;
       }
       if (!was && window.scrollY) window.scrollTo(0, 0);
@@ -568,6 +570,10 @@
       }
       return (item) => {
         const n = ui.poster(item, { onSelect: pick, onChange: changed });
+        // a plugin item's badge (Overseerr: Requested, Downloading 45%...)
+        if (item.badge && item.badge.label) {
+          (n.querySelector('.t-card-frame') || n).appendChild(h('span.t-pbadge' + (item.badge.tone ? '.t-pbadge-' + item.badge.tone : ''), { text: item.badge.label }));
+        }
         n.appendChild(h('span.t-search-cap', { text: caption(item) }));
         return n;
       };
@@ -681,8 +687,40 @@
     let suggBusy = false;
     const recentBox = h('section.t-search-recent');
     const suggBox = h('section.t-search-sugg');
+    const pluginBox = h('section.t-search-idlerows');
     const hint = h('p.t-search-hint');
-    idle.append(recentBox, suggBox, hint);
+    idle.append(recentBox, suggBox, pluginBox, hint);
+
+    // Plugins' rows before typing: asked when the page shows with nothing typed (and again after a
+    // minute), never while typing. Built once per answer, so clearing the field doesn't redo them.
+    let idleRows = [];
+    let idleAt = 0;
+    let idleSeq = 0;
+    let idleBuilt = null;
+    function loadIdle() {
+      if (!PL.plugins || !PL.plugins.hasSearchIdle || !PL.plugins.hasSearchIdle()) return;
+      if (idleAt && Date.now() - idleAt < 60000) return;
+      idleAt = Date.now();
+      const mine = ++idleSeq;
+      PL.plugins.searchIdleRows().then((rows) => {
+        if (!alive || mine !== idleSeq) return;
+        idleRows = (rows || []).filter((r) => r && r.items && r.items.length);
+        if (!idleRows.length) idleAt = 0;
+        if (!query) renderIdle();
+      }, () => { idleAt = 0; });
+    }
+    function renderIdleRows() {
+      if (idleBuilt === idleRows) return;
+      idleBuilt = idleRows;
+      pluginBox.replaceChildren();
+      idleRows.forEach((r) => {
+        const sec = { kind: r.kind === 'wide' ? 'wide' : 'poster', plugin: r };
+        const node = ui.shelf({ title: r.title, kind: sec.kind, items: r.items, card: card(sec) });
+        node.classList.add('t-search-shelf', 't-search-' + sec.kind);
+        pluginBox.appendChild(node);
+      });
+      pluginBox.hidden = !idleRows.length;
+    }
 
     function renderIdle() {
       const recent = PL.storage.get(recentKey(), []);
@@ -712,8 +750,9 @@
         sugg.items.forEach((item) => list.appendChild(suggestionRow(item)));
         suggBox.appendChild(list);
       }
+      renderIdleRows();
       hint.textContent = liveTv() ? 'Search for films, shows, episodes, people and channels.' : 'Search for films, shows, episodes and people.';
-      hint.hidden = !!(recent.length || sugg);
+      hint.hidden = !!(recent.length || sugg || idleRows.length);
     }
 
     // A row in the spirit of Netflix's "Recommended" list: a 16:9 still, the title, a play button.
@@ -766,6 +805,7 @@
         guideTimer = setTimeout(() => { if (alive && shown) loadGuide(); }, first ? 0 : 400);
       }
       loadSuggestions(!!o.back);
+      if (!query) loadIdle();
       // back from a title or the player: progress and watched marks may have changed
       if (o.back && query) serverSearch();
       if (o.back && liveTv() && query) runTv();

@@ -103,8 +103,10 @@ html = html.replace(/(\s*)(<\/head>)/, [
   '',
   '  <link rel="preload" href="web/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>',
 ].concat(WEB_STYLES.map((s) => `  <link rel="stylesheet" href="${s}">`)).join('\n') + '$1$2');
-// the Overseerr plugin's browser path (instead of its webOS service), right after its shared core
-html = html.replace(/(\s*)<script src="plugins\/overseerr\/seerr\.js"><\/script>/, (m, ws) => `${m}${ws}<script src="plugins/overseerr/seerr-web.js"></script>`);
+// the Overseerr plugin's browser path (instead of its webOS service), right after its shared core,
+// and its phone and tablet pages (touch.js, touch.css)
+html = html.replace(/(\s*)<script src="plugins\/overseerr\/seerr\.js"><\/script>/, (m, ws) => `${m}${ws}<script src="plugins/overseerr/seerr-web.js"></script>${ws}<script src="plugins/overseerr/touch.js"></script>`);
+html = html.replace(/(\s*)<link rel="stylesheet" href="plugins\/overseerr\/overseerr\.css">/, (m, ws) => `${m}${ws}<link rel="stylesheet" href="plugins/overseerr/touch.css">`);
 html = html.replace(/(\s*)<script src="js\/app\.js"><\/script>/, (m, ws) => m + WEB_SCRIPTS.map((s) => `${ws}<script src="${s}"></script>`).join(''));
 html = html.replace('<html lang="en">', `<html lang="en" data-version="${version}">`);
 if (html === before) fail('index.html did not change: has its layout moved?');
@@ -145,7 +147,7 @@ html = html.replace(/(src|href)="((?:js|css|web|plugins|img)\/[^"?]+)"/g, (m, at
 // the CSP allows no inline script or handler: catch one before Vercel serves a broken page
 if (/<script(?![^>]*\bsrc=)[^>]*>/i.test(html)) fail('index.html has an inline <script>');
 if (/\son[a-z]+\s*=/i.test(html)) fail('index.html has an inline event handler');
-for (const s of ['web/env.js', 'js/core.js', 'web/web-input.js', 'web/web.js', 'web/web-media.js', 'plugins/overseerr/seerr-web.js', 'web/firstrun-web.css', 'js/screens/firstrun.js']) if (!html.includes(`"${s}?v=`)) fail(`index.html lacks ${s}`);
+for (const s of ['web/env.js', 'js/core.js', 'web/web-input.js', 'web/web.js', 'web/web-media.js', 'plugins/overseerr/seerr-web.js', 'plugins/overseerr/touch.js', 'plugins/overseerr/touch.css', 'web/firstrun-web.css', 'js/screens/firstrun.js']) if (!html.includes(`"${s}?v=`)) fail(`index.html lacks ${s}`);
 if (html.indexOf('web/env.js') > html.indexOf('js/core.js')) fail('web/env.js must load before js/core.js');
 
 writeFileSync(join(OUT, 'index.html'), html);

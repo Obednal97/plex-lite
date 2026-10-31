@@ -12,6 +12,10 @@
 //              on Wikimedia Commons), with watched state in memory.
 //              The app's own files never collide with Plex paths, so one origin serves both.
 //   /plextv/*  a mock plex.tv: user, Home users, resources (this server) and link-code pins
+//   /api/v1/*  a fake Overseerr (seerr.mjs) for the Overseerr plugin: requests, discover rows,
+//              downloads; /seerr-service/<method> runs the plugin's real webOS service against it,
+//              and the page gets a PalmServiceBridge that calls there (Settings → Overseerr → the
+//              address of this server, e.g. http://127.0.0.1:8930)
 // The page gets window.PL_DEV pointing the app at both, the same hook tools/devserver.mjs uses.
 //
 // Settings (environment): PORT (8930), PLEXLITE_DEMO_MEDIA (artwork cache, default
@@ -21,6 +25,7 @@
 // Content and licences: tools/demo/library.json and docs/screenshots/CREDITS.md.
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
+import Module from 'node:module';
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -28,6 +33,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as art from './art.mjs';
 import { loadLibrary, slug } from './model.mjs';
+import { createSeerr } from './seerr.mjs';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const APP = fileURLToPath(new URL('../..', import.meta.url));
@@ -44,6 +50,7 @@ const PMS_PATH = /^\/(identity|library|hubs|photo|video|playQueues|:|livetv|medi
 
 const model = loadLibrary(join(HERE, 'library.json'));
 const lib = model.lib;
+const seerr = createSeerr(model);
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg',
   '.svg': 'image/svg+xml', '.json': 'application/json', '.webm': 'video/webm', '.ico': 'image/x-icon' };
 
@@ -62,7 +69,8 @@ function clean(item, opts = {}) {
   const out = {};
   for (const [k, v] of Object.entries(item)) {
     if (k.startsWith('_') || v === undefined) continue;
-    if (opts.list && (k === 'Role' || k === 'Writer' || k === 'Extras' || k === 'Country')) continue;
+    // (Guid too: Plex sends it in lists only when asked with includeGuids=1)
+    if (opts.list && (k === 'Role' || k === 'Writer' || k === 'Extras' || k === 'Country' || k === 'Guid')) continue;
     if (k === 'Extras') continue;
     out[k] = v;
   }
@@ -128,7 +136,13 @@ function imageFile(path) {
 // /photo/:/transcode?url=<plex image path>&width&height[&blur&opacity&background]. Real files are
 // sent as they are (the browser scales them; cards use object-fit) except for blurred ambients.
 function photo(res, q) {
-  const path = q.get('url') || '';
+  const path = (q.get('url') || '').replace(BASE, '');
+  // the fake Overseerr's titles that aren't in the library (seerr.mjs)
+  const sm = /^\/demo-seerr\/(poster|art)\/([\w-]+)$/.exec(path);
+  if (sm) {
+    const t = [...seerr.titles.values()].find((x) => slug(x.title) === sm[2]);
+    return send(res, 200, sm[1] === 'poster' ? art.poster(t ? t.title : sm[2], t && t.year, sm[2]) : art.still(sm[2]), 'image/svg+xml');
+  }
   const ref = model.images.get(path.split('?')[0]);
   if (!ref) return send(res, 404, 'unknown image', 'text/plain');
   const file = imageFile(path.split('?')[0]);
@@ -679,6 +693,61 @@ function plextv(req, res, path) {
   return send(res, 404, { errors: [{ message: `the demo plex.tv does not implement ${path}` }] });
 }
 
+// ---- The Overseerr plugin's webOS service, against the fake Overseerr -----------------------------------
+
+// plugins/overseerr/service/service.js, loaded as on the TV with a stand-in for webos-service and an
+// in-memory state file; the page's PalmServiceBridge (dev-config.js below) posts its calls here.
+const serviceMethods = {};
+{
+  const require = Module.createRequire(import.meta.url);
+  const origLoad = Module._load;
+  const memFs = { readFileSync() { throw new Error('none'); }, writeFileSync() {} };
+  Module._load = function (req) {
+    if (req === 'webos-service') return function Service() { this.register = (name, fn) => { serviceMethods[name] = fn; }; };
+    if (req === 'fs') return memFs;
+    return origLoad.apply(this, arguments);
+  };
+  try { require(join(APP, 'plugins/overseerr/service/service.js')); } finally { Module._load = origLoad; }
+}
+
+function seerrService(req, res, method) {
+  let body = '';
+  req.on('data', (c) => { body += c; });
+  req.on('end', () => {
+    const fn = serviceMethods[method];
+    if (!fn) return send(res, 200, { returnValue: false, errorCode: 'bad_request', errorText: 'no such method' });
+    let payload = {};
+    try { payload = JSON.parse(body || '{}'); } catch { /* empty */ }
+    fn({ payload, respond: (r) => send(res, 200, r) });
+  });
+}
+
+function seerrApi(req, res, path, search) {
+  let body = '';
+  req.on('data', (c) => { body += c; });
+  req.on('end', () => {
+    const r = seerr.handle({ method: req.method, path: path + search, cookie: req.headers.cookie || '', body });
+    send(res, r.status, r.data == null ? '' : r.data, 'application/json', r.setCookie ? { 'Set-Cookie': r.setCookie } : undefined);
+  });
+}
+
+// For the TV app in a desktop browser: luna:// calls to the Overseerr service go to /seerr-service,
+// and the fake Overseerr's artwork paths are used as they are (no TMDB images in the demo).
+const DEMO_HOOKS = `
+window.PalmServiceBridge = function () {};
+window.PalmServiceBridge.prototype.call = function (url, params) {
+  var self = this;
+  var x = new XMLHttpRequest();
+  x.open('POST', '/seerr-service/' + String(url).split('/').pop());
+  x.onload = function () { if (self.onservicecallback) self.onservicecallback(x.responseText); };
+  x.onerror = function () { if (self.onservicecallback) self.onservicecallback('{"returnValue":false,"errorText":"demo service unreachable"}'); };
+  x.send(params);
+};
+document.addEventListener('DOMContentLoaded', function () {
+  if (window.PL && PL.overseerr) PL.overseerr.img = function (p) { return p ? ${JSON.stringify(BASE)} + p : null; };
+});
+`;
+
 // ---- HTTP ------------------------------------------------------------------------------------------
 
 createServer(async (req, res) => {
@@ -694,8 +763,10 @@ createServer(async (req, res) => {
       const signin = /[?&]signin\b/.test(req.headers.referer || '');
       const server = { name: SERVER_NAME, machineId: MACHINE_ID, uri: BASE, token: TOKEN, kind: 'lan-http' };
       const dev = signin ? { clientId: 'demo-client', plexTv: `${BASE}/plextv` } : { token: TOKEN, clientId: 'demo-client', server, plexTv: `${BASE}/plextv` };
-      return send(res, 200, `window.PL_DEV = ${JSON.stringify(dev)};\n`, 'text/javascript');
+      return send(res, 200, `window.PL_DEV = ${JSON.stringify(dev)};\n${DEMO_HOOKS}`, 'text/javascript');
     }
+    if (path.startsWith('/api/v1/')) return seerrApi(req, res, path, url.search);
+    if (path.startsWith('/seerr-service/') && req.method === 'POST') return seerrService(req, res, path.slice(15));
     if (PMS_PATH.test(path)) return pms(req, res, path, url.searchParams);
     if (path.startsWith('/plextv/')) return plextv(req, res, path.slice(7));
     const file = normalize(join(APP, path === '/' ? 'index.html' : path));

@@ -11,6 +11,15 @@ releases are fixes only.
 
 ### Changed
 
+- **Overseerr has its own page.** Settings → Plugins → Overseerr opens a page (on the TV and on
+  phones and tablets) instead of a menu: Your requests, Downloads, the Trending/Popular/Upcoming rows
+  switch, who you're signed in as (and whether you can report problems), Sign in again, Sign out and
+  the Overseerr address. The "Download queue address" row goes once the shared Home server helper
+  setting is there; Downloading then uses the helper's address.
+- **Report a problem: two subtitle reasons.** "Subtitles missing" and "Subtitles burned in" replace
+  "Subtitles missing or burned in" (`reason=subs-missing` / `reason=subs-burned`), so the home server
+  helper can fetch missing subtitles instead of replacing the file.
+
 - **Browse plugins no longer lists Hello Shelf.** It was an example plugin for testing the catalogue;
   the catalogue now publishes no example or test plugins (the tests use a fixture copy instead), and
   an empty catalogue says Overseerr is built in.
@@ -28,6 +37,20 @@ releases are fixes only.
   page: an episode's menu now has Go to episode and Go to show. Other rows open the page as before.
 
 ### Added
+
+- **Your requests** (Overseerr page): the titles you asked for, newest first, with the seasons, how
+  far each has got (Pending approval, Approved, Processing, Downloading 45%, Partly available,
+  Available, Declined) and when. OK opens a title in Plex once it's there, else its request sheet.
+- **Trending, Popular and Upcoming** from Overseerr: films on a movie library's Recommended view and
+  shows on a TV library's, placed among Plex's own rows, and Trending, Popular films and Popular
+  shows on Search before anything is typed. Titles in your library open in Plex; the rest open the
+  request sheet, badged Requested, Processing or Downloading as in Search. Cached for 30 minutes;
+  switch them off on the Overseerr page.
+- **Request seasons**: a show (or season) page and its hold-OK menu offer the seasons Overseerr says
+  have aired but aren't in Plex or asked for yet.
+- **Plugin API:** a `searchIdleRows` hook (Search before typing), `shelf.at` (place a row after that
+  many of the library's own rows), `item.badge` (drawn on touch cards), and a bundled plugin's
+  `actions` may answer with a promise (docs/PLUGINS.md).
 
 - **Phones and tablets** (docs/WEB.md, "Phones and tablets"): the web build has its own layout under
   1100 px wide and on touch tablets: bottom tabs (Movies, TV Shows, Live TV, Search), Settings under
@@ -183,6 +206,9 @@ releases are fixes only.
 
 ### Fixed
 
+- **Overseerr on the TV notices a session that ended elsewhere** (signed out in Overseerr's own
+  pages): it signs in again by itself, as the web build already did, instead of failing with
+  "permission" errors.
 - **Web, Safari**: a resumed server stream could keep counting from the resume point twice (Safari
   starts at the segment before it, after saying `canplay` at 0), which put the reported position,
   resume point and subtitles off; embedded subtitles were shown twice (Safari's own rendition too) and

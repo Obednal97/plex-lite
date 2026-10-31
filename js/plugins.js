@@ -3,8 +3,9 @@
 // A plugin calls PL.plugins.register(def). Every hook is optional:
 //   def.settingsRows(ctx)        -> [{label, value, action}]                 rows in Settings
 //   def.searchRows(q, ctx)       -> Promise<shelf | [shelf] | null>          shelves after Search's own
+//   def.searchIdleRows(ctx)      -> Promise<shelf | [shelf] | null>          Search before anything is typed
 //   def.shelfRows(section, ctx)  -> Promise<[shelf]>                         shelves on a library's Recommended
-//   def.actions(item, ctx)       -> [{label, icon?, run()}]                  details pills + hold-OK menu
+//   def.actions(item, ctx)       -> [{label, icon?, run()}] | Promise<[…]>  details pills + hold-OK menu
 //   def.badges(item, ctx)        -> Promise<[{label, tone?}]>                 keyline badges on a details page
 //   def.onSelect(item, ctx)      OK on an item that came from one of its shelves
 //   def.services                 [luna service ids] bundled in plugins/<id>/service/
@@ -12,7 +13,9 @@
 //   def.tabs                     [{id, title}] tabs it adds (max 2 plugin tabs in total)
 //   def.screen(tabId, ctx)       -> Promise<model> what a tab shows (rendered by Plex Lite, see
 //                                   js/screens/plugin-screen.js): {type: 'shelves'|'grid'|'page', …}
-// A shelf is {id, title, kind: 'poster'|'wide', items, makeCard?, onSelect?}.
+// A shelf is {id, title, kind: 'poster'|'wide', items, makeCard?, onSelect?, at?}. at: on Recommended,
+// after that many of the library's own rows (default: after all of them). An item may carry
+// badge: {label, tone} for layouts that don't use makeCard (the touch layout).
 // External plugins (separately installed, sandboxed; js/plugin-host.js) register definitions with
 // def.external = true whose hooks are all asynchronous.
 //
@@ -122,7 +125,13 @@
       var own = s.onSelect;
       s.id = def.id + ':' + (s.id || 'shelf');
       s.kind = s.kind === 'wide' ? 'wide' : 'poster';
-      s.items.forEach(function (it) { it.plugin = def.id; });
+      s.at = typeof s.at === 'number' && s.at >= 0 ? Math.min(50, Math.floor(s.at)) : null;
+      s.items.forEach(function (it) {
+        it.plugin = def.id;
+        if (it.badge) {
+          it.badge = it.badge.label ? { label: String(it.badge.label).slice(0, 40), tone: /^[a-z0-9-]{1,16}$/.test(it.badge.tone || '') ? it.badge.tone : '' } : null;
+        }
+      });
       s.onSelect = function (item) {
         safe(def, 'onSelect', null, function () {
           if (own) own(item, def.ctx);
@@ -150,6 +159,36 @@
     return active().some(function (d) { return !!d.searchRows; });
   };
 
+  // Search before anything is typed (shown instead of the blank space next to the keyboard). Only
+  // asked when the query is empty, never while typing.
+  plugins.searchIdleRows = function () {
+    return Promise.all(active().filter(function (d) { return d.searchIdleRows; }).map(function (d) {
+      return safeAsync(d, 'searchIdleRows', function () { return d.searchIdleRows(d.ctx); })
+        .then(function (v) { return safe(d, 'searchIdleRows', [], function () { return normalizeShelves(d, v); }); });
+    })).then(flatten);
+  };
+
+  plugins.hasSearchIdle = function () {
+    return active().some(function (d) { return !!d.searchIdleRows; });
+  };
+
+  // Where plugin rows go among a screen's own rows: extra [{at, row}] (shelf.at: after that many of
+  // base, or at the end without it); rows placed at the same point keep their order. -> rows
+  plugins.placeRows = function (base, extra) {
+    var out = base.map(function (r) { return { row: r, at: null }; });
+    extra.forEach(function (x) {
+      var at = typeof x.at === 'number' && x.at >= 0 ? Math.min(x.at, base.length) : base.length;
+      var i = 0;
+      var seen = 0;
+      while (i < out.length && (seen < at || (out[i].at != null && out[i].at <= at))) {
+        if (out[i].at == null) seen++;
+        i++;
+      }
+      out.splice(i, 0, { row: x.row, at: at });
+    });
+    return out.map(function (o) { return o.row; });
+  };
+
   // section: the Plex library section object ({key, type, title})
   plugins.shelfRows = function (section) {
     return Promise.all(active().filter(function (d) { return d.shelfRows; }).map(function (d) {
@@ -164,18 +203,26 @@
     });
   }
 
-  // [{label, icon?, run()}] for a Plex item (details pills, hold-OK menu). Bundled plugins answer at
-  // once; if an external plugin is active the result is a Promise (callers handle both).
+  // [{label, icon?, run()}] for a Plex item (details pills, hold-OK menu). Bundled plugins usually
+  // answer at once; one that needs a lookup may answer with a Promise, and external plugins always
+  // do. Then the result is a Promise of everything, in plugin order (callers handle both).
   plugins.actions = function (item) {
     var withActions = active().filter(function (d) { return d.actions; });
-    var bundled = flatten(withActions.filter(function (d) { return !d.external; }).map(function (d) {
-      return safe(d, 'actions', [], function () { return cleanActions(d, d.actions(item, d.ctx)); });
-    }));
-    var external = withActions.filter(function (d) { return d.external; });
-    if (!external.length) return bundled;
-    return Promise.all(external.map(function (d) {
-      return safeAsync(d, 'actions', function () { return d.actions(item); }).then(function (l) { return cleanActions(d, l); });
-    })).then(function (lists) { return bundled.concat(flatten(lists)); });
+    var later = false;
+    var answers = withActions.map(function (d) {
+      if (d.external) {
+        later = true;
+        return safeAsync(d, 'actions', function () { return d.actions(item); }).then(function (l) { return cleanActions(d, l); });
+      }
+      var got = safe(d, 'actions', [], function () { return d.actions(item, d.ctx); });
+      if (got && typeof got.then === 'function') {
+        later = true;
+        return safeAsync(d, 'actions', function () { return got; }).then(function (l) { return safe(d, 'actions', [], function () { return cleanActions(d, l); }); });
+      }
+      return safe(d, 'actions', [], function () { return cleanActions(d, got); });
+    });
+    if (!later) return flatten(answers);
+    return Promise.all(answers).then(flatten);
   };
 
   // ---- Tabs (declarative screens) ----------------------------------------------------------------
@@ -273,7 +320,11 @@
       // bundled plugins only: push a screen object ({el, show, hide, key, destroy}) built with ctx.ui
       push: function (screen) { PL.app.push(screen); },
       // opens Plex Lite's details page for a Plex item ({ratingKey, type, title})
-      openItem: function (item) { PL.app.push(PL.screens.details(item)); },
+      // (the phone and tablet layer's own page while it is showing: web/touch/shell.js)
+      openItem: function (item) {
+        if (PL.touch && PL.touch.visible && PL.touch.open) PL.touch.open(item);
+        else PL.app.push(PL.screens.details(item));
+      },
       pop: function () { PL.app.pop(); },
       backdrop: function (url) { PL.app.backdrop.set(url || null, url ? 'detail' : 'ambient'); },
       // Calls one of the plugin's own bundled services (def.services); serviceId defaults to the first.

@@ -80,14 +80,31 @@ searchRows: function (q, ctx) {
 },
 ```
 
+### searchIdleRows(ctx) → Promise<shelf | [shelf] | null>
+
+Shelves for Search before anything is typed (next to the TV keyboard; under recent searches on
+phones). Asked when Search shows with an empty query (and again after a minute), never while typing,
+so Search's typing path is unaffected. Answer from a cache: Overseerr's Trending, Popular films and
+Popular shows reuse the lists its Recommended rows loaded. A shelf's own `onSelect` is used when it
+has one.
+
 ### shelfRows(section, ctx) → Promise<[shelf]>
 
 Extra shelves on a library's Recommended view. `section` is the Plex section (`{key, type, title}`).
+A shelf with `at: n` goes after the library's first `n` rows (Overseerr puts Trending after 2,
+Popular after 4, Upcoming after 6); without it, after all of them. Rows placed at the same point keep
+the plugins' order, and a library with fewer rows gets them at the end. They arrive after Plex's rows
+and are put in without moving the focus off its row.
 
-### actions(item, ctx) → [{label, icon?, run()}]
+### actions(item, ctx) → [{label, icon?, run()}] | Promise<[…]>
 
-Extra actions for a Plex item, shown as pills on its details page and in the hold-OK menu. Must be
-synchronous and fast (no network calls here; fetch in `run()`).
+Extra actions for a Plex item, shown as pills on its details page and in the hold-OK menu. Answer at
+once when you can (no network calls for the common case; fetch in `run()`). An action that depends
+on a lookup may answer with a promise: the details page adds the pills when it settles, but the
+hold-OK menu waits only 600 ms for plugins, so answer within ~450 ms with what you know and keep the
+lookup going into a cache for next time. Overseerr's "Request seasons" does this: a details page
+passes the full item (with `Guid`s) and it waits up to 5 s; a list item gets 450 ms. A promise that
+takes 8 s drops all of that plugin's actions.
 
 ```js
 actions: function (item, ctx) {
@@ -108,11 +125,13 @@ OK on an item from one of the plugin's shelves. A shelf can also carry its own `
 
 ### Shelves and items
 
-A shelf is `{id, title, kind: 'poster' | 'wide', items, makeCard?, onSelect?}`. Items need
+A shelf is `{id, title, kind: 'poster' | 'wide', items, makeCard?, onSelect?, at?}`. Items need
 `ratingKey` (unique), `title`, and optionally `year`, `thumb`/`art` (image URLs; they are resized by
 the Plex server), `summary`. Use a custom `type` (Overseerr uses `'request'`) so core actions such as
 Play don't apply to them. `makeCard(item, kind, geo)` may start from `ctx.ui.makeCard` and add a
-badge with `ctx.ui.badge(node, className, text)`.
+badge with `ctx.ui.badge(node, className, text)`. The phone and tablet layout doesn't use `makeCard`:
+give an item `badge: {label, tone?}` (a short word: posters are ~100 px wide there; tones `accent`,
+`status-2` amber, `status-3` blue, `status-4` green) and it is drawn on the card.
 
 ## ctx
 
@@ -129,7 +148,7 @@ badge with `ctx.ui.badge(node, className, text)`.
 | `plexToken()` | the active profile's Plex token; explicit so it can be permissioned later |
 | `profile()` | the active Plex Home profile `{uuid, title}`, or `null` for the account owner |
 | `plex.metadata(ratingKey)`, `plex.children(ratingKey)`, `plex.image(path, w, h)` | read-only lookups on the connected server |
-| `openItem(item)` | opens the details page for a Plex item (`{ratingKey, type, title}`) |
+| `openItem(item)` | opens the details page for a Plex item (`{ratingKey, type, title}`); the touch layout's page on phones and tablets |
 | `push(screen)`, `pop()`, `backdrop(url)` | bundled plugins only: push a screen object (`{el, show, hide, key, destroy}`) built from `ctx.ui` (which also has `spinner`, `fadeInImage`, `KEY`, `isBack`) |
 | `service(method, params, serviceId?)` | calls one of the plugin's own `services` over the Luna bus |
 
@@ -228,11 +247,13 @@ ES2015 only: no `async`/`await`, object spread, `Object.entries/values`, `Promis
 
 Full notes: [OVERSEERR.md](OVERSEERR.md).
 
-- **Settings:** "Overseerr" → set the address → signs in with the active Plex profile's token through
-  the service. Each Plex Home profile has its own Overseerr session.
+- **Settings:** "Overseerr" opens the plugin's page (a pushed screen; on phones a touch page): sign in,
+  Your requests, Downloads, the discover rows switch. Each Plex Home profile has its own session.
 - **Search:** `searchRows` queries `/api/v1/search`, hides titles already available, badges
   Requested / Processing / Partly available / Downloading n%.
 - **onSelect:** a sheet to request a movie, all/remaining seasons or a single season
   (`POST /api/v1/request`).
+- **Discover:** `shelfRows` (Trending, Popular, Upcoming with `at`) and `searchIdleRows`.
+- **Request seasons:** `actions` on show and season pages (a promise until the lookup is cached).
 - **Downloading:** `shelfRows` (a Downloading shelf), `badges` (details) and a Downloading screen.
 - **Report a problem:** `actions` (details pill + hold-OK) → `POST /api/v1/issue`.
