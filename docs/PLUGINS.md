@@ -236,3 +236,14 @@ Full notes: [OVERSEERR.md](OVERSEERR.md).
   (`POST /api/v1/request`).
 - **Downloading:** `shelfRows` (a Downloading shelf), `badges` (details) and a Downloading screen.
 - **Report a problem:** `actions` (details pill + hold-OK) → `POST /api/v1/issue`.
+
+## Home server helper plugins in brief
+
+Full notes: [HOME-HELPER.md](HOME-HELPER.md). Three bundled plugins share one setting, Settings →
+Plugins → **Home server helper** (`plugins/home-helper/`, which also provides `PL.homeHelper` to other
+bundled plugins, Overseerr's Downloading included):
+
+- **What's coming** (`plugins/whats-coming/`): `shelfRows` ("New episodes this week", "Films arriving
+  soon"), `badges` ("3 episodes missing") and `actions` ("Search for missing episodes").
+- **Subtitles** (`plugins/bazarr/`): `actions` ("Subtitles…": find missing subtitles, fix their timing)
+  and `badges` ("No English subtitles").

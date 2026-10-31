@@ -1,0 +1,8 @@
+/* What's coming: the New / Premiere tag on episode and film cards (same shape as Overseerr's badges). */
+.wc-tag {
+  position: absolute; left: 10px; top: 10px; z-index: 2; height: 28px; line-height: 28px; padding: 0 10px; border-radius: 8px;
+  font-size: 17px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  background: rgba(8, 8, 10, 0.82); color: var(--text); border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.wc-tag-new { background: rgba(229, 160, 13, 0.95); color: #000; border-color: rgba(229, 160, 13, 1); }
+.wc-tag-premiere { background: rgba(70, 130, 220, 0.92); color: #fff; border-color: rgba(70, 130, 220, 1); }

@@ -28,6 +28,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as art from './art.mjs';
 import { loadLibrary, slug } from './model.mjs';
+import { createFakeHelper, demoData, UPCOMING_FILMS } from './helper.mjs';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const APP = fileURLToPath(new URL('../..', import.meta.url));
@@ -44,6 +45,16 @@ const PMS_PATH = /^\/(identity|library|hubs|photo|video|playQueues|:|livetv|medi
 
 const model = loadLibrary(join(HERE, 'library.json'));
 const lib = model.lib;
+// A fake home server helper at /helper (tools/demo/helper.mjs): Settings → Home server helper →
+// http://127.0.0.1:8930/helper. PLEXLITE_DEMO_HELPER=0 leaves it out. PLEXLITE_DEMO_NOW (a local
+// date and time, e.g. 2026-10-30T15:00) is the moment its calendar is built around, for screenshots
+// taken with the browser's clock set to the same time.
+const DEMO_NOW = process.env.PLEXLITE_DEMO_NOW ? new Date(process.env.PLEXLITE_DEMO_NOW) : null;
+const STARTED = Date.now();
+const HELPER = process.env.PLEXLITE_DEMO_HELPER !== '0'
+  ? createFakeHelper({ data: demoData(model, DEMO_NOW || new Date(), (kind, id) => `${BASE}/helper/img/${kind}/${id}`), latencyMs: 120, searchMs: 1500,
+    now: DEMO_NOW ? () => DEMO_NOW.getTime() + (Date.now() - STARTED) : Date.now })
+  : null;
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg',
   '.svg': 'image/svg+xml', '.json': 'application/json', '.webm': 'video/webm', '.ico': 'image/x-icon' };
 
@@ -129,6 +140,14 @@ function imageFile(path) {
 // sent as they are (the browser scales them; cards use object-fit) except for blurred ambients.
 function photo(res, q) {
   const path = q.get('url') || '';
+  // the fake helper's artwork (absolute URLs, as the real helper's TMDB/TVDB images are)
+  const hm = /^https?:\/\/[^/]+\/helper\/img\/(poster|art)\/([\w-]+)$/.exec(path);
+  if (hm) {
+    const own = model.movies.concat(model.shows).find((i) => i._id === hm[2]);
+    if (own) return photo(res, new URLSearchParams({ ...Object.fromEntries(q), url: hm[1] === 'poster' ? own.thumb : own.art }));
+    const film = UPCOMING_FILMS.find((f) => f[0] === hm[2]);
+    return send(res, 200, hm[1] === 'poster' ? art.poster(film ? film[1] : hm[2], film && film[2], hm[2]) : art.still(hm[2]), 'image/svg+xml');
+  }
   const ref = model.images.get(path.split('?')[0]);
   if (!ref) return send(res, 404, 'unknown image', 'text/plain');
   const file = imageFile(path.split('?')[0]);
@@ -696,6 +715,7 @@ createServer(async (req, res) => {
       const dev = signin ? { clientId: 'demo-client', plexTv: `${BASE}/plextv` } : { token: TOKEN, clientId: 'demo-client', server, plexTv: `${BASE}/plextv` };
       return send(res, 200, `window.PL_DEV = ${JSON.stringify(dev)};\n`, 'text/javascript');
     }
+    if (HELPER && (path === '/helper' || path.startsWith('/helper/'))) return await HELPER.handle(req, res, path.slice(7) || '/', url.searchParams);
     if (PMS_PATH.test(path)) return pms(req, res, path, url.searchParams);
     if (path.startsWith('/plextv/')) return plextv(req, res, path.slice(7));
     const file = normalize(join(APP, path === '/' ? 'index.html' : path));
