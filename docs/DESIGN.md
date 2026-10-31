@@ -86,7 +86,10 @@ Transform and opacity only.
   silver or pale on a transparent background, with little that is dark) gets a dark `#3b3e46` plate
   with a hairline rim. Each logo is sampled once in a 32×16 canvas (Plex sends CORS headers);
   mid-grey if it can't be read (`js/logos.js`, `css/logos.css`).
-- **Settings:** quiet rows on the ground (hairline separators), white plate on focus.
+- **Settings:** quiet rows on the ground (hairline separators), white plate on focus, in groups
+  (Account & server, This browser on the web, Playback, Surprise Me, Plugins, Advanced, About) under
+  24 px uppercase `--text-3` labels like a sheet's headings. The labels never take the focus; Up and
+  Down skip them, and the list scrolls so a group's label shows above its first row.
 - **Live TV** (spec and remote tables in [LIVETV-v2-design.md](LIVETV-v2-design.md)): a two-hour time
   grid on the plain ground, six channels down. The focused programme's details sit above it like a small
   hero (red LIVE pill, 48 px title, a two-line synopsis, 400×225 art at the right); a ruler with a teal

@@ -11,6 +11,14 @@ releases are fixes only.
 
 ### Changed
 
+- **Settings is grouped** under section headings: Account & server, This browser (web), Playback,
+  Surprise Me, Plugins, Advanced and About. The headings are labels only: Up and Down skip them.
+  Advanced holds Performance stats (the developer overlay: frames a second, the longest frame, JS
+  heap and DOM nodes, formerly "Frame-rate meter") and Refresh search index. On phones and tablets,
+  Refresh search index moves from This device to a new Advanced group.
+- **Blue no longer turns on the performance overlay.** Outside Live TV (the guide, Browse and the
+  live player, where it opens Browse) Blue does nothing; the overlay is Settings → Advanced →
+  Performance stats.
 - **Continue Watching plays at once**, on the TV, laptops and phones: choosing an episode in Continue
   Watching or Recently Released Episodes, or a film in Continue Watching, starts it (resuming where it
   was left) instead of opening its page. Hold OK, right-click, "…" or a long press still offer the
@@ -127,8 +135,8 @@ releases are fixes only.
 ### Changed
 
 - Live TV's filter row (All, Favourites, Movies, Sports, News) is replaced by the Browse rail and its
-  chips; Blue opens Browse on the Live TV tab and in the live player (the frame-time overlay stays on
-  Blue elsewhere).
+  chips; Blue opens Browse on the Live TV tab and in the live player, and does nothing elsewhere (the
+  frame-time overlay moved to Settings → Advanced → Performance stats).
 - Live TV rebuilt (docs/LIVETV-v2-design.md). The tab is a two-hour guide grid of every channel in
   the DVR's lineup (channels without guide data too), with the focused programme's details, synopsis
   and artwork above it, filters (All, Favourites, Movies, Sports, News), number keys to jump to a

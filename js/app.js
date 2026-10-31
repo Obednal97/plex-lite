@@ -302,9 +302,10 @@
     if (typing && code === PL.KEY.BACKSPACE) return; // deletes a character, not "back"
     if (typing && !PL.isBack(code) && code !== PL.KEY.DOWN && code !== PL.KEY.UP && code !== PL.KEY.ENTER) return;
     var screen = app.top();
-    // Blue: Live TV's Browse rail where there is one (guide, live player), else the perf overlay
+    // Blue: Live TV's Browse rail where there is one (guide, Browse, live player); nothing elsewhere.
+    // (It used to toggle the perf overlay, which a stray press turned on: that is in Settings now.)
     if (code === PL.KEY.BLUE && !typing) {
-      if (!(screen && screen.wantsBlue && screen.key && screen.key(code, e))) perf.toggle();
+      if (screen && screen.wantsBlue && screen.key) screen.key(code, e);
       e.preventDefault();
       return;
     }
@@ -327,7 +328,7 @@
     if (handled || (code >= 37 && code <= 40)) e.preventDefault();
   }
 
-  // ---- Performance overlay (Blue button) ---------------------------------------------------
+  // ---- Performance overlay (Settings > Advanced > Performance stats; app.perf for tools) -----
 
   var perf = {
     el: null,

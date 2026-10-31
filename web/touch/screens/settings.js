@@ -2,8 +2,9 @@
 // right of every tab opens it. It is a stack of sheets, not a page: who's signed in and Switch
 // profile, the libraries and plugin tabs that have no tab of their own, the server, playback,
 // Controls and the other browser settings, plugins (installed, the catalogue, Overseerr's web
-// path), About and Sign out. Everything the TV's Settings offers in a browser, from the same shared
-// code (PL.plex, PL.input, PL.web, PL.plugins, PL.pluginHost, PL.pluginStore).
+// path), Advanced (Refresh search index), About and Sign out. Everything the TV's Settings offers in
+// a browser, from the same shared code (PL.plex, PL.input, PL.web, PL.plugins, PL.pluginHost,
+// PL.pluginStore).
 //
 // Plugins and parts of the web layer open the TV's own sheets and text entry (PL.screens.sheet,
 // PL.screens.textEntry, PL.web.info) and close them with PL.app.pop(). While the layer shows, those
@@ -921,6 +922,9 @@
       PL.web ? { label: 'Local network access', value: PL.web.lnaLabel(), next: true, action: () => PL.web.explainLna() } : null,
       fullscreenOk() ? { label: 'Full screen', toggle: isFull(), action: () => { PL.web.toggleFullscreen(); setTimeout(refreshAll, 400); } } : null,
       PL.input.detected() !== 'touch' && PL.web && PL.web.shortcuts ? { label: 'Keyboard shortcuts', sub: 'Shown over the page; ? opens them too', next: true, action: () => PL.web.shortcuts() } : null,
+    ];
+    // as on the TV (js/screens/settings.js); the TV's Performance stats overlay isn't drawn on this layer
+    const advanced = [
       PL.fuzzy && PL.fuzzy.rebuild ? { label: 'Refresh search index', sub: 'If Search misses new titles', action: () => { PL.fuzzy.rebuild(); T.toast('Rebuilding the search index…'); } } : null,
     ];
     // bundled plugins' own rows (Overseerr), then Overseerr's web requirements
@@ -952,6 +956,7 @@
         ] },
         { heading: 'This device', rows: device },
         { heading: 'Plugins', rows: pluginRows.concat([{ label: 'Plugins', value: installed ? String(installed) : '', sub: 'Installed plugins and the catalogue', icon: 'grid', next: true, action: pluginsSheet }]) },
+        { heading: 'Advanced', rows: advanced },
         { heading: 'About', rows: [
           { label: 'Plex Lite', value: PL.VERSION, icon: 'info', next: true, action: aboutSheet },
           { label: 'Sign out', icon: 'signout', danger: true, action: signOut },

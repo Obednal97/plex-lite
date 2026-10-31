@@ -196,6 +196,11 @@ html, body { background: var(--ground); color: var(--text); }
 .row .row-value { font-size: 26px; color: var(--text-2); }
 .row.focused { background: var(--focus); color: var(--focus-ink); box-shadow: none; }
 .row.focused .row-value { color: rgba(8, 8, 10, 0.55); }
+/* a group's heading in Settings: a quiet label, never focused (72 px: js/screens/settings.js HEAD) */
+.settings-heading {
+  height: 72px; padding: 30px 28px 0; font-size: 24px; line-height: 28px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); white-space: nowrap;
+}
 
 .center-card {
   background: linear-gradient(180deg, rgba(58, 58, 64, 0.6), rgba(40, 40, 46, 0.6));
