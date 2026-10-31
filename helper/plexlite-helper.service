@@ -23,7 +23,8 @@ ProtectControlGroups=yes
 RestrictAddressFamilies=AF_INET AF_INET6
 Restart=on-failure
 RestartSec=5
-TimeoutStopSec=30
+# a fix under way finishes before the helper exits
+TimeoutStopSec=120
 
 [Install]
 WantedBy=multi-user.target

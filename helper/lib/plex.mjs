@@ -39,6 +39,49 @@ export function makePlex(cfg, svc, now = () => Date.now(), log = () => {}) {
   }
 
   const canRefresh = () => !!(svc.plex && cfg.plex && cfg.plex.token);
+  // a token whose answer is still cached costs no call to Plex
+  function isCached(token) {
+    const hit = tokens.get(tokenHash(token));
+    return !!hit && now() - hit.at < (hit.ok ? TOKEN_TTL : BAD_TOKEN_TTL);
+  }
+
+  async function metadata(key) {
+    try {
+      const r = await svc.plex.get(`/library/metadata/${encodeURIComponent(key)}`, { includeGuids: 1 });
+      return ((r && r.MediaContainer && r.MediaContainer.Metadata) || [])[0] || null;
+    } catch { return null; }
+  }
+  const hasGuid = (m, guid) => !!m && (m.Guid || []).some((g) => String(g.id) === guid);
+
+  // Is this ratingKey (from a viewer, or Seerr) really the target? Checked before using the owner's
+  // token on it.
+  async function isTarget(key, t) {
+    if (!key || !/^\d+$/.test(String(key))) return false;
+    const m = await metadata(key);
+    if (!m) return false;
+    if (t.type === 'movie') return m.type === 'movie' && hasGuid(m, `tmdb://${t.tmdbId}`);
+    if (t.type === 'show') return m.type === 'show' && (hasGuid(m, `tvdb://${t.tvdbId}`) || (!!t.tmdbId && hasGuid(m, `tmdb://${t.tmdbId}`)));
+    if (m.type !== 'episode' || Number(m.parentIndex) !== Number(t.season) || Number(m.index) !== Number(t.episode)) return false;
+    const show = m.grandparentRatingKey ? await metadata(m.grandparentRatingKey) : null;
+    return !!show && (hasGuid(show, `tvdb://${t.tvdbId}`) || (!!t.tmdbId && hasGuid(show, `tmdb://${t.tmdbId}`)));
+  }
+
+  // the show's ratingKey: the hint when it checks out, else found by its guid
+  async function showKey(t, hint) {
+    if (hint && (await isTarget(hint, { ...t, type: 'show' }))) return String(hint);
+    return findRatingKey({ ...t, type: 'show', season: 0 });
+  }
+
+  // [{episode, files: [basename, …]}] for one season of a show, as Plex has it
+  async function seasonEpisodes(key, season) {
+    const leaves = await svc.plex.get(`/library/metadata/${encodeURIComponent(key)}/allLeaves`);
+    return ((leaves && leaves.MediaContainer && leaves.MediaContainer.Metadata) || [])
+      .filter((m) => Number(m.parentIndex) === Number(season))
+      .map((m) => ({
+        episode: Number(m.index),
+        files: (m.Media || []).flatMap((md) => (md.Part || []).map((p) => String(p.file || '').split(/[\\/]/).pop())).filter(Boolean),
+      }));
+  }
 
   async function guids() {
     if (guidCache && now() - guidCache.at < GUID_TTL) return guidCache;
@@ -73,7 +116,8 @@ export function makePlex(cfg, svc, now = () => Date.now(), log = () => {}) {
   async function refresh(t, ratingKey) {
     if (!canRefresh()) return false;
     try {
-      const key = ratingKey && /^\d+$/.test(String(ratingKey)) ? String(ratingKey) : await findRatingKey(t);
+      // a ratingKey from the viewer is used only when Plex says it is this title
+      const key = ratingKey && (await isTarget(ratingKey, t)) ? String(ratingKey) : await findRatingKey(t);
       if (!key) { log(`plex refresh skipped: item not found`); return false; }
       await svc.plex.call('PUT', `/library/metadata/${key}/refresh`);
       return true;
@@ -83,5 +127,5 @@ export function makePlex(cfg, svc, now = () => Date.now(), log = () => {}) {
     }
   }
 
-  return { checkToken, refresh, canRefresh, findRatingKey };
+  return { checkToken, isCached, refresh, canRefresh, findRatingKey, isTarget, showKey, seasonEpisodes };
 }

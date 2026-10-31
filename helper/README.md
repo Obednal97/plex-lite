@@ -14,7 +14,7 @@ sh /opt/plex-lite/helper/install.sh        # Debian 12: creates /etc/plexlite-he
 
 | file | |
 |---|---|
-| `helper.mjs` | entry point (`node helper.mjs [--env <file>]`) |
+| `helper.mjs` | entry point (`node helper.mjs [--env <file>] [--backfill-days N]`) |
 | `lib/app.mjs` | routes, auth, rate limits |
 | `lib/report.mjs` | the report flow and its safety rules, backfill |
 | `lib/reads.mjs` | `/queue`, `/coming`, `/missing`, `/missing/search` |
@@ -23,4 +23,4 @@ sh /opt/plex-lite/helper/install.sh        # Debian 12: creates /etc/plexlite-he
 | `lib/state.mjs` | `state.json`: handled issues, limits |
 | `helper.env.example`, `plexlite-helper.service`, `install.sh` | packaging |
 
-Tests: `node --test test/helper-report.test.mjs test/helper-api.test.mjs`.
+Tests: `node --test test/helper-report.test.mjs test/helper-api.test.mjs test/helper-review.test.mjs`.

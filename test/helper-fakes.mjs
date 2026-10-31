@@ -84,6 +84,7 @@ export function makeWorld(clock) {
     const file = o.file === null ? null : {
       id: o.fileId || o.id * 100, movieId: o.id, relativePath: o.file || `${o.title} (2020)/${o.title}.2020.1080p.WEB.mkv`,
       path: `${o.root || '/data/movies'}/${o.file || `${o.title} (2020)/${o.title}.2020.1080p.WEB.mkv`}`,
+      dateAdded: o.dateAdded || '2026-10-01T00:00:30Z',
     };
     const movie = { id: o.id, title: o.title, tmdbId: o.tmdbId, imdbId: `tt${o.tmdbId}`, year: 2020, monitored: o.monitored !== false, hasFile: !!file, movieFile: file, images: [{ coverType: 'poster', url: '/MediaCover/1/poster.jpg', remoteUrl: `https://image.example.com/${o.tmdbId}/poster.jpg` }, { coverType: 'fanart', remoteUrl: `https://image.example.com/${o.tmdbId}/fanart.jpg` }], ...o.extra };
     w.radarr.movies.push(movie);
@@ -113,7 +114,7 @@ export function makeWorld(clock) {
         if (e.file) {
           fileId = e.fileId || id + 500000;
           const rel = `Season ${s}/${e.file}`;
-          if (!w.sonarr.files.find((f) => f.id === fileId)) w.sonarr.files.push({ id: fileId, seriesId: o.id, seasonNumber: s, relativePath: rel, path: `${o.root || '/data/tv'}/${o.title}/${rel}` });
+          if (!w.sonarr.files.find((f) => f.id === fileId)) w.sonarr.files.push({ id: fileId, seriesId: o.id, seasonNumber: s, relativePath: rel, path: `${o.root || '/data/tv'}/${o.title}/${rel}`, dateAdded: e.dateAdded || '2026-10-01T00:00:30Z' });
           const dl = e.downloadId === null ? null : e.downloadId || `DL-S${o.id}-${s}-${e.episode}`;
           if (e.importRecord !== false) w.sonarr.history.push({ id: ++hist, episodeId: id, seriesId: o.id, eventType: 'downloadFolderImported', downloadId: dl, sourceTitle: e.release || `${o.title}.S${s}E${e.episode}`, data: { importedPath: `${o.root || '/data/tv'}/${o.title}/${rel}` }, date: '2026-10-01T00:00:00Z' });
           if (dl && e.grab !== false) {
@@ -152,12 +153,31 @@ export function makeWorld(clock) {
   // ---- Plex ----
   w.addPlexMovie = (ratingKey, tmdbId) => {
     if (!w.plex.sections.find((s) => s.key === '1')) w.plex.sections.push({ key: '1', type: 'movie', title: 'Films' });
-    (w.plex.items['1'] || (w.plex.items['1'] = [])).push({ ratingKey: String(ratingKey), Guid: [{ id: `tmdb://${tmdbId}` }] });
+    (w.plex.items['1'] || (w.plex.items['1'] = [])).push({ ratingKey: String(ratingKey), type: 'movie', Guid: [{ id: `tmdb://${tmdbId}` }] });
   };
+  // leaves: [[ratingKey, season, episode, file?]]
   w.addPlexShow = (ratingKey, tvdbId, leaves) => {
     if (!w.plex.sections.find((s) => s.key === '2')) w.plex.sections.push({ key: '2', type: 'show', title: 'TV' });
-    (w.plex.items['2'] || (w.plex.items['2'] = [])).push({ ratingKey: String(ratingKey), Guid: [{ id: `tvdb://${tvdbId}` }] });
-    w.plex.leaves[String(ratingKey)] = leaves.map(([rk, s, e]) => ({ ratingKey: String(rk), parentIndex: s, index: e }));
+    const list = w.plex.items['2'] || (w.plex.items['2'] = []);
+    if (!list.find((x) => x.ratingKey === String(ratingKey))) list.push({ ratingKey: String(ratingKey), type: 'show', Guid: [{ id: `tvdb://${tvdbId}` }] });
+    w.plex.leaves[String(ratingKey)] = leaves.map(([rk, s, e, file]) => ({
+      ratingKey: String(rk), type: 'episode', parentIndex: s, index: e, grandparentRatingKey: String(ratingKey),
+      Guid: [{ id: `tvdb://${rk}0` }], Media: file ? [{ Part: [{ file }] }] : [],
+    }));
+  };
+  // Plex sees the same files as Sonarr, in the same seasons
+  w.mirrorToPlex = (seriesId, showKey) => {
+    const series = w.sonarr.series.find((x) => x.id === seriesId);
+    const leaves = w.sonarr.episodes.filter((e) => e.seriesId === seriesId && e.hasFile).map((e) => {
+      const f = w.sonarr.files.find((x) => x.id === e.episodeFileId);
+      return [Number(showKey) * 100 + e.seasonNumber * 10 + e.episodeNumber, e.seasonNumber, e.episodeNumber, `/media/tv/${f.relativePath}`];
+    });
+    w.addPlexShow(showKey, series.tvdbId, leaves);
+  };
+  w.plexMetadata = (key) => {
+    for (const list of Object.values(w.plex.items)) { const m = list.find((x) => x.ratingKey === String(key)); if (m) return m; }
+    for (const leaves of Object.values(w.plex.leaves)) { const m = leaves.find((x) => x.ratingKey === String(key)); if (m) return m; }
+    return null;
   };
   return w;
 }
@@ -213,7 +233,11 @@ function radarrHandler(w) {
       if ((r = m(p, /^\/movie\/(\d+)$/))) return R.movies.find((x) => x.id === Number(r[1]));
       if (p === '/moviefile') return R.movies.filter((x) => x.id === num(q.get('movieId')) && x.movieFile).map((x) => x.movieFile);
       if (p === '/rootfolder') return R.roots.map((path, i) => ({ id: i + 1, path }));
-      if (p === '/queue') return paged(R.queue);
+      if (p === '/queue') {
+        if (R.onQueue) R.onQueue();
+        if (R.queueError) return { status: 500, body: { message: R.queueError } };
+        return paged(R.queue);
+      }
       if (p === '/calendar') return R.calendar;
       if (p === '/history/movie') {
         return R.history.filter((h) => h.movieId === num(q.get('movieId')) && (!q.get('eventType') || h.eventType === q.get('eventType')));
@@ -224,7 +248,7 @@ function radarrHandler(w) {
         return paged(R.history.filter((h) => (!q.get('downloadId') || h.downloadId === q.get('downloadId')) && (!types.length || types.some((t) => name[t] === h.eventType))));
       }
     }
-    if (c.method === 'POST' && (r = m(p, /^\/history\/failed\/(\d+)$/))) { R.failed.push(Number(r[1])); return { status: 200, body: null }; }
+    if (c.method === 'POST' && (r = m(p, /^\/history\/failed\/(\d+)$/))) { R.failed.push(Number(r[1])); return { status: 200, body: null, delay: R.failedDelay || 0 }; }
     if (c.method === 'DELETE' && (r = m(p, /^\/moviefile\/(\d+)$/))) {
       if (R.failDelete) return { status: 500, body: { message: 'disk on fire' } };
       R.deleted.push(Number(r[1]));
@@ -267,7 +291,11 @@ function sonarrHandler(w) {
           && (!types.length || types.some((t) => name[t] === h.eventType))));
       }
     }
-    if (c.method === 'POST' && (r = m(p, /^\/history\/failed\/(\d+)$/))) { S.failed.push(Number(r[1])); return { status: 200, body: null }; }
+    if (c.method === 'POST' && (r = m(p, /^\/history\/failed\/(\d+)$/))) {
+      if (S.failFailed && S.failFailed.has(Number(r[1]))) return { status: 500, body: { message: 'internal detail' } };
+      S.failed.push(Number(r[1]));
+      return { status: 200, body: null };
+    }
     const unfile = (ids) => {
       for (const id of ids) {
         S.deleted.push(id);
@@ -327,6 +355,10 @@ function plexHandler(w) {
     if (c.method === 'GET' && c.path === '/library/sections') return { MediaContainer: { Directory: P.sections } };
     if (c.method === 'GET' && (r = m(c.path, /^\/library\/sections\/(\w+)\/all$/))) return { MediaContainer: { Metadata: P.items[r[1]] || [] } };
     if (c.method === 'GET' && (r = m(c.path, /^\/library\/metadata\/(\d+)\/allLeaves$/))) return { MediaContainer: { Metadata: P.leaves[r[1]] || [] } };
+    if (c.method === 'GET' && (r = m(c.path, /^\/library\/metadata\/(\d+)$/))) {
+      const md = w.plexMetadata(r[1]);
+      return md ? { MediaContainer: { Metadata: [md] } } : { status: 404, body: null };
+    }
     if (c.method === 'PUT' && (r = m(c.path, /^\/library\/metadata\/(\d+)\/refresh$/))) {
       if (token !== SERVER_TOKEN) return { status: 401, body: null };
       P.refreshed.push(r[1]);

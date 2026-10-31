@@ -15,7 +15,7 @@ test('helper config: dry run is the default; the env file loader keeps what is a
   assert.equal(readConfig({}).dryRun, true);
   assert.equal(readConfig({ DRY_RUN: '0' }).dryRun, false);
   assert.equal(readConfig({}).otherAction, 'manual');
-  assert.equal(readConfig({}).backfillDays, 14);
+  assert.equal(readConfig({}).backfillDays, 0, 'a backfill is a deliberate one-off');
   assert.equal(readConfig({ SONARR_URL: 'http://sonarr.example.com/' }).sonarr, null, 'a URL without a key is not configured');
   const dir = mkdtempSync(join(tmpdir(), 'plexlite-helper-env-'));
   const file = join(dir, 'helper.env');

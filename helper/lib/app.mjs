@@ -1,7 +1,7 @@
 // The helper: routes, auth and rate limits, wired to the report flow and the read endpoints.
 // Contract: docs/HELPER.md (and the plugin builders' copy of it).
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import http from 'node:http';
 import { join } from 'node:path';
 import { describeConfig } from './config.mjs';
@@ -24,11 +24,17 @@ function sameSecret(given, expected) {
   return timingSafeEqual(sha(given), sha(expected));
 }
 
-export function createHelper(cfg, opts = {}) {
+export function createHelper(config, opts = {}) {
   const now = opts.now || (() => Date.now());
   const log = opts.log || ((m) => console.log(m));
+  const state = openState(config.stateDir, now, log);
+  let cfg = config;
+  // an unreadable state file was moved aside: no memory of handled issues, so change nothing
+  if (state.corruptFiles().length) {
+    if (!cfg.dryRun) log(`!!! ${state.corruptFiles().join(', ')} in ${cfg.stateDir}: running in DRY RUN until it is restored or deleted`);
+    cfg = { ...cfg, dryRun: true };
+  }
   const svc = makeServices(cfg, now);
-  const state = openState(cfg.stateDir, now, log);
   const plex = makePlex(cfg, svc, now, log);
   const isPaused = () => cfg.paused || existsSync(join(cfg.stateDir, 'PAUSED'));
   const subs = makeSubtitles({ cfg, svc, plex, now, log });
@@ -37,13 +43,29 @@ export function createHelper(cfg, opts = {}) {
 
   // ---- action auth: the viewer's Plex token, checked against the Plex server ----
   const actionTimes = new Map(); // sha256(token) → [times]
+  const failsByIp = new Map(); // client address → [times of failed token checks]
+  let checks = []; // times of token checks that went to Plex
+  const recent = (list) => (list || []).filter((x) => now() - x < TEN_MIN);
   async function authorize(req) {
     if (!cfg.plex) throw new HttpError(503, 'unavailable', 'PLEX_URL is not set on the helper, so it cannot check who is asking');
+    const ip = String((req.socket && req.socket.remoteAddress) || '?');
+    const fails = recent(failsByIp.get(ip));
+    failsByIp.set(ip, fails);
+    if (fails.length >= cfg.authFailsPerIp10Min) throw new HttpError(429, 'rate_limited', 'too many refused tokens from this address; try again later');
     const token = req.headers['x-plex-token'];
     if (!token || typeof token !== 'string') throw new HttpError(401, 'unauthenticated', 'X-Plex-Token is required');
+    if (!plex.isCached(token)) {
+      checks = recent(checks);
+      if (checks.length >= cfg.tokenChecksPer10Min) throw new HttpError(429, 'rate_limited', 'too many new tokens to check; try again later');
+      checks.push(now());
+    }
     const ok = await plex.checkToken(token);
     if (ok === null) throw new HttpError(503, 'unavailable', 'the Plex server did not answer');
-    if (!ok) throw new HttpError(401, 'unauthenticated', 'the Plex server refused this token');
+    if (!ok) {
+      fails.push(now());
+      if (failsByIp.size > 1000) failsByIp.delete(failsByIp.keys().next().value);
+      throw new HttpError(401, 'unauthenticated', 'the Plex server refused this token');
+    }
     const h = tokenHash(token);
     const t = now();
     const list = (actionTimes.get(h) || []).filter((x) => t - x < TEN_MIN);
@@ -137,12 +159,12 @@ export function createHelper(cfg, opts = {}) {
 
   let retryTimer = null;
   // Seerr may start after the helper (a reboot): try the backfill again every 5 minutes until it works
-  async function backfillUntilDone() {
+  async function backfillUntilDone(days) {
     retryTimer = null;
-    const r = await reports.backfill();
+    const r = await reports.backfill(days);
     if (r === null) {
       log(`backfill: trying again in ${BACKFILL_RETRY_MS / 60000} minutes`);
-      retryTimer = setTimeout(backfillUntilDone, BACKFILL_RETRY_MS);
+      retryTimer = setTimeout(() => backfillUntilDone(days), BACKFILL_RETRY_MS);
     }
     return r;
   }
@@ -155,16 +177,28 @@ export function createHelper(cfg, opts = {}) {
         server.listen(port, host, () => { server.off('error', reject); resolve(server.address()); });
       });
     },
-    async start() {
-      const addr = await this.listen();
+    // opts.backfillDays: a one-off backfill (helper.mjs --backfill-days N). The service gets the
+    // same from a BACKFILL_DAYS file in the state folder, used once and then deleted.
+    async start(startOpts = {}) {
+      const addr = server.listening ? server.address() : await this.listen();
       log(`Plex Lite helper ${VERSION} listening on ${addr.address}:${addr.port}`);
       for (const line of describeConfig(cfg)) log(line);
       await logProfiles();
-      await backfillUntilDone();
+      await reports.recoverInterrupted();
+      let days = startOpts.backfillDays;
+      const trigger = join(cfg.stateDir, 'BACKFILL_DAYS');
+      if (existsSync(trigger)) {
+        const n = Number.parseInt(readFileSync(trigger, 'utf8'), 10);
+        try { unlinkSync(trigger); } catch (e) { log(`can't remove ${trigger}: ${e.message}`); }
+        if (Number.isInteger(n) && n > 0 && n <= 365) days = n;
+        else log(`${trigger} doesn't hold a number of days (1–365): ignored`);
+      }
+      if (days || cfg.backfillDays) await backfillUntilDone(days || cfg.backfillDays);
       return addr;
     },
     close() {
       if (retryTimer) clearTimeout(retryTimer);
+      reports.stop();
       return new Promise((resolve) => {
         server.close(() => resolve());
         if (server.closeAllConnections) server.closeAllConnections();

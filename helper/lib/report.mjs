@@ -7,6 +7,9 @@ import {
 import { HttpError, UpstreamError } from './http.mjs';
 
 const DAY = 24 * 3600 * 1000;
+// an import record belongs to the current file only if it was written when the file was added
+const IMPORT_WINDOW_MS = 10 * 60 * 1000;
+const SEE_LOG = 'see the helper\'s log';
 const PERM = { ADMIN: 2, MANAGE_ISSUES: 1048576, CREATE_ISSUES: 4194304 };
 export const DRY_PREFIX = 'Dry run (nothing changed): ';
 
@@ -21,8 +24,9 @@ export const REASONS = {
   subtitles: 'subtitles missing or burned in',
   other: 'something else',
 };
-// Seerr's own issue types, for issues made in Seerr's web UI (no plexlite: line)
-const FROM_TYPE = { 1: 'video-quality', 2: 'audio-language', 3: 'subtitles', 4: 'other' };
+// Seerr's own issue types, for issues made in Seerr's web UI (no plexlite: line). A "Subtitles"
+// issue there is treated as subtitles missing (Bazarr, nothing deleted): deletes only when sure.
+const FROM_TYPE = { 1: 'video-quality', 2: 'audio-language', 3: 'subs-missing', 4: 'other' };
 
 // "plexlite: reason=…; scope=…; season=1; …" → {reason, scope, season, episode, plex, file, versions}
 export function parseTail(message) {
@@ -40,12 +44,32 @@ const sortComments = (list) => [...(list || [])].sort((a, b) => (a.id || 0) - (b
 const isDryComment = (c) => String((c && c.message) || '').startsWith(DRY_PREFIX);
 const epLabel = (s, e) => (e ? `S${s} E${e}` : `Season ${s}`);
 const nameForPlex = (s) => basename(s).replace(/;/g, ',');
+const ticks = (list) => list.map((r) => `\`${r}\``).join(', ');
+
+// the comment for a live fix that a crash or restart cut short (state.setStep records how far it got)
+function interruptedText(r) {
+  const arr = r.arr || 'Sonarr/Radarr';
+  const rel = ticks(r.releases || []) || 'the release';
+  const pre = 'Not fixed automatically: the helper was interrupted (a restart or crash)';
+  switch (r.step) {
+    case 'blocklisting': return `${pre} while blocklisting ${rel}: some may be blocklisted, nothing was deleted. Check ${arr}'s blocklist and the file. Left for a person.`;
+    case 'blocklisted': return `${pre} after blocklisting ${rel}, before deleting the file: check ${arr} (delete the file, then search). Left for a person.`;
+    case 'deleting': return `${pre} after blocklisting ${rel}, while deleting the file: check ${arr} for the file, then search. Left for a person.`;
+    case 'deleted':
+    case 'searching': return `${pre} after blocklisting ${rel} and deleting the file, before the search started: search for it in ${arr}. Left for a person.`;
+    case 'searched': return `${pre} after blocklisting ${rel}, deleting the file and starting a search: check ${arr} → Queue. Left for a person.`;
+    case 'subtitles': return `${pre} while Bazarr was searching for subtitles. Left for a person.`;
+    default: return `${pre} while looking at this report, before changing anything. Left for a person: report it again if it's still wrong.`;
+  }
+}
 
 export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused }) {
   let chain = Promise.resolve();
+  // set on SIGTERM/close: nothing new starts; a destructive sequence already under way finishes
+  let stopping = false;
 
-  function enqueue(id, source) {
-    const run = chain.then(() => processIssue(id, source)).catch((e) => {
+  function enqueue(id, source, opts) {
+    const run = chain.then(() => processIssue(id, source, opts)).catch((e) => {
       log(`issue #${id}: unexpected error ${e && e.stack ? e.stack : e}`);
       return { outcome: 'error' };
     });
@@ -57,10 +81,11 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
     const message = (dry ? DRY_PREFIX : '') + text;
     try {
       await svc.seerr.post(`/issue/${id}/comment`, { message });
+      return true;
     } catch (e) {
       log(`issue #${id}: comment failed: ${e.message}`);
+      return false;
     }
-    return message;
   }
 
   async function resolve(id) {
@@ -68,9 +93,10 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
   }
 
   // ---------------------------------------------------------------------------------------------
-  async function processIssue(rawId, source = 'webhook') {
+  async function processIssue(rawId, source = 'webhook', opts = {}) {
     const id = Number(rawId);
     if (!Number.isInteger(id) || id <= 0) return { outcome: 'bad_id' };
+    if (stopping) { log(`issue #${id}: not started (the helper is stopping)`); return { outcome: 'stopping' }; }
     if (!svc.seerr) { log(`issue #${id}: Seerr is not configured`); return { outcome: 'unavailable' }; }
     const dry = cfg.dryRun;
     if (state.isHandled(id, dry)) { log(`issue #${id}: already handled`); return { outcome: 'already_handled' }; }
@@ -94,19 +120,30 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
     const first = reporterComments[0];
     const tail = first ? parseTail(first.message) : null;
     const age = now() - Date.parse(issue.createdAt);
-    const maxAge = source === 'backfill' ? cfg.backfillDays * DAY : cfg.maxIssueAgeMinutes * 60000;
+    const backfillDays = opts.days || cfg.backfillDays;
+    const maxAge = source === 'backfill' ? backfillDays * DAY : cfg.maxIssueAgeMinutes * 60000;
     const skip = (outcome, why) => { log(`issue #${id}: skipped (${why})`); return { outcome }; };
     if (Number(issue.status) !== 1) return skip('not_open', 'not open');
-    if (!(age <= maxAge)) return skip('too_old', `created ${Math.round(age / 60000)} min ago`);
     if (reporterComments.length !== 1) return skip('touched', `${reporterComments.length} comments`);
     if (source === 'backfill' && !tail) return skip('no_tail', 'not from Plex Lite');
+    // paused: not recorded, so it is handled once the helper is unpaused (by a backfill)
+    if (isPaused()) return skip('paused', 'paused');
+    if (!(age <= maxAge)) {
+      // say so, once: a report that waited too long (a long queue, the helper down) isn't silent
+      state.markHandled(id, dry, 'too_old');
+      log(`issue #${id}: too old (created ${Math.round(age / 60000)} min ago)`);
+      await comment(id, source === 'backfill'
+        ? `Not fixed automatically: this report is older than the ${backfillDays} days the helper looked back. Left for a person.`
+        : `Not fixed automatically: the helper only acts on reports in their first ${cfg.maxIssueAgeMinutes} minutes, and this one was older than ${cfg.maxIssueAgeMinutes} minutes when its turn came. Left for a person.`, dry);
+      return { outcome: 'too_old' };
+    }
 
     // recorded before any comment or change: an issue is processed once, even across restarts
     state.markHandled(id, dry, 'started');
     const done = (outcome, extra = {}) => { state.setOutcome(id, dry, outcome); return { outcome, ...extra }; };
     const media = issue.media || {};
     const userId = issue.createdBy && issue.createdBy.id;
-    const ctx = { id, dry, issue, media, userId, tail: tail || {} };
+    const ctx = { id, dry, issue, media, userId, tail: tail || {}, source };
 
     try {
       // ---- the report ----
@@ -148,8 +185,9 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
       if (reason === 'subs-missing') return done(...(await subtitleFlow(ctx)));
       return done(...(await regrabFlow(ctx)));
     } catch (e) {
+      // viewers read Seerr comments: the detail goes to the log only
       log(`issue #${id}: error: ${e.message}`);
-      await comment(id, `Not fixed automatically: the helper hit an error (${e.message}). Left for a person.`, dry);
+      await comment(id, `Not fixed automatically: the helper hit an error (${SEE_LOG}). Left for a person.`, dry);
       return done('error');
     }
   }
@@ -210,18 +248,24 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
     }
     const found = [];
     const notFound = [];
+    const skipped = [];
+    // one report can't hold the queue for long: later reports would age out
+    const deadline = now() + cfg.subtitleRunMaxSeconds * 1000;
+    state.setStep(id, false, 'subtitles');
     for (const p of plan) {
+      if (stopping || now() >= deadline) { skipped.push(`${p.name}${where(p.t)}`); continue; }
       const r = await subs.search(p.t, p.code, p.forced, p.hi);
       (r.status === 'downloaded' ? found : notFound).push(`${p.name}${where(p.t)}${r.provider ? ` (${r.provider})` : ''}`);
     }
-    log(`issue #${id}: subtitles found ${found.length}, not found ${notFound.length}`);
+    log(`issue #${id}: subtitles found ${found.length}, not found ${notFound.length}, not searched ${skipped.length}`);
+    const notSearched = skipped.length ? ` Not searched (time limit): ${skipped.join(', ')}.` : '';
     if (!found.length) {
-      await comment(id, `Bazarr searched for ${notFound.join(', ')} but found nothing. Left open for a person.`, false);
+      await comment(id, `Bazarr searched for ${notFound.join(', ') || 'nothing'} but found nothing.${notSearched} Left open for a person.`, false);
       return ['subs_not_found'];
     }
     const refreshed = await plex.refresh(refreshTarget, refreshKey);
     await comment(id, `Fixed automatically: Bazarr downloaded ${found.join(', ')}.` +
-      `${notFound.length ? ` Still missing: ${notFound.join(', ')}.` : ''}` +
+      `${notFound.length ? ` Still missing: ${notFound.join(', ')}.` : ''}${notSearched}` +
       `${refreshed ? ' Plex is refreshing, so they show in a minute.' : ''} If they're wrong, report it again.`, false);
     await resolve(id);
     return ['subs_fixed', { found: found.length }];
@@ -261,6 +305,13 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
       return ['limit'];
     }
 
+    // an older report (backfill) is acted on only when it names the file Plex played, and it is
+    // still the file Sonarr/Radarr has
+    if (ctx.source === 'backfill' && scope !== 'season' && !ctx.tail.file) {
+      await comment(id, 'Not fixed automatically: this older report doesn\'t say which file Plex played, so the helper can\'t be sure it\'s the file ' +
+        `${scope === 'movie' ? 'Radarr' : 'Sonarr'} has now. Nothing was changed; left for a person.`, dry);
+      return ['ambiguous'];
+    }
     const plan = scope === 'movie' ? await planRadarr(ctx) : await planSonarr(ctx, tvdbId);
     if (!plan.ok) {
       log(`issue #${id}: stopped: ${plan.why}`);
@@ -277,28 +328,47 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
       return ['dry_run', { plan }];
     }
 
+    // the last look before changing anything: paused or stopping → not recorded, no comment
+    const gate = stopping ? 'stopping' : isPaused() ? 'paused' : null;
+    if (gate) {
+      log(`issue #${id}: ${gate} before any change; left for later`);
+      state.unmarkHandled(id, false);
+      return [gate];
+    }
+    const arrName = scope === 'movie' ? 'Radarr' : 'Sonarr';
+
     // counted before the first destructive call
     state.recordRegrab(Number(userId), titleKey, id);
     const earlierLanguage = reason === 'audio-language' ? state.priorReports('audio-language', titleKey).length : 0;
     state.recordReport(reason, itemKey, id);
     if (reason === 'audio-language' && itemKey !== titleKey) state.recordReport(reason, titleKey, id);
 
+    // From here the sequence runs to the end even if the helper is asked to stop; each step is
+    // recorded first, so a crash leaves a trail that the next start reports on the issue.
+    state.setStep(id, false, 'blocklisting', { arr: arrName, releases: plan.grabs.map((g) => g.release) });
+    const blocklisted = [];
     for (const g of plan.grabs) {
       try {
         await arr.post(`/history/failed/${g.grabbedId}`);
+        blocklisted.push(g.release);
       } catch (e) {
-        await comment(id, `Not fixed automatically: blocklisting \`${g.release}\` failed (${e.message}). Nothing was deleted; left for a person.`, false);
+        log(`issue #${id}: blocklisting grab ${g.grabbedId} failed: ${e.message}`);
+        await comment(id, `Not fixed automatically: ${blocklisted.length ? `blocklisted ${ticks(blocklisted)}, but ` : ''}blocklisting \`${g.release}\` failed (${SEE_LOG}). ` +
+          `Nothing was deleted; left for a person${blocklisted.length ? ` (check ${arrName}'s blocklist)` : ''}.`, false);
         return ['error'];
       }
     }
+    state.setStep(id, false, 'deleting');
     try {
       if (scope === 'movie') await arr.del(`/moviefile/${plan.files[0].id}`);
       else if (plan.files.length === 1) await arr.del(`/episodefile/${plan.files[0].id}`);
       else await arr.call('DELETE', '/episodefile/bulk', { body: { episodeFileIds: plan.files.map((f) => f.id) } });
     } catch (e) {
-      await comment(id, `Not fixed automatically: blocklisted ${releases}, but deleting the file failed (${e.message}), so no search was started. Left for a person.`, false);
+      log(`issue #${id}: delete failed: ${e.message}`);
+      await comment(id, `Not fixed automatically: blocklisted ${releases}, but deleting the file failed (${SEE_LOG}), so no search was started. Left for a person.`, false);
       return ['error'];
     }
+    state.setStep(id, false, 'deleted');
     // "Unmonitor deleted …" would stop the search finding anything
     try {
       if (scope === 'movie') {
@@ -308,14 +378,17 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
         await arr.put('/episode/monitor', { episodeIds: plan.episodeIds, monitored: true });
       }
     } catch (e) { log(`issue #${id}: re-monitoring failed: ${e.message}`); }
+    state.setStep(id, false, 'searching');
     try {
       if (scope === 'movie') await arr.post('/command', { name: 'MoviesSearch', movieIds: [plan.movieId] });
       else if (plan.seasonSearch) await arr.post('/command', { name: 'SeasonSearch', seriesId: plan.seriesId, seasonNumber: season });
       else await arr.post('/command', { name: 'EpisodeSearch', episodeIds: plan.episodeIds });
     } catch (e) {
-      await comment(id, `Blocklisted ${releases} and deleted the file, but starting the search failed (${e.message}). Left open: search for it in ${scope === 'movie' ? 'Radarr' : 'Sonarr'}.`, false);
+      log(`issue #${id}: search failed: ${e.message}`);
+      await comment(id, `Blocklisted ${releases} and deleted the file, but starting the search failed (${SEE_LOG}). Left open: search for it in ${arrName}.`, false);
       return ['search_failed'];
     }
+    state.setStep(id, false, 'searched');
     let text = `Fixed automatically: blocklisted ${releases}, deleted the file and searched for a new copy. It shows in Plex Lite → Downloading. If the new one is wrong too, report it again.`;
     if (earlierLanguage) text += ' This title was reported for the wrong language before: if every release is in that language, the next copy may be too.';
     await comment(id, text, false);
@@ -325,18 +398,35 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
   }
 
   // the import of `file` and the one grab that brought it, or a reason to stop
-  async function grabFor(arr, importRecords, file, single) {
-    const imports = importRecords.filter((r) => isEvent(r, 'downloadFolderImported') && r.data && String(r.data.importedPath || '').endsWith(file.relativePath));
-    const ids = [...new Set(imports.map((r) => r.downloadId).filter(Boolean))];
-    if (!imports.length) return { why: `no import record for \`${basename(file.relativePath)}\` (imported by hand?)` };
-    if (!ids.length) return { why: `the import of \`${basename(file.relativePath)}\` has no download id (imported by hand?)` };
-    if (ids.length > 1) return { why: `\`${basename(file.relativePath)}\` was imported from ${ids.length} different downloads` };
-    const r = await arr.get('/history', { downloadId: ids[0], eventType: EVENT.grabbed, page: 1, pageSize: 50 });
-    const grabs = ((r && r.records) || []).filter((x) => isEvent(x, 'grabbed') && x.downloadId === ids[0]);
-    if (!grabs.length) return { why: `no grab record for the download of \`${basename(file.relativePath)}\`` };
-    // Radarr: exactly one. Sonarr writes one grabbed record per episode of a pack (same download).
-    if (single && grabs.length !== 1) return { why: `${grabs.length} grab records for the download of \`${basename(file.relativePath)}\`` };
-    return { grab: { grabbedId: grabs[0].id, downloadId: ids[0], release: grabs[0].sourceTitle || basename(file.relativePath) } };
+  // The grab that brought the *current* file, or a reason to stop. target: {movieId} (Radarr) or
+  // {seriesId, episodeIds} (Sonarr: the episodes the file holds).
+  // - the newest import whose path ends with the file, and only if it was written when the file was
+  //   added (a same-name re-grab leaves older imports behind; a hand import has none of its own);
+  // - every grab of that download (history by downloadId isn't filtered by title) must be this
+  //   title's; Radarr has exactly one; Sonarr one per episode of a pack.
+  async function grabFor(arr, importRecords, file, target) {
+    const name = basename(file.relativePath);
+    const mine = (r) => (target.movieId != null ? r.movieId == null || r.movieId === target.movieId
+      : (r.seriesId == null || r.seriesId === target.seriesId) && (r.episodeId == null || target.episodeIds.includes(r.episodeId)));
+    const imports = importRecords
+      .filter((r) => isEvent(r, 'downloadFolderImported') && r.data && String(r.data.importedPath || '').endsWith(file.relativePath) && mine(r))
+      .sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+    if (!imports.length) return { why: `no import record for \`${name}\` (imported by hand?)` };
+    const newest = imports[0];
+    const added = Date.parse(file.dateAdded);
+    if (!Number.isFinite(added) || !(Math.abs(Date.parse(newest.date) - added) <= IMPORT_WINDOW_MS)) {
+      return { why: `no import record from when \`${name}\` was added (imported by hand, or replaced since?)` };
+    }
+    if (!newest.downloadId) return { why: `the import of \`${name}\` has no download id (imported by hand?)` };
+    const r = await arr.get('/history', { downloadId: newest.downloadId, eventType: EVENT.grabbed, page: 1, pageSize: 100 });
+    const all = ((r && r.records) || []).filter((x) => isEvent(x, 'grabbed') && x.downloadId === newest.downloadId);
+    if (!all.length) return { why: `no grab record for the download of \`${name}\`` };
+    const foreign = all.filter((x) => (target.movieId != null ? x.movieId !== target.movieId : x.seriesId !== target.seriesId));
+    if (foreign.length) return { why: `the download of \`${name}\` has grab records for another title` };
+    if (target.movieId != null && all.length !== 1) return { why: `${all.length} grab records for the download of \`${name}\`` };
+    const ours = target.movieId != null ? all : all.filter((x) => target.episodeIds.includes(x.episodeId));
+    if (!ours.length) return { why: `no grab record of the download of \`${name}\` for its episode` };
+    return { grab: { grabbedId: ours[0].id, downloadId: newest.downloadId, release: ours[0].sourceTitle || name } };
   }
 
   function fileMismatch(tail, names) {
@@ -360,7 +450,7 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
     const q = await queue(svc.radarr, { movieIds: movie.id });
     if (q.some((x) => x.movieId === movie.id)) return { why: `a download for ${movie.title} is already in Radarr's queue` };
     const hist = await svc.radarr.get('/history/movie', { movieId: movie.id, eventType: 'downloadFolderImported' });
-    const g = await grabFor(svc.radarr, Array.isArray(hist) ? hist : [], file, true);
+    const g = await grabFor(svc.radarr, Array.isArray(hist) ? hist : [], file, { movieId: movie.id });
     if (!g.grab) return { why: g.why };
     ctx.title = movie.title;
     return { ok: true, grabs: [g.grab], files: [file], movieId: movie.id };
@@ -392,6 +482,21 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
     }
     const roots = await rootFolders(svc.sonarr);
     if (files.some((f) => !underRoot(f.path, roots))) return { why: 'a file isn\'t under one of Sonarr\'s root folders' };
+    // A season is deleted only when Plex's season is Sonarr's season: same number of episodes, and
+    // every file Sonarr would delete is in that Plex season (catches aired vs DVD order, absolute
+    // numbering, specials mapped into a season…).
+    if (scope === 'season') {
+      if (!plex.canRefresh()) return { why: 'a season report is only acted on when the helper has PLEX_TOKEN, so it can check Plex\'s season is Sonarr\'s' };
+      const key = await plex.showKey({ tvdbId, tmdbId: Number(series.tmdbId) || 0 }, ctx.media.ratingKey);
+      if (!key) return { why: 'the show isn\'t in Plex under its TVDB id, so its season can\'t be checked against Sonarr\'s' };
+      const plexEps = await plex.seasonEpisodes(key, season);
+      const plexFiles = new Set(plexEps.flatMap((e) => e.files));
+      const notInPlex = files.map((f) => basename(f.relativePath)).filter((n) => !plexFiles.has(n));
+      if (plexEps.length !== inScope.length || notInPlex.length) {
+        return { why: `Plex's Season ${season} doesn't match Sonarr's (${plexEps.length} episodes in Plex, ${inScope.length} with files in Sonarr` +
+          `${notInPlex.length ? `, ${notInPlex.length} of Sonarr's files not in it` : ''}): probably a numbering difference` };
+      }
+    }
     // every episode those files hold (a multi-episode file covers several)
     const affected = eps.filter((e) => fileIds.includes(e.episodeFileId));
     const q = await queue(svc.sonarr, { seriesIds: series.id });
@@ -403,7 +508,7 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
     for (const f of files) {
       const ep = affected.find((e) => e.episodeFileId === f.id);
       const r = await svc.sonarr.get('/history', { episodeId: ep.id, eventType: EVENT.downloadFolderImported, page: 1, pageSize: 50, sortKey: 'date', sortDirection: 'descending' });
-      const g = await grabFor(svc.sonarr, (r && r.records) || [], f, false);
+      const g = await grabFor(svc.sonarr, (r && r.records) || [], f, { seriesId: series.id, episodeIds: affected.filter((e) => e.episodeFileId === f.id).map((e) => e.id) });
       // one ambiguous file stops the whole issue
       if (!g.grab) return { why: g.why };
       if (!grabs.has(g.grab.downloadId)) grabs.set(g.grab.downloadId, g.grab);
@@ -418,10 +523,10 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
   // ---------------------------------------------------------------------------------------------
   // On start: open Plex Lite reports from the last BACKFILL_DAYS that predate the helper (or a
   // restart) are processed once.
-  async function backfill() {
-    if (!cfg.backfillDays || !svc.seerr) return [];
+  async function backfill(days = cfg.backfillDays) {
+    if (!days || !svc.seerr) return [];
     if (isPaused()) { log('backfill skipped: paused'); return []; }
-    const since = now() - cfg.backfillDays * DAY;
+    const since = now() - days * DAY;
     const ids = [];
     try {
       for (let skip = 0; skip < 2000; skip += 50) {
@@ -440,13 +545,26 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
       return null;
     }
     ids.sort((a, b) => a - b);
-    log(`backfill: ${ids.length} open Plex Lite report(s) from the last ${cfg.backfillDays} days to look at`);
+    log(`backfill: ${ids.length} open Plex Lite report(s) from the last ${days} days to look at`);
     const results = [];
-    for (const id of ids) results.push({ id, ...(await enqueue(id, 'backfill')) });
+    for (const id of ids) results.push({ id, ...(await enqueue(id, 'backfill', { days })) });
     return results;
   }
 
-  return { enqueue, processIssue, backfill, idle: () => chain };
+  // On start: a live fix that a crash or kill cut short gets a comment saying how far it got, and
+  // stays open. Dry-run ones changed nothing and are just closed.
+  async function recoverInterrupted() {
+    for (const [id, r] of Object.entries(state.data.dryRunHandled)) if (r.outcome === 'started') state.setOutcome(id, true, 'interrupted');
+    const left = state.interrupted();
+    if (!left.length || !svc.seerr) return [];
+    for (const r of left) {
+      log(`issue #${r.id}: interrupted at step "${r.step || 'checking'}" by a restart or crash: commenting and leaving it open`);
+      if (await comment(r.id, interruptedText(r), false)) state.setOutcome(r.id, false, 'interrupted');
+    }
+    return left.map((r) => r.id);
+  }
+
+  return { enqueue, processIssue, backfill, recoverInterrupted, stop: () => { stopping = true; }, idle: () => chain };
 }
 
 export { UpstreamError };

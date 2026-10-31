@@ -38,14 +38,16 @@ async function showWorld(opts = {}, extraSeasons = {}) {
       ...extraSeasons,
     },
   });
+  t.w.mirrorToPlex(300, 800);
   return t;
 }
 const epIssue = (t, o = {}) => t.w.addIssue({
-  id: o.id || 1, mediaType: 'tv', tmdbId: 7300, tvdbId: 9300, issueType: 2,
+  id: o.id || 1, mediaType: 'tv', tmdbId: 7300, tvdbId: 9300, issueType: 2, mediaRatingKey: '800',
   season: o.season == null ? 1 : o.season, episode: o.episode == null ? 2 : o.episode,
   message: report(o.reason || 'audio-language', o.scope || 'episode', {
     season: o.season == null ? 1 : o.season, episode: o.episode == null ? 2 : o.episode,
-    plex: 801, file: o.file === undefined ? 'Example.Show.S01E02.mkv' : o.file,
+    // the ratingKey mirrorToPlex gives that episode
+    plex: 80000 + (o.season == null ? 1 : o.season) * 10 + (o.episode == null ? 2 : o.episode), file: o.file === undefined ? 'Example.Show.S01E02.mkv' : o.file,
   }),
   ...o,
 });
@@ -175,13 +177,13 @@ test('helper: OTHER_ACTION=regrab re-grabs "something else"', async () => {
   } finally { await t.close(); }
 });
 
-test('helper: subs-burned, legacy subtitles and a web-UI subtitles issue re-grab', async () => {
+test('helper: subs-burned and the legacy subtitles reason re-grab', async () => {
   const t = await showWorld({ env: { LIMIT_PER_TITLE_7D: '5', LIMIT_PER_USER_24H: '5' } });
   try {
     epIssue(t, { id: 1, episode: 1, reason: 'subs-burned', file: 'Example.Show.S01E01.mkv' });
     epIssue(t, { id: 2, episode: 2, reason: 'subtitles' });
-    // made in Seerr's own UI: no plexlite: line, issueType 3, no file= to check
-    t.w.addIssue({ id: 3, mediaType: 'tv', tvdbId: 9300, issueType: 3, season: 1, episode: 3, message: 'subs are burned in' });
+    // made in Seerr's own UI: no plexlite: line, issueType 2 (audio), no file= to check
+    t.w.addIssue({ id: 3, mediaType: 'tv', tvdbId: 9300, issueType: 2, season: 1, episode: 3, message: 'sound is off' });
     for (const id of [1, 2, 3]) assert.equal((await t.helper.reports.processIssue(id)).outcome, 'fixed', `issue ${id}`);
     assert.equal(t.w.sonarr.deleted.length, 3);
   } finally { await t.close(); }
@@ -199,7 +201,7 @@ test('helper: subs-missing asks Bazarr (no delete), refreshes Plex, comments and
     assert.equal(r.outcome, 'subs_fixed');
     nothingChanged(t.w.sonarr);
     assert.deepEqual(t.w.bazarr.patches.map((p) => [p.kind, p.id, p.seriesid, p.language, p.forced, p.hi]), [['episode', e2.id, '300', 'en', 'False', 'False']]);
-    assert.deepEqual(t.w.plex.refreshed, ['801'], 'the episode from the report\'s plex= key');
+    assert.deepEqual(t.w.plex.refreshed, ['80012'], 'the episode from the report\'s plex= key');
     assert.match(t.w.comments(1)[0], /^Fixed automatically: Bazarr downloaded English for S1 E2 \(opensubtitlescom\)/);
     assert.equal(t.w.seerr.issues.get(1).status, 2);
   } finally { await t.close(); }

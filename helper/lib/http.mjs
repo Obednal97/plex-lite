@@ -39,6 +39,10 @@ export function request(service, base, path, opts = {}) {
   }
   if (payload) h['Content-Length'] = payload.length;
   return new Promise((resolve, reject) => {
+    let deadline = null;
+    const finish = (fn) => (v) => { clearTimeout(deadline); fn(v); };
+    resolve = finish(resolve);
+    reject = finish(reject);
     const req = lib.request(u, { method, headers: h }, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
@@ -58,8 +62,11 @@ export function request(service, base, path, opts = {}) {
         }
       });
       res.on('error', (e) => reject(new UpstreamError(service, 0, `${method} ${u.pathname}: ${e.message}`)));
+      res.on('close', () => { if (!res.complete) reject(new UpstreamError(service, 0, `${method} ${u.pathname}: answer cut off (timed out)`)); });
     });
+    // idle timeout, and a total deadline (a server that trickles bytes can't hold a call open)
     req.setTimeout(timeout, () => req.destroy(new Error(`timed out after ${timeout} ms`)));
+    deadline = setTimeout(() => req.destroy(new Error(`no complete answer within ${timeout} ms`)), timeout);
     req.on('error', (e) => reject(new UpstreamError(service, 0, `${method} ${u.pathname}: ${e.message}`)));
     if (payload) req.write(payload);
     req.end();
