@@ -541,13 +541,16 @@ test('host: placeRows puts plugin rows after that many of the screen\'s own', ()
 test('host: openItem opens the touch layer\'s page while it shows', () => {
   const PL = host();
   PL.plugins.register({ id: 'pq', name: 'Q', version: '1', apiVersion: 1 });
-  let def = null;
-  PL.plugins.register({ id: 'pr', name: 'R', version: '1', apiVersion: 1, settingsRows: (c) => { def = c; return []; } });
-  PL.plugins.settingsRows();
-  def.openItem({ ratingKey: '5' });
+  let open = null;
+  PL.plugins.register({ id: 'pr', name: 'R', version: '1', apiVersion: 1, settingsRows: (c) => [{ label: 'Open', action: () => c.openItem(open) }] });
+  // (from the viewer's choice: a late answer has rules of its own, test/late-answers.test.mjs)
+  const row = () => PL.plugins.settingsRows()[0];
+  open = { ratingKey: '5' };
+  row().action();
   eq(PL.pushed, { details: { ratingKey: '5' } });
   const shown = [];
   PL.touch = { visible: true, open: (i) => shown.push(i) };
-  def.openItem({ ratingKey: '6' });
+  open = { ratingKey: '6' };
+  row().action();
   eq(shown, [{ ratingKey: '6' }]);
 });

@@ -220,6 +220,14 @@ give an item `badge: {label, tone?}` (a short word: posters are ~100 px wide the
 | `push(screen)`, `pop()`, `backdrop(url)` | bundled plugins only: push a screen object (`{el, show, hide, key, destroy}`) built from `ctx.ui` (which also has `spinner`, `fadeInImage`, `KEY`, `isBack`) |
 | `service(method, params, serviceId?)` | calls one of the plugin's own `services` over the Luna bus |
 
+**Late answers.** `sheet`, `textEntry`, `openItem` and `push` work as you'd expect while the
+viewer is using the plugin: in a key press or tap, and in one of its actions, shelf choices, Settings
+rows or sheet rows. Called later (after a lookup), they only go over the screen the plugin last left
+the viewer on, and never over a player: if the viewer has moved on, pressed Back or started playing
+meanwhile, the call is dropped (and logged), so a slow answer never lands on top of something else.
+Plugins don't need to do anything for this. (An external plugin's screen model from an item's
+`onSelect` follows the same rule, and its `sheet` capability is refused while something plays.)
+
 **Services on the web.** The web build ([WEB.md](WEB.md)) has no webOS services: a plugin with
 `services` is listed as "TV app only" there, unless its definition has `web: true`, which says it
 has a browser path of its own and doesn't call `ctx.service` on the web (`ctx.service` rejects there).

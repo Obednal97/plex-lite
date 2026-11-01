@@ -276,6 +276,10 @@
     if (this.live) this.liveOsd = new PL.LiveOsd(this);
   }
 
+  // (PL.plugins.playerOpen: nothing a plugin answers late is put over a player; the touch player and
+  // Live TV inherit it)
+  Player.prototype.isPlayer = true;
+
   Player.prototype.build = function () {
     var self = this;
     var el = this.el = PL.el('div', 'player');

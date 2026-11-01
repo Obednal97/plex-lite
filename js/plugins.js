@@ -136,6 +136,7 @@
         }
       });
       s.onSelect = function (item) {
+        userAction(def);
         safe(def, 'onSelect', null, function () {
           if (own) own(item, def.ctx);
           else if (def.onSelect) def.onSelect(item, def.ctx);
@@ -153,6 +154,79 @@
   function flatten(lists) {
     return lists.reduce(function (all, l) { return all.concat(l || []); }, []);
   }
+
+  // ---- Late answers ------------------------------------------------------------------------------
+  //
+  // A plugin may open a sheet, a page or a text entry (ctx.sheet, openItem, push, textEntry) while the
+  // viewer is doing something with it: during a key press or tap, or in one of its actions, shelf
+  // choices or rows (a "user task"). Anything later is an answer that arrived late. It is shown only
+  // over the same screen the plugin last left the viewer on (what was on screen when its last user
+  // task ended) and never over a player; otherwise it is dropped (and logged). Every ctx call made in
+  // a user task counts as the plugin being in use, so a plugin's own pages are covered without it
+  // doing anything.
+
+  var user = { on: false, timer: null, touched: [] };
+
+  // What is on screen: the stage's top screen, and on phones and tablets the touch layer's page and
+  // how many of its sheets are open.
+  function viewNow() {
+    var app = PL.app;
+    var t = PL.touch;
+    var touchOn = !!(t && t.engaged);
+    return {
+      top: app && app.top ? app.top() || null : null,
+      page: touchOn && t.top ? t.top() || null : null,
+      sheets: touchOn && t.sheets && t.sheets.count ? t.sheets.count() : 0,
+    };
+  }
+
+  function sameView(a, b) { return !!a && !!b && a.top === b.top && a.page === b.page && a.sheets === b.sheets; }
+
+  // Is a player (the TV's, Live TV's or the touch player) open?
+  plugins.playerOpen = function () {
+    var st = PL.app && PL.app.stack;
+    return !!st && st.some(function (s) { return !!(s && s.isPlayer); });
+  };
+
+  function endUserTask() {
+    user.timer = null;
+    user.on = false;
+    var list = user.touched;
+    user.touched = [];
+    var v = viewNow();
+    list.forEach(function (st) {
+      st.origin = v;
+      st.inTask = false;
+    });
+  }
+
+  function userTask() {
+    user.on = true;
+    if (!user.timer) user.timer = setTimeout(endUserTask, 0);
+  }
+
+  function touch(st) {
+    if (!user.on || st.inTask) return;
+    st.inTask = true;
+    user.touched.push(st);
+  }
+
+  // A plugin's action, shelf choice or row is running: a user task, and the plugin is in use.
+  function userAction(def) {
+    userTask();
+    if (def.late) touch(def.late);
+  }
+
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    ['keydown', 'keyup', 'click', 'touchend'].forEach(function (type) { window.addEventListener(type, userTask, true); });
+  }
+
+  // For code that shows something itself after waiting (an external plugin's screen model): captured
+  // when the viewer acted; later says whether the same screen is still showing, with no player open.
+  plugins.lateGuard = function () {
+    var v = viewNow();
+    return function () { return !plugins.playerOpen() && sameView(v, viewNow()); };
+  };
 
   // ---- Host functions (called by screens) -------------------------------------------------------
 
@@ -217,7 +291,7 @@
 
   function cleanActions(d, list) {
     return (list || []).filter(function (a) { return a && a.label && a.run; }).map(function (a) {
-      return { label: a.label, icon: a.icon, run: function () { safe(d, 'action', null, function () { a.run(); }); } };
+      return { label: a.label, icon: a.icon, run: function () { userAction(d); safe(d, 'action', null, function () { a.run(); }); } };
     });
   }
 
@@ -284,7 +358,13 @@
     // external plugins' rows are async; they live in their own sheet (Settings → Plugins → the plugin)
     return flatten(active().filter(function (d) { return d.settingsRows && !d.external; }).map(function (d) {
       d.ctx.refreshSettings = refresh || function () {};
-      return safe(d, 'settingsRows', [], function () { return d.settingsRows(d.ctx) || []; });
+      var rows = safe(d, 'settingsRows', [], function () { return d.settingsRows(d.ctx) || []; });
+      return (Array.isArray(rows) ? rows : []).map(function (r) {
+        if (!r || typeof r.action !== 'function') return r;
+        var act = r.action;
+        r.action = function () { userAction(d); return act.apply(this, arguments); };
+        return r;
+      });
     }));
   };
 
@@ -302,7 +382,10 @@
   // OK on an item that came from a plugin shelf (Search keeps plain items)
   plugins.select = function (item) {
     var d = item && find(item.plugin);
-    if (d && d.onSelect && plugins.isEnabled(d.id)) safe(d, 'onSelect', null, function () { d.onSelect(item, d.ctx); });
+    if (d && d.onSelect && plugins.isEnabled(d.id)) {
+      userAction(d);
+      safe(d, 'onSelect', null, function () { d.onSelect(item, d.ctx); });
+    }
   };
 
   // ---- onPlayback: playback events (docs/PLUGINS.md, "onPlayback") -------------------------------
@@ -478,10 +561,51 @@
 
   // ---- ctx: what a plugin may use ---------------------------------------------------------------
 
+  // Every function of a ctx marks the plugin as in use when called in a user task (see Late answers).
+  function touching(obj, st) {
+    Object.keys(obj).forEach(function (k) {
+      var v = obj[k];
+      if (typeof v === 'function') obj[k] = function () { touch(st); return v.apply(this, arguments); };
+      else if (v && typeof v === 'object') touching(v, st);
+    });
+    return obj;
+  }
+
   function makeCtx(def) {
     var prefix = 'plugin.' + def.id + '.';
     var tag = '[' + def.id + ']';
-    return {
+    // origin: what was on screen when the plugin's last user task ended
+    var st = def.late = { origin: null, inTask: false };
+    var mayShow = function (what) {
+      if (user.on) {
+        touch(st);
+        return true;
+      }
+      if (!plugins.playerOpen() && sameView(st.origin, viewNow())) return true;
+      PL.log(tag + ' late ' + what + ' not shown: ' + (plugins.playerOpen() ? 'something is playing' : 'the screen changed'));
+      return false;
+    };
+    // a sheet's rows and a text entry's answer are the viewer acting through the plugin
+    var acting = function (fn) {
+      return function () {
+        userAction(def);
+        return fn.apply(this, arguments);
+      };
+    };
+    var withActingRows = function (sections) {
+      return (sections || []).map(function (sec) {
+        var copy = {};
+        Object.keys(sec || {}).forEach(function (k) { copy[k] = sec[k]; });
+        copy.rows = ((sec && sec.rows) || []).map(function (r) {
+          var row = {};
+          Object.keys(r || {}).forEach(function (k) { row[k] = r[k]; });
+          if (typeof row.action === 'function') row.action = acting(row.action);
+          return row;
+        });
+        return copy;
+      });
+    };
+    return touching({
       id: def.id,
       ui: {
         el: PL.el,
@@ -497,9 +621,11 @@
         isBack: PL.isBack,
         KEY: PL.KEY,
       },
-      sheet: function (sections, opts) { PL.app.push(PL.screens.sheet(sections, opts)); },
+      sheet: function (sections, opts) {
+        if (mayShow('sheet')) PL.app.push(PL.screens.sheet(withActingRows(sections), opts));
+      },
       textEntry: function (title, initial, placeholder, onDone) {
-        PL.app.push(PL.screens.textEntry(title, initial, placeholder, onDone));
+        if (mayShow('text entry')) PL.app.push(PL.screens.textEntry(title, initial, placeholder, acting(onDone)));
       },
       toast: PL.toast,
       log: function () { PL.log.apply(null, [tag].concat([].slice.call(arguments))); },
@@ -521,10 +647,11 @@
         image: function (path, w, h) { return PL.plex.image(path, w, h); },
       },
       // bundled plugins only: push a screen object ({el, show, hide, key, destroy}) built with ctx.ui
-      push: function (screen) { PL.app.push(screen); },
+      push: function (screen) { if (mayShow('screen')) PL.app.push(screen); },
       // opens Plex Lite's details page for a Plex item ({ratingKey, type, title})
       // (the phone and tablet layer's own page while it is showing: web/touch/shell.js)
       openItem: function (item) {
+        if (!mayShow('page')) return;
         if (PL.touch && PL.touch.visible && PL.touch.open) PL.touch.open(item);
         else PL.app.push(PL.screens.details(item));
       },
@@ -562,6 +689,6 @@
           bridge.call('luna://' + id + '/' + method, JSON.stringify(params || {}));
         });
       },
-    };
+    }, st);
   }
 })();

@@ -343,6 +343,57 @@ test('e2e: a plugin tab needs the "tabs" grant, then renders shelves; an item op
   rt.stop();
 });
 
+// A plugin whose shelf item opens a page a moment later (its own option, answered after a wait)
+const SLOW_PAGE = "PlexLitePlugin.register({id:'com.example.slowpage', name:'Slow', apiVersion:1," +
+  "shelfRows:function(){ return [{title:'S', kind:'poster', items:[{key:'a', title:'A', onSelect:function(){" +
+  " return new Promise(function(r){ setTimeout(function(){ r({type:'page', title:'Later'}); }, 30); }); }}]}]; }});";
+const SLOW_MANIFEST = { id: 'com.example.slowpage', title: 'Slow', version: '1.0.0', apiVersion: 1, entry: 'p.js', permissions: [] };
+
+test('late answers: an external plugin\'s page opens only over the screen it was chosen on, never over a player', async () => {
+  const h = makeHost();
+  const stack = [{ name: 'library' }];
+  h.PL.app = { stack, top: () => stack[stack.length - 1], push: (s) => stack.push(s) };
+  h.PL.screens = { pluginScreen: (m) => ({ name: 'page:' + m.title }) };
+  // the registry's guard (js/plugins.js), as in the app
+  const win = { PL: h.PL, ...TIMERS };
+  win.window = win;
+  vm.createContext(win);
+  vm.runInContext(read('js/plugins.js'), win);
+  const { rt } = runtimeFor(h, SLOW_MANIFEST, SLOW_PAGE);
+  const def = h.I.toDefinition(rt);
+  const [shelf] = await def.shelfRows({ key: '1' });
+  shelf.onSelect(shelf.items[0]);
+  await new Promise((r) => setTimeout(r, 80));
+  eq(stack.map((x) => x.name), ['library', 'page:Later'], 'still on the library: the page opens');
+  stack.pop();
+  shelf.onSelect(shelf.items[0]);
+  stack.push({ name: 'details' }); // the viewer went on
+  await new Promise((r) => setTimeout(r, 80));
+  eq(stack.map((x) => x.name), ['library', 'details'], 'not over another screen');
+  stack.pop();
+  shelf.onSelect(shelf.items[0]);
+  stack.push({ isPlayer: true, name: 'player' });
+  await new Promise((r) => setTimeout(r, 80));
+  eq(stack.map((x) => x.name), ['library', 'player'], 'not over a player');
+  rt.stop();
+});
+
+test('an external plugin can\'t open a sheet while something plays', async () => {
+  const h = makeHost();
+  const stack = [{ name: 'library' }];
+  h.PL.app = { stack, top: () => stack[stack.length - 1], push: (s) => stack.push(s) };
+  const win = { PL: h.PL, ...TIMERS };
+  win.window = win;
+  vm.createContext(win);
+  vm.runInContext(read('js/plugins.js'), win);
+  const { rt } = runtimeFor(h, PROBE_MANIFEST, PROBE);
+  stack.push({ isPlayer: true });
+  assert.throws(() => rt.capability('sheet', ['Hi', [{ id: 'x', label: 'Row' }]]), /playing/);
+  stack.pop();
+  rt.capability('sheet', ['Hi', [{ id: 'x', label: 'Row' }]]);
+  assert.equal(h.sheets.length, 1);
+});
+
 test('registry: dotted external ids, at most 2 plugin tabs overall, unregister', () => {
   const store = {};
   const PL = {

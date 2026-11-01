@@ -400,6 +400,8 @@
         d.toast(str(args[0], 120));
         return true;
       case 'sheet': {
+        // never over a player (a plugin may ask at any time, e.g. from its playback hook)
+        if (PL.plugins && PL.plugins.playerOpen && PL.plugins.playerOpen()) throw new Error('Not while something is playing');
         var rows = sanitizeList(args[1], 20);
         d.sheet(str(args[0], 60), rows.map(function (r) {
           return { label: r.label, sub: r.value, action: function () { self.call('invoke', [r.id]).then(null, function () {}); } };
@@ -504,7 +506,10 @@
         // OK on an item: the plugin's own option (may open a screen model), else Plex details
         onSelect: function (item) {
           if (item.onSelect) {
+            // the plugin's screen comes later: only over the screen the viewer chose it on, never over a player
+            var still = PL.plugins && PL.plugins.lateGuard ? PL.plugins.lateGuard() : null;
             item.onSelect().then(function (m) {
+              if (still && !still()) return;
               if (m && PL.screens && PL.screens.pluginScreen) PL.app.push(PL.screens.pluginScreen(m, { title: m.title }));
             }, function (e) { if (PL.toast) PL.toast(String((e && e.message) || e)); });
           } else if (/^\d+$/.test(String(item.ratingKey)) && PL.screens) {
