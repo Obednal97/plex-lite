@@ -607,19 +607,24 @@
   };
 
   // Tells the plugins' playback tracker (PL.plugins.playbackSession) what the video did. It only
-  // queues an event: plugins hear about it in a timer of their own, after this frame.
+  // queues an event: plugins hear about it in a timer of their own, after this frame. It never throws:
+  // the media event handlers that call it (showing the controls, the status) must carry on.
   Player.prototype.playback = function (what) {
     var pb = this.pb;
     if (!pb) return;
     var self = this;
     var pos = function () { return self.live ? null : Math.round(self.intendedPosition() * 1000); };
-    if (what === 'playing') {
-      if (this.live) pb.playing('live:' + (this.live.channel && this.live.channel.identifier), { channel: this.live.channel, now: this.liveNow }, true, null);
-      else if (this.full) pb.playing(this.full.ratingKey, this.full, false, pos());
-    } else if (what === 'waiting') {
-      pb.waiting(pos);
-    } else {
-      pb[what](pos());
+    try {
+      if (what === 'playing') {
+        if (this.live) pb.playing('live:' + (this.live.channel && this.live.channel.identifier), { channel: this.live.channel, now: this.liveNow }, true, null);
+        else if (this.full) pb.playing(this.full.ratingKey, this.full, false, pos());
+      } else if (what === 'waiting') {
+        pb.waiting(pos);
+      } else {
+        pb[what](pos());
+      }
+    } catch (e) {
+      PL.warn('playback event failed', what, e && e.message);
     }
   };
 

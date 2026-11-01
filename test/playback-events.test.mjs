@@ -249,3 +249,30 @@ test('player: every emission point goes through Player.playback (no plugin calls
   assert.ok(!/plugins\.playback\(/.test(src), 'the player never dispatches itself');
   assert.match(src, /if \(!self\.scrubState\) self\.playback\('paused'\)/, 'a scrub is not a pause');
 });
+
+// Player.prototype.playback, run on its own (the player's other code isn't needed for it)
+function playbackMethod() {
+  const src = read('js/screens/player.js');
+  const start = src.indexOf('  Player.prototype.playback = function');
+  const end = src.indexOf('\n  };\n', start);
+  assert.ok(start > 0 && end > start, 'found Player.prototype.playback');
+  const warnings = [];
+  const ctx = { Player: function () {}, PL: { warn: (...a) => warnings.push(a.join(' ')) }, Math };
+  ctx.Player.prototype = {};
+  vm.createContext(ctx);
+  vm.runInContext(src.slice(start, end + 5), ctx);
+  return { playback: ctx.Player.prototype.playback, warnings };
+}
+
+test('player: a failing playback tracker never breaks the media event handler that reported it', () => {
+  const { playback, warnings } = playbackMethod();
+  const boom = () => { throw new Error('tracker broke'); };
+  const player = { pb: { playing: boom, paused: boom, waiting: boom, stopped: boom, ended: boom }, live: null, full: { ratingKey: '1' }, intendedPosition: () => 12 };
+  for (const what of ['playing', 'paused', 'waiting', 'stopped', 'ended']) {
+    assert.doesNotThrow(() => playback.call(player, what), what);
+  }
+  assert.equal(warnings.length, 5, 'logged instead');
+  // (and a broken position doesn't either)
+  const odd = { pb: { paused() {} }, live: null, intendedPosition: () => { throw new Error('no video'); } };
+  assert.doesNotThrow(() => playback.call(odd, 'paused'));
+});
