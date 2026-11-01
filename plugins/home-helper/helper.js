@@ -4,8 +4,8 @@
 // Sonarr, Radarr, Bazarr and Overseerr; the API is in docs/HOME-HELPER.md.
 //
 // Loaded before plugins/overseerr/ (which reads PL.homeHelper.url()); plugin.js registers the
-// settings row later, so the Settings order stays Overseerr, Home server helper, What's coming,
-// Subtitles.
+// settings row later, so the Settings order is Overseerr, Home server helper, What's coming,
+// Subtitles, Home Assistant (index.html loads them in that order).
 //
 //   url()                    the address ('http://host:8787'), or null (not set, or the plugin is off)
 //   health(maxAgeMs)         Promise<{ok, version, dryRun, paused, services: {seerr, sonarr, radarr, bazarr, plex}} | null>
@@ -46,18 +46,24 @@
     return m[1].toLowerCase() + '://' + m[2].toLowerCase() + port + path;
   };
 
-  // The stored address. Overseerr's own "Download queue address" (plugin.overseerr.config.helperUrl)
-  // is adopted once if the shared one isn't set; clearing the shared address later doesn't bring it back.
+  // The stored address. Overseerr's own "Download queue address" (plugin.overseerr.config.helperUrl,
+  // from before this setting existed) is adopted once if the shared one isn't set, and is deleted from
+  // Overseerr's config either way: Overseerr only reads PL.homeHelper.url(), so removing the shared
+  // address (or switching this plugin off) really stops its /queue calls.
   H.address = function () {
     var url = read('url', null);
-    if (url || read('migrated', false)) return url || null;
+    if (read('migrated', false)) return url || null;
     var seerr = PL.storage.get('plugin.overseerr.config', null);
     if (seerr && seerr.helperUrl) {
-      try { url = H.normalizeUrl(seerr.helperUrl); } catch (e) { url = null; }
-      if (url) {
-        write('url', url);
-        write('migrated', true);
+      if (!url) {
+        try { url = H.normalizeUrl(seerr.helperUrl); } catch (e) { url = null; }
+        if (url) write('url', url);
       }
+      delete seerr.helperUrl;
+      PL.storage.set('plugin.overseerr.config', seerr);
+      write('migrated', true);
+    } else if (url) {
+      write('migrated', true);
     }
     return url || null;
   };
@@ -80,12 +86,12 @@
   };
 
   // Why a browser can't reach this address from here: an http helper from an https page is mixed
-  // content (browsers block it; localhost is the exception). null when it can be tried.
+  // content. (Browsers would let http://localhost through, but the web build's Content-Security-Policy
+  // allows https: only and upgrades http requests, so nothing http is reachable.) null when it can be tried.
   H.blocked = function (url) {
     if (!url || !PL.isWeb) return null;
     var page = (typeof location !== 'undefined' && location.protocol) || '';
     if (page !== 'https:' || !/^http:/i.test(url)) return null;
-    if (/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(url)) return null;
     return 'mixed';
   };
 
@@ -238,11 +244,33 @@
     return 'Couldn\'t reach the home server helper';
   };
 
-  // A toast with a spinner for something that takes a while; the next toast replaces it.
+  // A toast with a spinner for something that takes a while; the next toast replaces it (and the
+  // spinner with it), and so does idle().
+  var spin = null;
+  var spinTimer = null;
+
+  function dropSpinner() {
+    clearTimeout(spinTimer);
+    spinTimer = null;
+    var n = spin;
+    spin = null;
+    // (an animation that is still in the DOM keeps running under a hidden toast)
+    if (n && n.parentNode) n.parentNode.removeChild(n);
+  }
+
+  function toastNode() {
+    return typeof document !== 'undefined' && document.querySelector ? document.querySelector('.toast') : null;
+  }
+
   H.busy = function (text) {
+    dropSpinner();
     PL.toast(text, 65000);
-    var node = typeof document !== 'undefined' && document.querySelector ? document.querySelector('.toast') : null;
-    if (node && node.insertBefore) node.insertBefore(PL.el('span', 'hh-spin'), node.firstChild);
+    var node = toastNode();
+    if (!node || !node.insertBefore) return;
+    spin = PL.el('span', 'hh-spin');
+    node.insertBefore(spin, node.firstChild);
+    // the toast hides itself after 65 s: the spinner goes then too
+    spinTimer = setTimeout(dropSpinner, 65000);
   };
 
   // Dry run (DRY_RUN=1 on the helper): actions answer {dryRun: true} and change nothing.
@@ -250,10 +278,12 @@
     return !!(answer && answer.dryRun);
   };
 
-  // Hides the busy toast (when a sheet opens instead of another toast).
+  // Hides the busy toast (when a sheet opens instead of another toast) and stops its spinner.
   H.idle = function () {
-    var node = typeof document !== 'undefined' && document.querySelector ? document.querySelector('.toast') : null;
-    if (node && node.querySelector && node.querySelector('.hh-spin')) node.classList.remove('show');
+    var node = toastNode();
+    var busy = !!(spin && node && spin.parentNode === node);
+    dropSpinner();
+    if (busy) node.classList.remove('show');
   };
 
   // ---- Identifying a title ---------------------------------------------------------------------------

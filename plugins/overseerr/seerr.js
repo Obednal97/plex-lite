@@ -332,11 +332,17 @@
     return m[1].toLowerCase() + '://' + m[2] + (m[3] || '');
   };
 
-  // The home server helper's address: the shared setting (plugins/home-helper, PL.homeHelper) once
-  // it exists, else this plugin's own older "Download queue address" (which that plugin migrates).
+  // The home server helper's address. With the shared setting (plugins/home-helper, PL.homeHelper)
+  // only that one counts: no address there, or that plugin switched off, means no helper (it adopts
+  // and then deletes this plugin's older "Download queue address"). Without it, that older address.
+  // null too when this page can't reach it (an http helper from an https web page).
   O.helperUrl = function (ctx) {
-    var shared = PL.homeHelper && typeof PL.homeHelper.url === 'function' ? PL.homeHelper.url() : null;
-    if (shared) return String(shared).replace(/\/+$/, '');
+    var H = PL.homeHelper;
+    if (H && typeof H.url === 'function') {
+      var shared = H.url();
+      if (!shared || (H.blocked && H.blocked(shared))) return null;
+      return String(shared).replace(/\/+$/, '');
+    }
     var cfg = O.config(ctx) || {};
     return cfg.helperUrl || null;
   };
@@ -406,8 +412,10 @@
   var cache = { key: null, at: 0, list: null, pending: null, source: null };
 
   // Promise<{list, source: 'helper'|'overseerr', at}>, cached for 20 s and shared by every caller.
+  // A new helper address (or none) starts afresh, like another profile.
   O.downloads = function (ctx, maxAge) {
-    var key = O.profileKey(ctx);
+    var helperUrl = O.helperUrl(ctx);
+    var key = O.profileKey(ctx) + '|' + (helperUrl || '');
     var age = maxAge == null ? DOWNLOADS_MAX_AGE : maxAge;
     // another profile's list is never served, not even while this one loads
     if (cache.key !== key) cache = { key: key, at: 0, list: null, pending: null, source: null };
@@ -416,7 +424,6 @@
       return Promise.resolve({ list: mine.list, source: mine.source, at: mine.at });
     }
     if (mine.pending) return mine.pending;
-    var helperUrl = O.helperUrl(ctx);
     var seerr = function () {
       return O.svc(ctx, 'downloads', {}).then(function (r) { return { list: fromSeerr(r.items), source: 'overseerr' }; });
     };
@@ -448,7 +455,7 @@
 
   // The list already loaded for this profile (any age), or null: for values shown at once.
   O.downloadsKnown = function (ctx) {
-    return cache.key === O.profileKey(ctx) && cache.list ? cache.list : null;
+    return cache.key === O.profileKey(ctx) + '|' + (O.helperUrl(ctx) || '') && cache.list ? cache.list : null;
   };
 
   // The download entry for a Plex title ({type, ratingKey, tmdb, tvdb}), or null.

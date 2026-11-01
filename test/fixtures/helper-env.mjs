@@ -33,7 +33,9 @@ export async function makeEnv(opts = {}) {
   const plexCalls = [];
   const http = [];
   const toastNode = { textContent: '', children: [], classList: { set: new Set(), add(c) { this.set.add(c); }, remove(c) { this.set.delete(c); } },
-    insertBefore(n) { this.children.unshift(n); }, querySelector(sel) { return sel === '.hh-spin' ? this.children.find((c) => c.cls === 'hh-spin') || null : null; } };
+    insertBefore(n) { n.parentNode = this; this.children.unshift(n); },
+    removeChild(n) { this.children = this.children.filter((c) => c !== n); n.parentNode = null; return n; },
+    querySelector(sel) { return sel === '.hh-spin' ? this.children.find((c) => c.cls === 'hh-spin') || null : null; } };
   const plain = (item) => item && clone(Object.fromEntries(Object.entries(item).filter(([k]) => !k.startsWith('_'))));
   const PL = {
     isWeb: !!opts.web,
@@ -44,7 +46,8 @@ export async function makeEnv(opts = {}) {
     },
     log() {}, warn() {},
     el: (tag, cls, text) => ({ tag, cls, text }),
-    toast: (m) => { toasts.push(m); toastNode.textContent = m; toastNode.children = []; toastNode.classList.add('show'); },
+    // (setting textContent drops the children, as in a browser)
+    toast: (m) => { toasts.push(m); toastNode.textContent = m; toastNode.children.forEach((c) => { c.parentNode = null; }); toastNode.children = []; toastNode.classList.add('show'); },
     http: (method, url, o = {}) => {
       http.push({ method, url, headers: { ...(o.headers || {}) }, body: o.body ? JSON.parse(o.body) : null });
       const ctrl = new AbortController();
@@ -118,12 +121,16 @@ export async function makeEnv(opts = {}) {
   const defs = {};
   const register = PL.plugins.register;
   PL.plugins.register = (def) => { defs[def.id] = def; return register(def); };
-  for (const f of ['plugins/home-helper/helper.js', 'plugins/home-helper/plugin.js', 'plugins/whats-coming/plugin.js', 'plugins/bazarr/plugin.js']) {
+  // opts.overseerr: the Overseerr plugin too, in index.html's order (the helper core first)
+  const files = ['plugins/home-helper/helper.js']
+    .concat(opts.overseerr ? ['seerr.js', 'report.js', 'downloads.js', 'discover.js', 'screens.js', 'plugin.js'].map((f) => 'plugins/overseerr/' + f) : [])
+    .concat(['plugins/home-helper/plugin.js', 'plugins/whats-coming/plugin.js', 'plugins/bazarr/plugin.js']);
+  for (const f of files) {
     vm.runInContext(read(f), win, { filename: f });
   }
   const H = PL.homeHelper;
   return {
-    PL, H, W: PL.whatsComing, B: PL.bazarr, helper: helper && helper.helper, url: helper && helper.url, store, toasts, pushed, plexCalls, http, defs, toastNode,
+    PL, H, W: PL.whatsComing, B: PL.bazarr, O: PL.overseerr, helper: helper && helper.helper, url: helper && helper.url, store, toasts, pushed, plexCalls, http, defs, toastNode,
     // a plugin's definition (def.ctx is the ctx js/plugins.js made for it)
     def: (id) => defs[id],
     sheets: () => pushed.filter((s) => s.kind === 'sheet'),

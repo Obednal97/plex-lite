@@ -24,11 +24,12 @@ test('home helper: adopts Overseerr\'s download queue address once', async () =>
   assert.equal(env.H.url(), 'http://helper.example.com:8787');
   assert.equal(env.store['plugin.home-helper.url'], 'http://helper.example.com:8787');
   assert.equal(env.store['plugin.home-helper.migrated'], true);
+  // Overseerr's own copy is deleted once adopted: its plugin reads PL.homeHelper.url() only
+  assert.equal(env.store['plugin.overseerr.config'].helperUrl, undefined);
+  assert.equal(env.store['plugin.overseerr.config'].url, 'https://seerr.example.com', 'the rest of its config stays');
   // removing the shared address doesn't bring Overseerr's back
   env.H.setUrl(null);
   assert.equal(env.H.url(), null);
-  // Overseerr's config is left alone (its plugin reads PL.homeHelper.url() itself)
-  assert.equal(env.store['plugin.overseerr.config'].helperUrl, 'http://helper.example.com:8787');
 });
 
 test('home helper: an address already set wins over Overseerr\'s', async () => {
@@ -126,7 +127,10 @@ test('home helper: an http helper from an https web page is blocked without a re
   assert.equal(err.code, 'blocked');
   assert.equal(env.http.length, 0);
   assert.equal(env.H.blocked('https://home.example.com/helper'), null, 'an https helper can be tried');
-  assert.equal(env.H.blocked('http://localhost:8787'), null, 'localhost is allowed');
+  // the web build's Content-Security-Policy (connect-src https:, upgrade-insecure-requests) lets no
+  // http request out, localhost included
+  assert.equal(env.H.blocked('http://localhost:8787'), 'mixed', 'localhost is blocked too');
+  assert.equal(env.H.blocked('http://127.0.0.1:8787'), 'mixed');
   const row = env.PL.plugins.settingsRows(() => {}).find((r) => r.label === 'Home server helper');
   assert.equal(row.value, 'Not available in this browser');
 });
@@ -211,4 +215,59 @@ test('home helper: the helper page says when the helper is in dry run', async ()
   assert.ok(labels.includes('Dry run: nothing is changed yet'));
   assert.equal((await env.H.health()).dryRun, true);
   await env.close();
+});
+
+// ---- With Overseerr loaded too (index.html's order), as on the TV ------------------------------------
+
+const queueCalls = (env) => env.http.filter((c) => /\/queue$/.test(c.url));
+
+test('home helper + Overseerr: the old Download queue address is adopted, then only the shared one counts', async () => {
+  const env = await makeEnv({ overseerr: true, setUrl: false, overseerrConfig: { url: 'https://seerr.example.com', helperUrl: 'http://old.example.com:8787', profiles: {} } });
+  const ctx = env.def('overseerr').ctx;
+  assert.equal(env.O.helperUrl(ctx), 'http://old.example.com:8787', 'adopted');
+  assert.equal(env.store['plugin.overseerr.config'].helperUrl, undefined, 'and deleted from Overseerr');
+  // Remove the helper: Overseerr has no helper either
+  env.H.setUrl(null);
+  assert.equal(env.O.helperUrl(ctx), null);
+  await env.O.downloads(ctx, 0).catch(() => null);
+  assert.equal(queueCalls(env).length, 0, 'no /queue call');
+  await env.close();
+});
+
+test('home helper + Overseerr: switching the Home server helper off stops Overseerr calling /queue', async () => {
+  const env = await makeEnv({ overseerr: true });
+  const ctx = env.def('overseerr').ctx;
+  const got = await env.O.downloads(ctx, 0);
+  assert.equal(got.source, 'helper');
+  assert.equal(queueCalls(env).length, 1, 'the shared address feeds Downloading');
+  env.PL.plugins.setEnabled('home-helper', false);
+  assert.equal(env.O.helperUrl(ctx), null);
+  await env.O.downloads(ctx).catch(() => null);
+  assert.equal(queueCalls(env).length, 1, 'no /queue call (nor the helper\'s list from the cache)');
+  assert.equal(env.O.downloadsKnown(ctx), null, 'nothing known for "no helper" yet');
+  await env.close();
+});
+
+test('home helper + Overseerr: an http helper from an https web page is never called', async () => {
+  const env = await makeEnv({ overseerr: true, noHelper: true, web: true, pageProtocol: 'https:' });
+  const ctx = env.def('overseerr').ctx;
+  env.H.setUrl('http://homeserver.local:8787');
+  assert.equal(env.O.helperUrl(ctx), null);
+  await env.O.downloads(ctx, 0).catch(() => null);
+  assert.equal(queueCalls(env).length, 0);
+  await env.close();
+});
+
+test('home helper: the busy spinner goes with idle() (it would keep spinning in a hidden toast)', async () => {
+  const env = await makeEnv({ noHelper: true });
+  env.H.busy('Checking subtitles…');
+  env.H.busy('Finding English subtitles…');
+  assert.equal(env.toastNode.children.filter((c) => c.cls === 'hh-spin').length, 1, 'one spinner');
+  env.H.idle();
+  assert.equal(env.toastNode.children.length, 0, 'spinner removed');
+  assert.ok(!env.toastNode.classList.set.has('show'), 'toast hidden');
+  // a plain toast showing now isn't hidden by a late idle()
+  env.PL.toast('Saved');
+  env.H.idle();
+  assert.ok(env.toastNode.classList.set.has('show'));
 });
