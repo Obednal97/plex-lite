@@ -271,3 +271,25 @@ test('home helper: the busy spinner goes with idle() (it would keep spinning in 
   env.H.idle();
   assert.ok(env.toastNode.classList.set.has('show'));
 });
+
+test('Settings lists the bundled plugins as Overseerr, Home server helper, What\'s coming, Subtitles, Home Assistant', async () => {
+  const { readFileSync } = await import('node:fs');
+  const vm = (await import('node:vm')).default;
+  const root = new URL('..', import.meta.url).pathname;
+  const html = readFileSync(root + 'index.html', 'utf8');
+  // the plugin files in index.html's order (each folder's core files before its plugin.js)
+  const files = [...html.matchAll(/<script src="(plugins\/[^"]+\.js)"><\/script>/g)].map((m) => m[1]);
+  const store = {};
+  const PL = {
+    isWeb: false, log() {}, warn() {}, toast() {}, el: () => ({}),
+    storage: { get: (k, d) => (k in store ? store[k] : d), set: (k, v) => { store[k] = v; }, del: (k) => { delete store[k]; } },
+    plex: { token: 't', onSignOut: [] },
+  };
+  const win = { PL, setTimeout: (fn, ms) => { const t = setTimeout(fn, ms); t.unref(); return t; }, clearTimeout, Promise, Date, JSON, Math };
+  win.window = win;
+  vm.createContext(win);
+  vm.runInContext(readFileSync(root + 'js/plugins.js', 'utf8'), win);
+  for (const f of files) vm.runInContext(readFileSync(root + f, 'utf8'), win, { filename: f });
+  assert.deepEqual(clone(PL.plugins.list().map((p) => p.name)), ['Overseerr', 'Home server helper', 'What\'s coming', 'Subtitles', 'Home Assistant'], 'the On/Off rows');
+  assert.deepEqual(clone(PL.plugins.settingsRows(() => {}).map((r) => r.label)), ['Overseerr', 'Home server helper', 'Home Assistant'], 'their own rows, in the same order');
+});
