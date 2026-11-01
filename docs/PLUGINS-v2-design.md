@@ -163,6 +163,7 @@ it). Budget assumption: ~3 MB per live frame. To keep it negligible:
 | `network:user` | medium | Contact a server address you enter |
 | `service` | medium | Run its own background service on the TV |
 | `tabs` | low | Add its own tab to Plex Lite (max 2 plugin tabs overall) |
+| `playback` | medium | See what you're watching and when it plays or pauses (`onPlayback`, see PLUGINS.md) |
 
 - Always allowed: scoped storage, toasts, sheets (host-rendered), settings rows.
 - **Connect** (after install, or Settings → Plugins → the plugin → Connect…) shows the consent sheet, which lists the

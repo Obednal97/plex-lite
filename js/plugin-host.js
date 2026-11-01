@@ -20,6 +20,12 @@
     maxFailures: 5,
     storageBytes: 64 * 1024,
     fetchBytes: 1024 * 1024,
+    // playback events reach external plugins this long after the event (then when the page is idle),
+    // so a plugin's frame never starts while a video is starting
+    playbackDelayMs: 4000,
+    playbackIdleMs: 2000,
+    // how often a message held while something plays checks whether the player has closed
+    heldToastCheckMs: 2000,
   };
   host.LIMITS = LIMITS;
 
@@ -30,6 +36,8 @@
     'plex:token': { risk: 'high', text: 'Use your Plex sign-in (full access to your Plex account)' },
     'service': { risk: 'medium', text: 'Run its own background service on the TV' },
     'tabs': { risk: 'low', text: 'Add its own tab to Plex Lite' },
+    // onPlayback: what is playing (title, type, genres, rating) and when it plays, pauses or stops
+    'playback': { risk: 'medium', text: 'See what you\'re watching and when it plays or pauses' },
   };
 
   function originOf(url) {
@@ -358,10 +366,70 @@
       if (self.failures >= LIMITS.maxFailures) {
         self.disabled = true;
         self.stop();
-        if (self.deps.toast) self.deps.toast((self.manifest.title || self.id) + ' was turned off after repeated errors');
+        if (self.deps.toast) toastWhenNotPlaying(self.deps.toast, (self.manifest.title || self.id) + ' was turned off after repeated errors');
       }
       throw e;
     });
+  };
+
+  // Nothing is shown over a player: a message for the viewer waits until it has closed.
+  var heldToasts = [];
+  var heldTimer = null;
+
+  function playing() { return !!(PL.plugins && PL.plugins.playerOpen && PL.plugins.playerOpen()); }
+
+  function toastWhenNotPlaying(toast, text) {
+    if (!playing()) { toast(text); return; }
+    heldToasts.push({ toast: toast, text: text });
+    if (heldTimer) return;
+    var check = function () {
+      if (playing()) { heldTimer = setTimeout(check, LIMITS.heldToastCheckMs); return; }
+      heldTimer = null;
+      var list = heldToasts;
+      heldToasts = [];
+      // one toast replaces another: say them all at once
+      if (list.length) list[0].toast(list.map(function (t) { return t.text; }).join(' · '), 6000);
+    };
+    heldTimer = setTimeout(check, LIMITS.heldToastCheckMs);
+  }
+
+  // Playback events for an external plugin, delivered in order a few seconds after the event and
+  // when the page is idle (a sandboxed frame starting costs ~50 ms on the TV: not while a video
+  // starts). While the page goes away they go at once (timers may not run after that).
+  // -> Promise that settles when this event has been delivered
+  Runtime.prototype.queuePlayback = function (ev) {
+    var self = this;
+    return new Promise(function (resolve, reject) {
+      self.playbackQueue = self.playbackQueue || [];
+      self.playbackQueue.push({ ev: ev, resolve: resolve, reject: reject });
+      var hidden = !!PL.leaving || (typeof document !== 'undefined' && !!document.hidden);
+      if (hidden) { self.flushPlayback(); return; }
+      if (self.playbackTimer) return;
+      self.playbackTimer = setTimeout(function () {
+        var go = function () { self.flushPlayback(); };
+        if (typeof requestIdleCallback === 'function') requestIdleCallback(go, { timeout: LIMITS.playbackIdleMs });
+        else go();
+      }, LIMITS.playbackDelayMs);
+    });
+  };
+
+  Runtime.prototype.flushPlayback = function () {
+    var self = this;
+    clearTimeout(this.playbackTimer);
+    this.playbackTimer = null;
+    var list = this.playbackQueue || [];
+    this.playbackQueue = [];
+    // removed, or no longer allowed since the event: nothing goes out (and no frame starts)
+    if (this.removed || !hasGrant(this.grant(), 'playback')) {
+      list.forEach(function (q) { q.resolve(null); });
+      return;
+    }
+    // one after another, in order
+    list.reduce(function (chain, q) {
+      return chain.then(function () {
+        return self.call('onPlayback', [q.ev]).then(function () { q.resolve(null); }, q.reject);
+      });
+    }, Promise.resolve());
   };
 
   // Everything a plugin can ask the host to do. Unknown or ungranted requests are refused.
@@ -398,6 +466,8 @@
         d.toast(str(args[0], 120));
         return true;
       case 'sheet': {
+        // never over a player (a plugin may ask at any time, e.g. from its playback hook)
+        if (PL.plugins && PL.plugins.playerOpen && PL.plugins.playerOpen()) throw new Error('Not while something is playing');
         var rows = sanitizeList(args[1], 20);
         d.sheet(str(args[0], 60), rows.map(function (r) {
           return { label: r.label, sub: r.value, action: function () { self.call('invoke', [r.id]).then(null, function () {}); } };
@@ -474,6 +544,23 @@
     };
   }
 
+  // A playback event as an external plugin gets it (onPlayback): the documented fields only.
+  var PLAYBACK_EVENTS = ['play', 'pause', 'resume', 'stop', 'ended', 'buffering-start', 'buffering-end'];
+  function sanitizePlayback(ev) {
+    if (!ev || PLAYBACK_EVENTS.indexOf(ev.event) === -1) return null;
+    var it = ev.item || {};
+    var item = { type: str(it.type, 12), kind: typeof it.kind === 'string' ? str(it.kind, 12) : null, title: str(it.title, 200) };
+    ['showTitle', 'contentRating', 'channel'].forEach(function (k) { if (typeof it[k] === 'string') item[k] = str(it[k], 200); });
+    ['season', 'episode', 'year', 'durationMs'].forEach(function (k) { if (typeof it[k] === 'number' && isFinite(it[k])) item[k] = it[k]; });
+    if (it.type === 'live') item.liveCategory = typeof it.liveCategory === 'string' ? str(it.liveCategory, 12) : null;
+    item.genres = (Array.isArray(it.genres) ? it.genres : []).slice(0, 3).map(function (g) { return str(g, 40); }).filter(Boolean);
+    item.isKids = it.isKids === true;
+    return {
+      event: ev.event, at: typeof ev.at === 'number' ? ev.at : Date.now(), item: item,
+      positionMs: typeof ev.positionMs === 'number' && isFinite(ev.positionMs) ? ev.positionMs : null,
+    };
+  }
+
   function toDefinition(rt, deps) {
     var rec = function () { return rt.grant(); };
     var shelfItems = function (shelf) {
@@ -485,7 +572,10 @@
         // OK on an item: the plugin's own option (may open a screen model), else Plex details
         onSelect: function (item) {
           if (item.onSelect) {
+            // the plugin's screen comes later: only over the screen the viewer chose it on, never over a player
+            var still = PL.plugins && PL.plugins.lateGuard ? PL.plugins.lateGuard() : null;
             item.onSelect().then(function (m) {
+              if (still && !still()) return;
               if (m && PL.screens && PL.screens.pluginScreen) PL.app.push(PL.screens.pluginScreen(m, { title: m.title }));
             }, function (e) { if (PL.toast) PL.toast(String((e && e.message) || e)); });
           } else if (/^\d+$/.test(String(item.ratingKey)) && PL.screens) {
@@ -537,6 +627,15 @@
         return rt.call('screen', [str(tabId, 40)]).then(function (m) { return sanitizeModel(m, rec(), rt); });
       },
     };
+    // Playback events only for plugins that ask for them ("playback") and were allowed to: the
+    // registry then never wakes the others' frames while something plays.
+    if ((rt.manifest.permissions || []).indexOf('playback') !== -1) {
+      def.onPlayback = function (event) {
+        if (!hasGrant(rec(), 'playback')) return null;
+        var clean = sanitizePlayback(event);
+        return clean ? rt.queuePlayback(clean) : null;
+      };
+    }
     if (deps && deps.onDefinition) deps.onDefinition(def);
     return def;
   }
@@ -659,7 +758,10 @@
   // keepGrants: an update replaces the code but keeps the user's grants (re-checked on activation).
   host.removeRuntime = function (id, keepGrants) {
     var rt = host.runtimes[id];
-    if (rt) rt.stop();
+    if (rt) {
+      rt.removed = true;
+      rt.stop();
+    }
     delete host.runtimes[id];
     delete host.definitions[id];
     host.pending = host.pending.filter(function (p) { return p !== id; });
@@ -811,7 +913,7 @@
     API_VERSION: API_VERSION, originOf: originOf, parsePermissions: parsePermissions, Grants: Grants, hasGrant: hasGrant,
     originAllowed: originAllowed, projectItem: projectItem, sanitizeShelf: sanitizeShelf, sanitizeList: sanitizeList,
     plexPathAllowed: plexPathAllowed, cleanParams: cleanParams, scrubToken: scrubToken, Rpc: Rpc, Runtime: Runtime,
-    sanitizeModel: sanitizeModel,
+    sanitizeModel: sanitizeModel, sanitizePlayback: sanitizePlayback,
     buildSrcdoc: buildSrcdoc, toDefinition: toDefinition,
   };
 })();

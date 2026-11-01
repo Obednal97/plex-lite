@@ -45,3 +45,31 @@
 .osdl-row.focused .osdl-state.tone-stalled, .osdl-row.focused .osdl-state.tone-failed { color: #9a5b00; }
 .osdl-empty-title { font-size: 32px; line-height: 44px; font-weight: 600; color: var(--text); }
 .osdl-empty-sub { margin-top: 8px; font-size: 24px; line-height: 32px; color: var(--text-2); }
+
+/* States on list screens (Your requests): waiting in grey, done in teal, problems in amber. */
+.osdl-state.tone-pending { color: var(--text-2); }
+.osdl-state.tone-done { color: var(--resume); }
+.osdl-state.tone-warn { color: #f0b44c; }
+.osdl-row.focused .osdl-state.tone-pending { color: rgba(8, 8, 10, 0.62); }
+.osdl-row.focused .osdl-state.tone-done { color: #138a96; }
+.osdl-row.focused .osdl-state.tone-warn { color: #9a5b00; }
+
+/* The Overseerr page (Settings → Plugins → Overseerr): Settings' rows, with a sub line. */
+.osp-screen { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; }
+.osp-title { left: 460px; }
+.osp-line {
+  position: absolute; left: 460px; top: 214px; width: 1000px; font-size: 24px; line-height: 32px; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.panel.osp-panel { top: 272px; max-height: 690px; }
+.row.osp-row { height: 108px; line-height: normal; }
+.osp-label { position: absolute; left: 28px; top: 18px; right: 360px; font-size: 28px; line-height: 38px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.osp-sub { position: absolute; left: 28px; top: 58px; right: 360px; font-size: 24px; line-height: 32px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row.osp-row .osp-value { top: 0; line-height: 108px; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.osp-single .osp-label { top: 35px; }
+.osp-danger .osp-label { color: #ff8a80; }
+.osp-warn .osp-sub { color: #f0b44c; }
+.row.osp-row.focused .osp-sub { color: rgba(8, 8, 10, 0.55); }
+.row.osp-row.focused.osp-single .osp-label { top: 35px; }
+/* on the focused (white) plate the danger label is dark red; unfocused it stays the light red above */
+.row.osp-row.focused.osp-danger .osp-label { color: #b3261e; }

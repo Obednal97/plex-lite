@@ -740,14 +740,19 @@
   }
 
   // Zones with skip: true (text blocks) are laid out but never focused. A zone without a height
-  // is measured once after it is in the DOM.
+  // is measured once after it is in the DOM. Zones already in the stack stay where they are in the
+  // DOM (they are placed by their top), so rows joining a page late cost only the new rows.
   VStack.prototype.setZones = function (zones, index) {
-    PL.clear(this.inner);
+    var inner = this.inner;
+    var els = zones.map(function (z) { return z.el; });
+    var kids = inner.childNodes;
+    for (var i = kids.length - 1; i >= 0; i--) {
+      if (els.indexOf(kids[i]) === -1) inner.removeChild(kids[i]);
+    }
     this.zones = zones;
-    var self = this;
     zones.forEach(function (z) {
       z.el.style.position = 'absolute';
-      self.inner.appendChild(z.el);
+      if (z.el.parentNode !== inner) inner.appendChild(z.el);
     });
     var y = this.opts.top || 0;
     zones.forEach(function (z) {

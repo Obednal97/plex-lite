@@ -8,8 +8,11 @@ to Overseerr only, never to Sonarr, Radarr or a download client: those stay on t
 |---|---|
 | `seerr.js` | shared core (`PL.overseerr`): per-profile sessions, API calls, permission checks, Plex → Overseerr mapping, the download list and its cache |
 | `report.js` | "Report a problem" |
-| `downloads.js` | the Downloading screen, the Downloading shelf and the details badge |
-| `plugin.js` | Settings, Search requests, `register()` |
+| `downloads.js` | the list screen (Downloading, Your requests), the Downloading shelf and the details badge |
+| `discover.js` | Trending, Popular and Upcoming rows (Recommended, Search before typing) |
+| `screens.js` | the TV's Overseerr page and Your requests |
+| `plugin.js` | the page's rows, requests (Search, discover, Request seasons), `register()` |
+| `touch.js`, `touch.css` | the same pages on phones and tablets (web build only) |
 | `service/service.js` | the webOS service that holds the Overseerr sessions (Node 0.12, ES5) |
 | `seerr-web.js` | the web build's browser path: the same methods as the service, with `fetch` from the page (see [On the web](#on-the-web)) |
 
@@ -22,13 +25,78 @@ so a request or a report is always made under the viewer's own Overseerr account
 
 - A profile signs in automatically once it has signed in on this TV before (sessions live in `/tmp`
   and are re-created after a reboot).
-- The **first** sign-in for a profile is an explicit step: Settings → Overseerr → "Sign in as …".
+- The **first** sign-in for a profile is an explicit step: Settings → Overseerr (the page) → "Sign in as …".
   Overseerr matches the Plex account by id or email, and if it doesn't know it (and new Plex sign-ins
   are allowed) it **creates a new Overseerr user** with the default permissions. Doing that silently
   when someone switches profile would be surprising.
 - Until a profile has signed in, the plugin shows nothing for it (no Overseerr search row, no
   Downloading shelf, no Report button).
 - A config from version 1.0 (one session) is kept for the account owner only.
+
+## The Overseerr page
+
+Settings → Plugins → Overseerr opens a page (a TV screen in Settings' look; a touch page on phones
+and tablets): who you're signed in as and whether you can report problems, **Your requests**,
+**Downloads**, **Trending, Popular and Upcoming** (on/off, this device), Sign in again, Sign out of
+Overseerr (this profile only), the Overseerr address, and, until the shared **Home server helper**
+setting exists (`plugins/home-helper`, `PL.homeHelper`), the old "Download queue address". Before a
+profile has signed in it offers "Sign in as …"; before Overseerr is set up, "Set up Overseerr".
+
+## Your requests
+
+The viewer's own requests, newest first (`GET /api/v1/request?take=50&skip=0&sort=added&filter=all&
+requestedBy=<the session's Overseerr user id>`; the service always uses its own session's user, and
+Overseerr itself limits users without "Manage requests" to their own). One row per request: poster,
+title, the seasons ("Seasons 1–3", or the year and "Film"), when it was requested, and its state:
+
+| State | When |
+|---|---|
+| Pending approval | the request is pending (1) |
+| Declined / Failed | declined (3) / failed (4) |
+| Available | completed (5, Seerr), or every requested season (a film: the title) is available |
+| Downloading 45% | Sonarr/Radarr have it in their queue (Overseerr's `downloadStatus`), with a progress rail |
+| Partly available | some requested seasons are in (a film or a request without seasons: the title is partly available) |
+| Processing | approved and sent to Sonarr/Radarr (media status 3) |
+| Approved | approved, nothing further yet |
+
+Overseerr's request list doesn't load the media's seasons, so a show's states come from each season
+request's status (Seerr marks a season request completed once it's in). OK opens the title in Plex
+when Overseerr knows its Plex `ratingKey`, else its request sheet. The list refreshes every 30 s while
+it's open and is cached for 20 s (the page shows the count from the same answer).
+
+## Trending, Popular and Upcoming
+
+Rows from Overseerr's discover lists, only when the plugin is on, this profile is signed in and the
+switch on the Overseerr page is on:
+
+| Where | Rows (and their place) | Lists |
+|---|---|---|
+| A movie library's Recommended | Trending films (after 2 Plex rows), Popular films (after 4), Upcoming films (after 6) | `/discover/trending?mediaType=movie`, `/discover/movies`, `/discover/movies/upcoming` |
+| A TV library's Recommended | Trending shows, Popular shows, Upcoming shows (same places) | `/discover/trending?mediaType=tv`, `/discover/tv`, `/discover/tv/upcoming` |
+| Search, before typing | Trending (films and shows alternately), Popular films, Popular shows | the same lists |
+
+(The What's coming plugin's rows are "New episodes this week" and "Films arriving soon".) Titles in
+the library (available or partly available, with a Plex `ratingKey` that the server confirms) open
+their Plex page; the others open the request sheet. Cards carry the same badges as Search's request
+row (Requested, Processing, Partly available, Downloading n%; shorter on phones). Overseerr versions
+without trending's `mediaType` send both kinds; only the asked-for kind is kept. The service's
+`discover` method sends 20 compact results per list (Overseerr's own answer is 50–100 KB), and the
+app keeps each list for 30 minutes per profile, shared by Search and both libraries; a request made
+from Plex Lite clears the affected caches.
+
+## Request seasons
+
+A show page (and a season page) of a show that's in Plex gets a "Request seasons" pill, and the
+hold-OK menu a row, when Overseerr says some seasons have aired but are neither available nor in an
+open (pending or approved) request. It opens the season request sheet ("Request all seasons",
+"Request Seasons 4 and 5", then each season with its state, or "Starts 19 Jan 2027" for one that
+hasn't aired). The lookup is the service's `lookup` with the show's seasons (a few hundred bytes),
+cached for 10 minutes per show: the first visit answers as a promise (the details page adds the pill
+when it lands, within 5 s; the hold-OK menu gets whatever is known within 450 ms and the lookup
+carries on into the cache). Shows without a TMDB id in Plex are matched through Overseerr's search, as
+for reports. A show Overseerr can't match is kept as "nothing to request"; a lookup that failed for a
+reason that may pass (no network, a session that ended, Plex not answering) isn't kept, so the next
+visit asks again.
 
 ## Report a problem
 
@@ -40,8 +108,8 @@ every 10 minutes (or from Settings → Overseerr → "Signed in as …").
 Flow (all glass sheets):
 
 1. **Reason**: Poor video quality · Wrong audio language · Audio out of sync · Stutters or looks
-   corrupt · Wrong film / Wrong episode · Subtitles missing or burned in · Something else… (asks for a
-   few words with the TV keyboard).
+   corrupt · Wrong film / Wrong episode · Subtitles missing · Subtitles burned in · Something else…
+   (asks for a few words with the TV keyboard).
 2. **Which episodes** (TV only): just this episode / all of the season / the whole show; from a show
    or season page, a season then an episode.
 3. **Confirm**: "Send report · S1 E6 · as <Overseerr user>". If the title already has an open issue
@@ -50,8 +118,11 @@ Flow (all glass sheets):
    Overseerr's own media id, found with the title's TMDB id (`lookup` service method). Shows that only
    carry a TVDB id in Plex are found through Overseerr's search.
 
-Issue types: video quality and corrupt → 1 (video); audio language and sync → 2 (audio); subtitles →
-3; wrong item and other → 4. The message starts with the reason in words (what notifications show)
+Issue types: video quality and corrupt → 1 (video); audio language and sync → 2 (audio); both
+subtitle reasons → 3; wrong item and other → 4. The two subtitle reasons have their own ids,
+`reason=subs-missing` and `reason=subs-burned` (they replace `reason=subtitles`), so the home server
+helper can ask Bazarr for missing subtitles instead of replacing the file; burned-in subtitles are
+replaced like the other reasons. The message starts with the reason in words (what notifications show)
 and ends with one machine-readable line for server-side automation:
 
 ```
@@ -67,7 +138,7 @@ again and resolve the issue (or ask Bazarr for missing subtitles), with dry run 
 
 ## Downloading
 
-- **Downloading screen** (Settings → Overseerr → Downloads, or OK on a Downloading card): one row per
+- **Downloading screen** (the Overseerr page → Downloads, or OK on a Downloading card): one row per
   title with poster, title, episodes, a progress rail, "45% · 12 min left" and size. Shows group their
   episodes ("S1 E4–E6 · 3 episodes"). It refreshes every 10 s while it's open and stops when hidden.
   It opens at once with the list the shelf already loaded, then refreshes. OK opens the title in Plex
@@ -79,8 +150,9 @@ again and resolve the issue (or ask Bazarr for missing subtitles), with dry run 
 
 Source, in order:
 
-1. **A download-queue helper** (the [home server helper](HELPER.md) serves it), when Settings → Overseerr → "Download queue address" is set: `GET
-   <address>/queue` (read-only, CORS `*`), one row per Sonarr/Radarr queue record:
+1. **The [home server helper](HELPER.md)**, when its address is set: the shared setting (`PL.homeHelper.url()`,
+   Settings → Plugins → Home server helper) or, until that exists, the Overseerr page's "Download
+   queue address": `GET <address>/queue` (read-only, CORS `*`), one row per Sonarr/Radarr queue record:
    `{version: 1, updatedAt, items: [{source, mediaType: 'movie'|'tv', tmdbId, tvdbId, title, year,
    season, episode, episodeTitle, releaseTitle, status, size, sizeLeft, timeLeftSeconds, eta,
    posterUrl, fanartUrl, …}]}`. This shows the full queue, including things nobody requested.
@@ -97,17 +169,28 @@ screen, so a details page costs no extra request once the list is warm.
 All take `key` (the profile). Errors: `unauthenticated` (sign in again), `forbidden` (Overseerr
 refused this Plex account), `network`, `bad_request`.
 
+**A session that ended elsewhere.** Overseerr answers the same 403 ("You do not have permission to
+access this endpoint") to a cookie whose session has gone (signed out in Overseerr's own pages,
+pruned) and to a user who lacks a permission. On any 403 that isn't about CSRF, the service (like
+`seerr-web.js`) asks `/api/v1/auth/me` with the same cookie: if that is refused too, the session has
+ended, so it is dropped and the call answers `unauthenticated` (the app then signs the profile in
+again, once); otherwise the 403 goes back to the caller as before.
+
 | method | params | answer |
 |---|---|---|
 | `login` | `url, plexToken, key` | `{user: {id, displayName, permissions}, url}` |
 | `status` | `key` | `{signedIn, user?, url}` (never signs in) |
 | `request` | `key, method, path, body` | `{status, data}` for `/api/v1<path>` on the signed-in server |
 | `downloads` | `key` | `{items: [{mediaId, mediaType, tmdbId, tvdbId, ratingKey, title, year, posterPath, backdropPath, status, downloads: [{title, status, size, sizeLeft, timeLeft, eta, season, episode, episodeTitle}]}], at}` |
-| `lookup` | `key, mediaType, tmdbId` | `{title, year, posterPath, media: {mediaId, status, ratingKey, tvdbId, downloads, issues: [open issues]} \| null}` |
+| `lookup` | `key, mediaType, tmdbId` | `{title, year, posterPath, media: {mediaId, status, ratingKey, tvdbId, downloads, issues: [open issues]} \| null, seasons?}`; shows add `seasons: [{season, name, episodes, airDate, status, requested: 'pending'\|'approved'\|null}]` (no Specials) |
+| `requests` | `key, take` (≤ 50) | `{items: [{id, status, createdAt, updatedAt, mediaType, tmdbId, tvdbId, ratingKey, mediaStatus, is4k, seasons: [{season, status}], mediaSeasons, downloads, title, year, posterPath, backdropPath}], total, at}`: the session's own user's requests |
+| `discover` | `key, list` (`trending-movie`, `trending-tv`, `popular-movie`, `popular-tv`, `upcoming-movie`, `upcoming-tv`) | `{list, items: [{id, mediaType, title, year, date, posterPath, backdropPath, overview, status, ratingKey, requested, downloading}], at}` (20 at most) |
 | `logout` | `key` or `all: true` | `{}` |
 
-Tests: `node test/overseerr.test.mjs` (plugin logic, and the service against a fake Overseerr) and
-`node --test test/overseerr-web.test.mjs` (the browser path behind a simulated browser: CORS,
+Tests: `node test/overseerr.test.mjs` (plugin logic, and the service against a fake Overseerr),
+`node --test test/overseerr-v2.test.mjs` (the page, Your requests, discover rows, Request seasons,
+sessions ended elsewhere, the host hooks; the service against the demo's fake Overseerr,
+`tools/demo/seerr.mjs`) and `node --test test/overseerr-web.test.mjs` (the browser path behind a simulated browser: CORS,
 preflights, same-site cookies; and the same answers as the service for the same fake Overseerr).
 
 ## On the web

@@ -10,6 +10,13 @@ const now = () => Math.floor(Date.now() / 1000);
 // A stable, readable slug: "Tears of Steel" -> "tears-of-steel".
 export const slug = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_]+/g, '-');
 
+// A made-up TMDB id for a demo title (its Plex Guid, and the fake Overseerr's id: seerr.mjs).
+export function demoTmdb(id) {
+  let h = 0x811c9dc5;
+  for (const c of String(id)) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+  return 900000 + (h % 90000);
+}
+
 // "The General" sorts as "General"
 const titleSort = (t) => String(t).replace(/^(the|a|an)\s+/i, '');
 
@@ -111,7 +118,7 @@ class Model {
     const id = m.id || slug(m.title);
     const durationMs = Math.round((m.durationMin || 90) * 60000);
     const item = {
-      ratingKey: rk, key: `/library/metadata/${rk}`, guid: `demo://movie/${id}`, type: 'movie',
+      ratingKey: rk, key: `/library/metadata/${rk}`, guid: `demo://movie/${id}`, type: 'movie', Guid: [{ id: `tmdb://${demoTmdb(id)}` }],
       librarySectionID: 1, librarySectionKey: '/library/sections/1', librarySectionTitle: 'Movies',
       title: m.title, titleSort: titleSort(m.title), originalTitle: m.originalTitle, year: m.year,
       originallyAvailableAt: m.released || `${m.year}-01-01`, summary: m.summary, tagline: m.tagline,
@@ -158,7 +165,7 @@ class Model {
     const rk = this.key();
     const id = s.id || slug(s.title);
     const show = {
-      ratingKey: rk, key: `/library/metadata/${rk}/children`, guid: `demo://show/${id}`, type: 'show',
+      ratingKey: rk, key: `/library/metadata/${rk}/children`, guid: `demo://show/${id}`, type: 'show', Guid: [{ id: `tmdb://${demoTmdb(id)}` }],
       librarySectionID: 2, librarySectionKey: '/library/sections/2', librarySectionTitle: 'TV Shows',
       title: s.title, titleSort: titleSort(s.title), year: s.year, originallyAvailableAt: s.released || `${s.year}-01-01`,
       summary: s.summary, studio: s.studio, contentRating: s.contentRating || undefined,
@@ -171,6 +178,8 @@ class Model {
       Role: (s.cast || []).map((c) => ({ ...this.person(c.name), role: c.role })),
       _id: id, _decade: Math.floor(s.year / 10) * 10, _section: '2', _src: s, _seasons: [],
     };
+    // made-up external ids, shared by the fake Overseerr (seerr.mjs) and the fake helper (helper.mjs)
+    show.Guid.unshift({ id: `tvdb://${991001 + this.shows.length}` });
     const logo = s.logo ? `media:${s.logo}` : s.genLogo ? `gen:logo/${id}` : null;
     if (logo) show.Image = [{ type: 'clearLogo', url: this.imagePath(`/library/metadata/${rk}/clearLogo/${this.nextId++}`, logo) }];
     this.items.set(rk, show);
@@ -277,6 +286,8 @@ class Model {
     tagFilter('Director', 'director');
     tagFilter('Writer', 'writer');
     if (q.get('decade')) out = out.filter((it) => String(it._decade) === q.get('decade'));
+    // Plex's title filter: a case-insensitive "contains"
+    if (q.get('title')) out = out.filter((it) => String(it.title).toLowerCase().includes(q.get('title').toLowerCase()));
     if (q.get('unwatched') === '1') {
       out = out.filter((it) => (it.type === 'show' ? it.viewedLeafCount < it.leafCount : !it.viewCount));
     }

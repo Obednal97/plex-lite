@@ -124,20 +124,43 @@ function isAuthFailure(res) {
   return res.status === 401 || (res.status === 403 && /auth/i.test(JSON.stringify(res.data || '')));
 }
 
+function isCsrf(res) {
+  return res.status === 403 && /csrf/i.test(JSON.stringify(res.data || ''));
+}
+
+// Overseerr answers 403 {error: 'You do not have permission to access this endpoint'} both to a
+// cookie whose session has gone (signed out in Overseerr's own pages, pruned) and to a user who
+// lacks a permission. /auth/me only needs a session, so it tells them apart (as seerr-web.js does).
+// cb(true) when the session has ended.
+function signedOut(cookie, apiPath, res, cb) {
+  if (isAuthFailure(res)) return cb(true);
+  if (res.status !== 403 || isCsrf(res)) return cb(false);
+  if (apiPath === '/auth/me') return cb(true);
+  call('GET', state.base, '/api/v1/auth/me', null, cookie, function (err, me) {
+    cb(!err && (me.status === 401 || me.status === 403));
+  });
+}
+
+function ended() {
+  var e = new Error('Overseerr session ended');
+  e.code = 'unauthenticated';
+  return e;
+}
+
 // GET as the session `key`; cb(err, data) where err.code 'unauthenticated' means sign in again.
 function apiGet(key, path, cb) {
   var s = session(key);
   if (!s) { var e = new Error('Not signed in to Overseerr'); e.code = 'unauthenticated'; return cb(e); }
   call('GET', state.base, '/api/v1' + path, null, s.cookie, function (err, res) {
     if (err) return cb(err);
-    if (isAuthFailure(res)) {
-      dropSession(key);
-      var e2 = new Error('Overseerr session ended');
-      e2.code = 'unauthenticated';
-      return cb(e2);
-    }
-    if (res.status !== 200) return cb(new Error((res.data && res.data.message) || ('HTTP ' + res.status)));
-    cb(null, res.data);
+    signedOut(s.cookie, path, res, function (out) {
+      if (out) {
+        dropSession(key);
+        return cb(ended());
+      }
+      if (res.status !== 200) return cb(new Error((res.data && (res.data.message || res.data.error)) || ('HTTP ' + res.status)));
+      cb(null, res.data);
+    });
   });
 }
 
@@ -216,11 +239,13 @@ service.register('request', function (msg) {
   s.used = Date.now();
   call(method, state.base, '/api/v1' + path, p.body == null ? null : p.body, s.cookie, function (err, res) {
     if (err) return fail(msg, 'Could not reach Overseerr (' + err.message + ')', 'network');
-    if (isAuthFailure(res)) {
-      dropSession(key);
-      return fail(msg, 'Overseerr session ended', 'unauthenticated');
-    }
-    msg.respond({ returnValue: true, status: res.status, data: res.data });
+    signedOut(s.cookie, path, res, function (out) {
+      if (out) {
+        dropSession(key);
+        return fail(msg, 'Overseerr session ended', 'unauthenticated');
+      }
+      msg.respond({ returnValue: true, status: res.status, data: res.data });
+    });
   });
 });
 
@@ -393,7 +418,7 @@ service.register('lookup', function (msg) {
     var mi = d.mediaInfo;
     var t = { title: d.title || d.name || '', year: String(d.releaseDate || d.firstAirDate || '').slice(0, 4), posterPath: d.posterPath || null, backdropPath: d.backdropPath || null };
     cacheTitle(type + ':' + id, t);
-    msg.respond({
+    var answer = {
       returnValue: true,
       title: t.title,
       year: t.year,
@@ -408,6 +433,138 @@ service.register('lookup', function (msg) {
           return { id: i.id, issueType: i.issueType, problemSeason: i.problemSeason, problemEpisode: i.problemEpisode, createdAt: i.createdAt };
         }),
       } : null,
+    };
+    if (type === 'tv') answer.seasons = trimSeasons(d, mi);
+    msg.respond(answer);
+  });
+});
+
+// A show's seasons (TMDB's, without Specials) with what Overseerr knows of each: its status
+// (1 unknown ... 5 available) and whether an open request (pending or approved) asks for it.
+function trimSeasons(d, mi) {
+  var known = {};
+  ((mi && mi.seasons) || []).forEach(function (s) { known[s.seasonNumber] = s.status; });
+  var asked = {};
+  ((mi && mi.requests) || []).forEach(function (r) {
+    if (r.status !== 1 && r.status !== 2) return;
+    (r.seasons || []).forEach(function (s) { asked[s.seasonNumber] = r.status === 1 ? 'pending' : 'approved'; });
+  });
+  return (d.seasons || []).filter(function (s) { return s && s.seasonNumber > 0; }).slice(0, 100).map(function (s) {
+    return {
+      season: s.seasonNumber,
+      name: String(s.name || '').slice(0, 80),
+      episodes: Number(s.episodeCount) || 0,
+      airDate: s.airDate || null,
+      status: known[s.seasonNumber] || 1,
+      requested: asked[s.seasonNumber] || null,
+    };
+  });
+}
+
+// ---- Your requests ----------------------------------------------------------------------------
+
+function trimRequest(r) {
+  var m = r.media || {};
+  return {
+    id: r.id,
+    status: r.status,
+    createdAt: r.createdAt || null,
+    updatedAt: r.updatedAt || null,
+    mediaType: r.type === 'tv' || m.mediaType === 'tv' ? 'tv' : 'movie',
+    tmdbId: m.tmdbId,
+    tvdbId: m.tvdbId || null,
+    ratingKey: m.ratingKey || null,
+    mediaStatus: m.status || 1,
+    is4k: !!r.is4k,
+    seasons: (r.seasons || []).slice(0, 100).map(function (s) { return { season: s.seasonNumber, status: s.status }; }),
+    mediaSeasons: (m.seasons || []).slice(0, 100).map(function (s) { return { season: s.seasonNumber, status: s.status }; }),
+    downloads: (m.downloadStatus || []).slice(0, 60).map(trimDownload),
+  };
+}
+
+// The viewer's own requests, newest first, with titles and posters (cached). {key, take}
+service.register('requests', function (msg) {
+  var p = msg.payload || {};
+  var key = keyOf(p);
+  if (!key) return fail(msg, 'Bad profile key', 'bad_request');
+  var take = Math.max(1, Math.min(50, Math.floor(Number(p.take)) || 30));
+  var s = session(key);
+  if (!s) return fail(msg, 'Not signed in to Overseerr', 'unauthenticated');
+  // always this session's own Overseerr user: the app can't ask for someone else's
+  var uid = s.user && Number(s.user.id) > 0 ? Number(s.user.id) : null;
+  var path = '/request?take=' + take + '&skip=0&sort=added&filter=all' + (uid ? '&requestedBy=' + uid : '');
+  apiGet(key, path, function (err, data) {
+    if (err) return respondError(msg, err);
+    var items = ((data && data.results) || []).filter(function (r) { return r && r.media; }).map(trimRequest);
+    eachLimit(items, 4, function (item, next) {
+      titleFor(key, item.mediaType, item.tmdbId, function (e, t) {
+        if (!e && t) {
+          item.title = t.title;
+          item.year = t.year;
+          item.posterPath = t.posterPath;
+          item.backdropPath = t.backdropPath;
+        }
+        next();
+      });
+    }, function () {
+      save();
+      msg.respond({ returnValue: true, items: items, total: (data && data.pageInfo && data.pageInfo.results) || items.length, at: Date.now() });
     });
+  });
+});
+
+// ---- Discover: Trending, Popular, Upcoming ----------------------------------------------------
+
+var DISCOVER = {
+  'trending-movie': { path: '/discover/trending?mediaType=movie&page=1', type: 'movie' },
+  'trending-tv': { path: '/discover/trending?mediaType=tv&page=1', type: 'tv' },
+  'popular-movie': { path: '/discover/movies?page=1', type: 'movie' },
+  'popular-tv': { path: '/discover/tv?page=1', type: 'tv' },
+  'upcoming-movie': { path: '/discover/movies/upcoming?page=1', type: 'movie' },
+  'upcoming-tv': { path: '/discover/tv/upcoming?page=1', type: 'tv' },
+};
+
+function percentOf(downloads) {
+  var size = 0;
+  var left = 0;
+  (downloads || []).forEach(function (d) { size += Number(d.size) || 0; left += Math.min(Number(d.sizeLeft) || 0, Number(d.size) || 0); });
+  return size > 0 ? Math.floor(((size - left) / size) * 100) : null;
+}
+
+function trimResult(r) {
+  var mi = r.mediaInfo || null;
+  var active = mi && (mi.requests || []).some(function (q) { return q && (q.status === 1 || q.status === 2); });
+  return {
+    id: r.id,
+    mediaType: r.mediaType,
+    title: String(r.title || r.name || '').slice(0, 200),
+    year: String(r.releaseDate || r.firstAirDate || '').slice(0, 4),
+    date: r.releaseDate || r.firstAirDate || null,
+    posterPath: r.posterPath || null,
+    backdropPath: r.backdropPath || null,
+    overview: String(r.overview || '').slice(0, 400),
+    status: mi && mi.status ? mi.status : 1,
+    ratingKey: (mi && mi.ratingKey) || null,
+    requested: !!active,
+    downloading: mi && mi.downloadStatus && mi.downloadStatus.length ? percentOf(mi.downloadStatus) : null,
+  };
+}
+
+// One discover list, compact (Overseerr's own answer is ~50-100 KB). {key, list}
+// Overseerr without trending's mediaType answers both kinds: only the asked-for kind is kept.
+service.register('discover', function (msg) {
+  var p = msg.payload || {};
+  var key = keyOf(p);
+  var spec = DISCOVER.hasOwnProperty(p.list) ? DISCOVER[p.list] : null;
+  if (!key || !spec) return fail(msg, 'Bad discover list', 'bad_request');
+  apiGet(key, spec.path, function (err, data) {
+    if (err) return respondError(msg, err);
+    var items = ((data && data.results) || []).filter(function (r) {
+      return r && r.id > 0 && (r.mediaType || spec.type) === spec.type;
+    }).slice(0, 20).map(function (r) {
+      if (!r.mediaType) r.mediaType = spec.type;
+      return trimResult(r);
+    });
+    msg.respond({ returnValue: true, list: p.list, items: items, at: Date.now() });
   });
 });

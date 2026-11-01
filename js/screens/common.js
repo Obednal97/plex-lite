@@ -89,22 +89,23 @@
       pages.push({ label: 'Go to show', action: open({ ratingKey: item.parentRatingKey, type: 'show', title: item.parentTitle }) });
     }
     var heading = t === 'episode' ? (item.grandparentTitle || '') + ' · ' + PL.fmt.episode(item) : (item.title || '');
-    var shown = false;
-    var finish = function (extra) {
-      if (shown) return;
-      shown = true;
-      (extra || []).forEach(function (a) { rows.push({ label: a.label, action: a.run }); });
-      rows = rows.concat(pages);
-      PL.app.push(screens.sheet([{ heading: heading, rows: rows }], { focus: 0 }));
+    // plugin actions go between the title's own rows and its pages; the menu opens with what the
+    // plugins know at once and a slower plugin's rows join it when they come (the focus stays put)
+    var made = [];
+    var rowFor = function (a) {
+      for (var i = 0; i < made.length; i++) if (made[i].src === a) return made[i].row;
+      var row = { label: a.label, action: a.run };
+      made.push({ src: a, row: row });
+      return row;
     };
-    var extra = PL.plugins && PL.plugins.actions ? PL.plugins.actions(item) : null;
-    if (extra && typeof extra.then === 'function') {
-      // external (sandboxed) plugins answer asynchronously; don't keep the menu waiting long
-      extra.then(finish, function () { finish(null); });
-      setTimeout(function () { finish(null); }, 600);
-    } else {
-      finish(extra);
-    }
+    var sectionsWith = function (extra) {
+      return [{ heading: heading, rows: rows.concat((extra || []).map(rowFor), pages) }];
+    };
+    var sheet = null;
+    var late = function (all) { if (sheet && sheet.update) sheet.update(sectionsWith(all)); };
+    var now = PL.plugins && PL.plugins.actions ? PL.plugins.actions(item, late) : null;
+    sheet = screens.sheet(sectionsWith(Array.isArray(now) ? now : null), { focus: 0 });
+    PL.app.push(sheet);
     return true;
   };
 
@@ -141,6 +142,8 @@
 
   // sections: [{heading, rows: [{label, sub, checked, action}]}]. Pushed as an overlay screen.
   // opts: {closeOnSelect (default true), focus: index of the row to focus first}
+  // screen.update(sections) redraws it with other rows (e.g. a plugin's late actions), keeping the
+  // focus on the row object it was on.
   screens.sheet = function (sections, opts) {
     opts = opts || {};
     var el = PL.el('div', 'sheet-host');
@@ -152,22 +155,30 @@
     el.appendChild(sheet);
     var rows = [];
     var y = 0;
-    sections.forEach(function (sec) {
-      if (sec.heading) {
-        list.appendChild(PL.el('div', 'sheet-heading', sec.heading));
-        y += 52;
-      }
-      sec.rows.forEach(function (r) {
-        var n = PL.el('div', 'sheet-row' + (r.checked ? ' checked' : ''));
-        n.appendChild(document.createTextNode(r.label));
-        if (r.sub) n.appendChild(PL.el('span', 'sheet-sub', r.sub));
-        list.appendChild(n);
-        rows.push({ node: n, row: r, top: y });
-        y += 64;
-      });
-    });
-    var index = PL.clamp(opts.focus != null ? opts.focus : Math.max(0, rows.map(function (r) { return !!r.row.checked; }).indexOf(true)), 0, rows.length - 1);
+    var index = 0;
     var viewH = 888 - 48;
+
+    function fill(secs) {
+      PL.clear(list);
+      rows = [];
+      y = 0;
+      secs.forEach(function (sec) {
+        if (sec.heading) {
+          list.appendChild(PL.el('div', 'sheet-heading', sec.heading));
+          y += 52;
+        }
+        sec.rows.forEach(function (r) {
+          var n = PL.el('div', 'sheet-row' + (r.checked ? ' checked' : ''));
+          n.appendChild(document.createTextNode(r.label));
+          if (r.sub) n.appendChild(PL.el('span', 'sheet-sub', r.sub));
+          list.appendChild(n);
+          var entry = { node: n, row: r, top: y };
+          n.addEventListener('click', function () { index = rows.indexOf(entry); choose(); });
+          rows.push(entry);
+          y += 64;
+        });
+      });
+    }
 
     function paint() {
       rows.forEach(function (r, i) { r.node.classList.toggle('focused', i === index); });
@@ -177,9 +188,8 @@
       PL.translate(list, 0, -Math.max(0, shift));
     }
 
-    rows.forEach(function (r, i) {
-      r.node.addEventListener('click', function () { index = i; choose(); });
-    });
+    fill(sections);
+    index = PL.clamp(opts.focus != null ? opts.focus : Math.max(0, rows.map(function (r) { return !!r.row.checked; }).indexOf(true)), 0, rows.length - 1);
     scrim.addEventListener('click', function () { PL.app.pop(); });
 
     function choose() {
@@ -193,6 +203,14 @@
     return {
       el: el,
       overlay: true,
+      update: function (secs) {
+        var was = rows[index] && rows[index].row;
+        fill(secs);
+        var at = -1;
+        rows.forEach(function (r, i) { if (at < 0 && r.row === was) at = i; });
+        index = PL.clamp(at >= 0 ? at : index, 0, rows.length - 1);
+        paint();
+      },
       show: function () { requestAnimationFrame(function () { sheet.classList.remove('sheet-enter'); }); },
       key: function (code) {
         if (code === K.UP || code === K.DOWN) {

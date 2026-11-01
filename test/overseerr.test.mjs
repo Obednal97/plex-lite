@@ -27,13 +27,13 @@ function webContext() {
       set: (k, v) => { store[k] = JSON.stringify(v); },
       del: (k) => { delete store[k]; },
     },
-    el: () => ({ appendChild() {}, style: {}, classList: { toggle() {}, add() {}, remove() {} } }),
+    el: () => ({ appendChild() {}, addEventListener() {}, style: {}, classList: { toggle() {}, add() {}, remove() {} } }),
     clear() {}, translate() {}, clamp: (v, lo, hi) => Math.max(lo, Math.min(hi, v)),
     plugins: { register: (def) => { PL.def = def; } },
   };
   const sandbox = { PL, console, setTimeout, clearTimeout, Promise, Date, JSON, Math };
   vm.createContext(sandbox);
-  for (const f of ['seerr.js', 'report.js', 'downloads.js', 'plugin.js']) {
+  for (const f of ['seerr.js', 'report.js', 'downloads.js', 'discover.js', 'screens.js', 'plugin.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'plugins/overseerr', f), 'utf8'), sandbox, { filename: f });
   }
   return { PL, O: PL.overseerr, store };
@@ -207,6 +207,20 @@ await (async () => {
   eq([res.source, res.list.length, res.list[0].count, res.list[0].progress], ['helper', 1, 2, 0.375], 'helper rows grouped per title');
 })().catch((e) => { failed++; console.log('FAIL helper', e && e.stack); });
 
+await (async () => {
+  // a season pack: one record per episode, each carrying the whole pack's size -> counted once
+  const { PL, O } = webContext();
+  PL.storage.set('plugin.overseerr.config', { url: 'https://seerr.example.com', helperUrl: 'http://helper.example.com:8787', profiles: {} });
+  const pack = (ep) => ({ source: 'sonarr', mediaType: 'tv', tmdbId: 9, tvdbId: 10, title: 'P Show', season: 2, episode: ep, releaseTitle: 'P.S02.1080p', status: 'downloading', size: 1000, sizeLeft: 400 });
+  const ctx = makeCtx(PL, {
+    service: (m) => m === 'login' ? Promise.resolve({ url: 'https://seerr.example.com', user: { id: 1, displayName: 'A', permissions: 2 } }) : Promise.resolve({ items: [] }),
+    http: () => Promise.resolve({ version: 1, items: [pack(1), pack(2), pack(3)] }),
+  });
+  await O.signIn(ctx, 'https://seerr.example.com');
+  const e = (await O.downloads(ctx, 0)).list[0];
+  eq([e.count, e.episodes.length, e.size, e.sizeLeft, e.progress, e.releases], [3, 3, 1000, 400, 0.6, ['P.S02.1080p']], 'season pack counted once');
+})().catch((e) => { failed++; console.log('FAIL season pack', e && e.stack); });
+
 {
   const { O } = webContext();
   const reason = O.REASONS.filter((r) => r.id === 'audio-language')[0];
@@ -217,7 +231,11 @@ await (async () => {
   const m2 = O.message(other, { season: 0, episode: 0, plexItem: null }, 'no sound', { type: 'movie' });
   eq(m2.split('\n')[0], 'Something else: no sound', 'note text');
   ok(/scope=movie$/.test(m2), 'movie scope');
-  eq(O.REASONS.map((r) => r.type), [1, 2, 2, 1, 4, 3, 4], 'issue types per reason');
+  eq(O.REASONS.map((r) => r.type), [1, 2, 2, 1, 4, 3, 3, 4], 'issue types per reason');
+  // subtitles: two reasons, so the helper can fetch missing ones from Bazarr instead of re-downloading
+  eq(O.REASONS.filter((r) => r.type === 3).map((r) => [r.id, r.label]), [['subs-missing', 'Subtitles missing'], ['subs-burned', 'Subtitles burned in']], 'subtitle reasons');
+  const sub = O.REASONS.filter((r) => r.id === 'subs-missing')[0];
+  ok(/reason=subs-missing; scope=movie/.test(O.message(sub, { season: 0, episode: 0, plexItem: null }, null, { type: 'movie' })), 'subs-missing tail');
 }
 
 {

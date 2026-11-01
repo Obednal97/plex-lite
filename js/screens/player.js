@@ -269,10 +269,16 @@
     this.hoverSec = null;     // pointer over the bar: the time under it
     this.painted = {};        // last values written to the DOM, so unchanged ones aren't rewritten
     this.preview = { part: null, ok: false, want: null, loading: false, shown: null };
+    // playback events for plugins (js/plugins.js, onPlayback): queued here, delivered later
+    this.pb = PL.plugins && PL.plugins.playbackSession ? PL.plugins.playbackSession() : null;
     this.build();
     // a channel: the live controls (js/screens/live-osd.js) replace the bottom block
     if (this.live) this.liveOsd = new PL.LiveOsd(this);
   }
+
+  // (PL.plugins.playerOpen: nothing a plugin answers late is put over a player; the touch player and
+  // Live TV inherit it)
+  Player.prototype.isPlayer = true;
 
   Player.prototype.build = function () {
     var self = this;
@@ -501,6 +507,7 @@
       self.state = 'playing';
       self.report();
       self.paintState();
+      self.playback('playing');
       // a new stream or a resume brings the controls up; recovering from a stall doesn't
       if (was !== 'playing' || !self.osdHidden) self.showOsd();
     });
@@ -509,11 +516,16 @@
       self.state = 'paused';
       if (!self.statusText.textContent) self.setStatus(null); // no buffering spinner over a paused picture
       self.report();
+      // a scrub pauses the video to show the paused look: that is a seek, not a pause
+      if (!self.scrubState) self.playback('paused');
       self.paintState();
       self.showOsd();
     });
     on('waiting', function () {
-      if (self.state === 'playing') self.setStatus('', true);
+      if (self.state !== 'playing') return;
+      self.setStatus('', true);
+      // waiting for a seek to land is part of the seek, not a stall worth telling plugins about
+      if (!v.seeking) self.playback('waiting');
     });
     on('timeupdate', function () {
       if (self.liveOsd) {
@@ -592,6 +604,28 @@
     this.status.classList.remove('player-status-hidden');
     this.status.classList.toggle('player-status-error', !spinning);
     this.statusText.textContent = text;
+  };
+
+  // Tells the plugins' playback tracker (PL.plugins.playbackSession) what the video did. It only
+  // queues an event: plugins hear about it in a timer of their own, after this frame. It never throws:
+  // the media event handlers that call it (showing the controls, the status) must carry on.
+  Player.prototype.playback = function (what) {
+    var pb = this.pb;
+    if (!pb) return;
+    var self = this;
+    var pos = function () { return self.live ? null : Math.round(self.intendedPosition() * 1000); };
+    try {
+      if (what === 'playing') {
+        if (this.live) pb.playing('live:' + (this.live.channel && this.live.channel.identifier), { channel: this.live.channel, now: this.liveNow }, true, null);
+        else if (this.full) pb.playing(this.full.ratingKey, this.full, false, pos());
+      } else if (what === 'waiting') {
+        pb.waiting(pos);
+      } else {
+        pb[what](pos());
+      }
+    } catch (e) {
+      PL.warn('playback event failed', what, e && e.message);
+    }
   };
 
   // The controls stay up while paused, scrubbing, or with a menu or tab open.
@@ -1936,6 +1970,7 @@
     var gen = ++this.gen;
     this.live.channel = channel;
     this.programme = '';
+    this.liveNow = null;
     this.liveMeta = null;
     this.liveTuned = false;
     this.state = 'loading';
@@ -1982,6 +2017,7 @@
       self.liveTuned = true;
       var now = sub.Timeline && sub.Timeline.Metadata && sub.Timeline.Metadata[0];
       if (now) self.programme = now.grandparentTitle ? now.grandparentTitle + ' · ' + now.title : now.title;
+      self.liveNow = now || null; // what plugins hear is on (onPlayback)
       self.paintText();
       self.start(0);
     }).catch(function (err) {
@@ -2390,6 +2426,7 @@
   };
 
   Player.prototype.finishCredits = function () {
+    this.playback('ended');
     if (this.full) PL.plex.setWatched(this.full.ratingKey, true).catch(function () {});
     this.exit();
   };
@@ -2458,6 +2495,7 @@
       return;
     }
     var dur = this.durationSec();
+    this.playback('ended');
     this.report(true, 'stopped');
     this.markWatchedIfDone(dur);
     this.stopTranscode();
@@ -2551,6 +2589,9 @@
     this.closeTab(true);
     if (this.state !== 'ended') {
       var pos = this.intendedPosition();
+      // from the credits (or past 90%) the old item ended; a jump earlier in it stopped it
+      var dur = this.durationSec();
+      this.playback(manual !== true || (dur && pos / dur >= 0.9) ? 'ended' : 'stopped');
       this.gen++;
       clearInterval(this.timelineTimer);
       this.report(true, 'stopped', pos);
@@ -2604,6 +2645,7 @@
 
   Player.prototype.fail = function (err) {
     PL.warn('playback failed', err && err.message);
+    this.playback('stopped');
     this.state = 'error';
     clearTimeout(this.jumpTimer);
     this.jumpTarget = null;
@@ -2654,6 +2696,7 @@
     if (this.state === 'stopped') return;
     var wasPlaying = (this.everStarted || !!this.lastReported) && this.lastReported !== 'stopped';
     var pos = this.intendedPosition();
+    this.playback('stopped');
     this.gen++;
     clearInterval(this.timelineTimer);
     clearTimeout(this.osdTimer);

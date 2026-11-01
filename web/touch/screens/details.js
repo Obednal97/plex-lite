@@ -656,18 +656,23 @@
       }, () => {});
     }
 
+    // what the plugins know at once with the page, a slower plugin's when it answers
     function pluginActions(f) {
       if (!PL.plugins || !PL.plugins.actions) return;
       const apply = (list) => {
         if (!st.alive || !list || !list.length || st.full !== f) return;
         st.plugins = list.filter((a) => a && a.label && a.run);
         if (st.actions) {
+          // a keyboard's focus stays on the button it was on
+          const focused = st.actions.contains(document.activeElement) ? document.activeElement.textContent : null;
           const row = actionsRow();
           st.actions.replaceWith(row);
           st.actions = row;
+          const again = focused != null && Array.from(row.children).find((b) => b.textContent === focused);
+          if (again) again.focus({ preventScroll: true });
         }
       };
-      const got = PL.plugins.actions(f);
+      const got = PL.plugins.actions(f, apply);
       if (got && typeof got.then === 'function') got.then(apply, () => {});
       else apply(got);
     }

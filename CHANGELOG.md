@@ -11,6 +11,15 @@ releases are fixes only.
 
 ### Changed
 
+- **Overseerr has its own page.** Settings → Plugins → Overseerr opens a page (on the TV and on
+  phones and tablets) instead of a menu: Your requests, Downloads, the Trending/Popular/Upcoming rows
+  switch, who you're signed in as (and whether you can report problems), Sign in again, Sign out and
+  the Overseerr address. The "Download queue address" row goes once the shared Home server helper
+  setting is there; Downloading then uses the helper's address.
+- **Report a problem: two subtitle reasons.** "Subtitles missing" and "Subtitles burned in" replace
+  "Subtitles missing or burned in" (`reason=subs-missing` / `reason=subs-burned`), so the home server
+  helper can fetch missing subtitles instead of replacing the file.
+
 - **Browse plugins no longer lists Hello Shelf.** It was an example plugin for testing the catalogue;
   the catalogue now publishes no example or test plugins (the tests use a fixture copy instead), and
   an empty catalogue says Overseerr is built in.
@@ -28,6 +37,56 @@ releases are fixes only.
   page: an episode's menu now has Go to episode and Go to show. Other rows open the page as before.
 
 ### Added
+
+- **Your requests** (Overseerr page): the titles you asked for, newest first, with the seasons, how
+  far each has got (Pending approval, Approved, Processing, Downloading 45%, Partly available,
+  Available, Declined) and when. OK opens a title in Plex once it's there, else its request sheet.
+- **Trending, Popular and Upcoming** from Overseerr: films on a movie library's Recommended view and
+  shows on a TV library's, placed among Plex's own rows, and Trending, Popular films and Popular
+  shows on Search before anything is typed. Titles in your library open in Plex; the rest open the
+  request sheet, badged Requested, Processing or Downloading as in Search. Cached for 30 minutes;
+  switch them off on the Overseerr page.
+- **Request seasons**: a show (or season) page and its hold-OK menu offer the seasons Overseerr says
+  have aired but aren't in Plex or asked for yet.
+- **Plugin API:** a `searchIdleRows` hook (Search before typing), `shelf.at` (place a row after that
+  many of the library's own rows), `item.badge` (drawn on touch cards), and a bundled plugin's
+  `actions` may answer with a promise (docs/PLUGINS.md). One plugin's slow answer never holds back
+  the others': details pills, the hold-OK menu and Recommended's rows show what is known at once and
+  add a slower plugin's when it comes, without moving the focus. A sheet or page a plugin opens after
+  waiting goes only over the screen it was asked from, never over another one or a player.
+  `ctx.profile()` says whether the profile is the Home's admin.
+
+- **Home Assistant plugin: Movie mode** (`plugins/home-assistant/`, its README): tells Home Assistant
+  through a webhook when a film or show starts, pauses or stops, so an automation there can dim the
+  lights while it plays and bring them back afterwards. Settings → Plugins → Home Assistant: a local
+  webhook URL and an optional remote one (your https address or a Nabu Casa cloudhook; the TV tries
+  the local one first and remembers which worked; a browser uses the remote one only), Movie mode
+  on/off, what dims the lights (Films only · Films and shows · Everything, including Live TV), how long
+  a pause waits before the lights come back (at once, 5 or 15 s, so a quick pause doesn't flash them),
+  Send a test, and the last event sent or the last error. Nothing is shown over the picture if Home
+  Assistant can't be reached.
+- **Playback events for plugins** (`onPlayback`, docs/PLUGINS.md): play, pause, resume, stop, ended
+  (Up Next counts as ended, then play) and buffering, from the player and the Live TV player, with
+  what is playing: type and kind (movie, series, live), title, show, season and episode, year,
+  duration, content rating, up to three genres, whether it's for children, and for Live TV the channel
+  and its category. Nothing that identifies the server or the account. Plugins hear about it after the
+  frame, never while a key press is handled, and a slow or failing plugin can't affect playback.
+  Catalogue plugins need the new `playback` permission ("See what you're watching and when it plays or
+  pauses") and hear about it about 4 s later, so their sandbox never starts while a video does.
+- **Home server helper** (Settings → Plugins): the address of the helper on your home server and its
+  status ("Connected · Sonarr, Radarr, Bazarr"). Overseerr's "Download queue address" moves into it;
+  removing the address or switching the plugin off stops Overseerr using the helper too. On the web
+  it says when the browser can't reach an `http` helper. See [docs/HOME-HELPER.md](docs/HOME-HELPER.md).
+- **What's coming**: "New episodes this week" on TV libraries (shows in that library as the current
+  Plex Home profile sees it, "S2 E5 · Tonight 21:00", tagged New or Premiere) and "Films arriving
+  soon" on movie libraries ("Digital release Friday", for the account owner only: Plex can't say yet
+  whether a restricted profile may see them), from Sonarr and Radarr through the helper. A show's page
+  says "3 episodes missing" and offers **Search for missing episodes**.
+- **Subtitles**: **Subtitles…** on films and episodes (details and hold OK) lists the subtitles a title
+  has, finds missing ones with Bazarr ("Found English subtitles") and fixes their timing; a "No English
+  subtitles" badge when a language is missing. Dry runs on the helper are said as such.
+- The demo server has a fake home server helper at `/helper` (`tools/demo/helper.mjs`), and the demo
+  library's titles carry made-up TMDB/TVDB ids.
 
 - **Home server helper** (`helper/`, docs/HELPER.md): a small Node service (Node 18+, no
   dependencies, systemd unit and install script for Debian 12) for the server that runs Seerr,
@@ -199,6 +258,9 @@ releases are fixes only.
 
 ### Fixed
 
+- **Overseerr on the TV notices a session that ended elsewhere** (signed out in Overseerr's own
+  pages): it signs in again by itself, as the web build already did, instead of failing with
+  "permission" errors.
 - **Web, Safari**: a resumed server stream could keep counting from the resume point twice (Safari
   starts at the segment before it, after saying `canplay` at 0), which put the reported position,
   resume point and subtitles off; embedded subtitles were shown twice (Safari's own rendition too) and

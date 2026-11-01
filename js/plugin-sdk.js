@@ -96,6 +96,8 @@
     actions: function (item) { return Promise.resolve(def.actions(item, ctx)).then(function (l) { return wrapList(l, 'run'); }); },
     settingsRows: function () { return Promise.resolve(def.settingsRows(ctx)).then(function (l) { return wrapList(l, 'action'); }); },
     screen: function (tabId) { return Promise.resolve(def.screen(tabId, ctx)).then(wrapModel); },
+    // playback events (needs the "playback" permission); the host doesn't wait for an answer
+    onPlayback: function (event) { return Promise.resolve(def.onPlayback(event, ctx)).then(function () { return null; }); },
   };
 
   // Synchronous throws in plugin code become rejections, so the host always gets an answer.
