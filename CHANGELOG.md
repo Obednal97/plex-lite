@@ -98,7 +98,10 @@ releases are fixes only.
   one grab of this title, the file isn't the one Plex played, a season in Plex isn't Sonarr's season,
   the title is already downloading, or a limit is reached (3 fixes per person a day, 10 a day, 2 per
   title a week). A fix cut short by a crash is reported on the issue at the next start. Older reports
-  are handled by a one-off backfill (`--backfill-days N`, or a `BACKFILL_DAYS` file). It also serves the full download
+  are handled by a one-off backfill (`--backfill-days N`, or a `BACKFILL_DAYS` file). A film or single
+  episode whose file has no download history (found by a rescan) is deleted and searched again without
+  a blocklist when the report names exactly that file (`NO_HISTORY_ACTION=redownload`, the default;
+  `manual` leaves it for a person). It also serves the full download
   queue (`/queue`), What's coming (`/coming`, `/missing`, `/missing/search`) and Bazarr subtitles
   (`/subtitles`, search, sync, then a Plex refresh). Actions need a Plex token the server accepts.
 - **Phones and tablets** (docs/WEB.md, "Phones and tablets"): the web build has its own layout under
