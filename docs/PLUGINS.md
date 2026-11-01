@@ -178,8 +178,10 @@ Fire-and-forget: the player never waits for it, and its return value is ignored.
   waiting on them in the hook, and debounce (a pause followed by a resume a second later is common).
 - **External plugins** need the `playback` permission ("See what you're watching and when it plays or
   pauses", medium risk) in their catalogue entry and the user's consent. They get the same fields
-  (strings capped). Only plugins that ask for it are woken: a sandboxed plugin's frame starts on its
-  first event, which costs ~50 ms on the TV once, after the `play` has been delivered.
+  (strings capped), in order, but about **4 s after** the event (then when the page is idle; at once
+  while the page goes away): a sandboxed plugin's frame starts on its first event, which costs ~50 ms
+  on the TV, and that must not happen while a video is starting. Only plugins that ask for it are
+  woken. If one keeps failing and is turned off, the message waits until the player has closed.
 
 ```js
 PL.plugins.register({

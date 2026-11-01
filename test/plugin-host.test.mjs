@@ -465,6 +465,7 @@ test('playback: a plugin that doesn\'t ask for it has no onPlayback; one not all
 
 test('e2e: with the grant, the plugin hears the event, cleaned to the documented fields', async () => {
   const h = makeHost();
+  h.host.LIMITS.playbackDelayMs = 0;
   const { rt, grants } = runtimeFor(h, WATCHER_MANIFEST, WATCHER);
   grants.set(WATCHER_MANIFEST.id, { granted: ['playback'], origins: [], denied: false });
   const def = h.I.toDefinition(rt);
@@ -490,6 +491,7 @@ test('e2e: playback events through the registry reach a granted external plugin,
   vm.createContext(win);
   for (const f of ['js/plugins.js', 'js/plugin-host.js']) vm.runInContext(read(f), win);
   const host = PL.pluginHost;
+  host.LIMITS.playbackDelayMs = 0; // (the delay itself: the next test)
   host.init({ sdkSource: SDK, createFrame: makeFrameFactory(WATCHER) });
   host.grants.set(WATCHER_MANIFEST.id, { version: '1.0.0', granted: ['playback'], origins: [], denied: false });
   host.addRuntime({ manifest: WATCHER_MANIFEST, source: WATCHER });
@@ -503,6 +505,55 @@ test('e2e: playback events through the registry reach a granted external plugin,
   await new Promise((r) => setTimeout(r, 500));
   eq(store['plugin.com.example.plexlite.watcher'].seen.map((e) => [e.event, e.positionMs]), [['play', 0], ['pause', 3000], ['resume', 3000], ['stop', 4000]]);
   host.removeRuntime(WATCHER_MANIFEST.id);
+});
+
+test('playback: an external plugin hears events a few seconds later, so its frame never starts while a video starts', async () => {
+  const store = {};
+  const PL = {
+    warn() {}, log() {}, toast() {}, el() {}, http() {},
+    storage: { get: (k, d) => (k in store ? clone(store[k]) : d), set: (k, v) => { store[k] = clone(v); }, del: (k) => { delete store[k]; } },
+    plex: { token: TOKEN, get: () => Promise.resolve({}) },
+  };
+  const win = { PL, ...TIMERS };
+  win.window = win;
+  vm.createContext(win);
+  for (const f of ['js/plugins.js', 'js/plugin-host.js']) vm.runInContext(read(f), win);
+  const host = PL.pluginHost;
+  assert.ok(host.LIMITS.playbackDelayMs >= 3000, 'a few seconds by default');
+  host.LIMITS.playbackDelayMs = 300;
+  host.init({ sdkSource: SDK, createFrame: makeFrameFactory(WATCHER) });
+  host.grants.set(WATCHER_MANIFEST.id, { version: '1.0.0', granted: ['playback'], origins: [], denied: false });
+  host.addRuntime({ manifest: WATCHER_MANIFEST, source: WATCHER });
+  const s = PL.plugins.playbackSession();
+  s.playing('901', { type: 'movie', title: 'Sintel', ratingKey: '901' }, false, 0);
+  await new Promise((r) => setTimeout(r, 250));
+  assert.equal(host.runtimes[WATCHER_MANIFEST.id].frame, null, 'past the registry\'s own 200 ms: still not started');
+  s.paused(3000);
+  await new Promise((r) => setTimeout(r, 400));
+  eq(store['plugin.com.example.plexlite.watcher'].seen.map((e) => e.event), ['play', 'pause'], 'then everything, in order');
+  // removed meanwhile: nothing goes out and no frame starts
+  s.playing('901', { type: 'movie', title: 'Sintel' }, false, 3000);
+  await new Promise((r) => setTimeout(r, 250));
+  const rt = host.runtimes[WATCHER_MANIFEST.id];
+  host.removeRuntime(WATCHER_MANIFEST.id);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(rt.frame, null);
+});
+
+test('a plugin turned off after repeated errors is said after the player closes, not over it', async () => {
+  const h = makeHost();
+  h.host.LIMITS.heldToastCheckMs = 20;
+  let open = true;
+  h.PL.plugins = { playerOpen: () => open };
+  const failing = "PlexLitePlugin.register({id:'com.example.bad', name:'Bad', apiVersion:1, searchRows:function(){ throw new Error('boom'); }});";
+  const { rt } = runtimeFor(h, { id: 'com.example.bad', title: 'Bad', apiVersion: 1, entry: 'p.js', permissions: [] }, failing);
+  for (let i = 0; i < 5; i++) await assert.rejects(rt.call('searchRows', ['x']));
+  assert.equal(rt.disabled, true);
+  await new Promise((r) => setTimeout(r, 60));
+  eq(h.toasts, [], 'nothing over the player');
+  open = false;
+  await new Promise((r) => setTimeout(r, 60));
+  assert.match(h.toasts.join(), /Bad was turned off after repeated errors/);
 });
 
 // ---- catalogue, hashes, installs (js/sha256.js + js/plugin-store.js) -----------------------------

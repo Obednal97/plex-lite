@@ -20,6 +20,12 @@
     maxFailures: 5,
     storageBytes: 64 * 1024,
     fetchBytes: 1024 * 1024,
+    // playback events reach external plugins this long after the event (then when the page is idle),
+    // so a plugin's frame never starts while a video is starting
+    playbackDelayMs: 4000,
+    playbackIdleMs: 2000,
+    // how often a message held while something plays checks whether the player has closed
+    heldToastCheckMs: 2000,
   };
   host.LIMITS = LIMITS;
 
@@ -360,10 +366,70 @@
       if (self.failures >= LIMITS.maxFailures) {
         self.disabled = true;
         self.stop();
-        if (self.deps.toast) self.deps.toast((self.manifest.title || self.id) + ' was turned off after repeated errors');
+        if (self.deps.toast) toastWhenNotPlaying(self.deps.toast, (self.manifest.title || self.id) + ' was turned off after repeated errors');
       }
       throw e;
     });
+  };
+
+  // Nothing is shown over a player: a message for the viewer waits until it has closed.
+  var heldToasts = [];
+  var heldTimer = null;
+
+  function playing() { return !!(PL.plugins && PL.plugins.playerOpen && PL.plugins.playerOpen()); }
+
+  function toastWhenNotPlaying(toast, text) {
+    if (!playing()) { toast(text); return; }
+    heldToasts.push({ toast: toast, text: text });
+    if (heldTimer) return;
+    var check = function () {
+      if (playing()) { heldTimer = setTimeout(check, LIMITS.heldToastCheckMs); return; }
+      heldTimer = null;
+      var list = heldToasts;
+      heldToasts = [];
+      // one toast replaces another: say them all at once
+      if (list.length) list[0].toast(list.map(function (t) { return t.text; }).join(' · '), 6000);
+    };
+    heldTimer = setTimeout(check, LIMITS.heldToastCheckMs);
+  }
+
+  // Playback events for an external plugin, delivered in order a few seconds after the event and
+  // when the page is idle (a sandboxed frame starting costs ~50 ms on the TV: not while a video
+  // starts). While the page goes away they go at once (timers may not run after that).
+  // -> Promise that settles when this event has been delivered
+  Runtime.prototype.queuePlayback = function (ev) {
+    var self = this;
+    return new Promise(function (resolve, reject) {
+      self.playbackQueue = self.playbackQueue || [];
+      self.playbackQueue.push({ ev: ev, resolve: resolve, reject: reject });
+      var hidden = !!PL.leaving || (typeof document !== 'undefined' && !!document.hidden);
+      if (hidden) { self.flushPlayback(); return; }
+      if (self.playbackTimer) return;
+      self.playbackTimer = setTimeout(function () {
+        var go = function () { self.flushPlayback(); };
+        if (typeof requestIdleCallback === 'function') requestIdleCallback(go, { timeout: LIMITS.playbackIdleMs });
+        else go();
+      }, LIMITS.playbackDelayMs);
+    });
+  };
+
+  Runtime.prototype.flushPlayback = function () {
+    var self = this;
+    clearTimeout(this.playbackTimer);
+    this.playbackTimer = null;
+    var list = this.playbackQueue || [];
+    this.playbackQueue = [];
+    // removed, or no longer allowed since the event: nothing goes out (and no frame starts)
+    if (this.removed || !hasGrant(this.grant(), 'playback')) {
+      list.forEach(function (q) { q.resolve(null); });
+      return;
+    }
+    // one after another, in order
+    list.reduce(function (chain, q) {
+      return chain.then(function () {
+        return self.call('onPlayback', [q.ev]).then(function () { q.resolve(null); }, q.reject);
+      });
+    }, Promise.resolve());
   };
 
   // Everything a plugin can ask the host to do. Unknown or ungranted requests are refused.
@@ -567,7 +633,7 @@
       def.onPlayback = function (event) {
         if (!hasGrant(rec(), 'playback')) return null;
         var clean = sanitizePlayback(event);
-        return clean ? rt.call('onPlayback', [clean]).then(function () { return null; }) : null;
+        return clean ? rt.queuePlayback(clean) : null;
       };
     }
     if (deps && deps.onDefinition) deps.onDefinition(def);
@@ -692,7 +758,10 @@
   // keepGrants: an update replaces the code but keeps the user's grants (re-checked on activation).
   host.removeRuntime = function (id, keepGrants) {
     var rt = host.runtimes[id];
-    if (rt) rt.stop();
+    if (rt) {
+      rt.removed = true;
+      rt.stop();
+    }
     delete host.runtimes[id];
     delete host.definitions[id];
     host.pending = host.pending.filter(function (p) { return p !== id; });
