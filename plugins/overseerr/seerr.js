@@ -198,9 +198,15 @@
 
   // TMDB id for a Plex title. Shows without a tmdb:// Guid are found through Overseerr's search,
   // matched on their TVDB id (or IMDb id for movies).
+  // A failure that asking again won't change (no id, no match) is marked err.permanent.
+  function permanent(err) {
+    err.permanent = true;
+    return err;
+  }
+
   O.tmdbFor = function (ctx, pt) {
     if (pt.tmdb) return Promise.resolve(Number(pt.tmdb));
-    if (!pt.tvdb && !pt.imdb) return Promise.reject(new Error('Plex has no TMDB, TVDB or IMDb id for this title'));
+    if (!pt.tvdb && !pt.imdb) return Promise.reject(permanent(new Error('Plex has no TMDB, TVDB or IMDb id for this title')));
     return O.api(ctx, 'GET', '/search?query=' + encodeURIComponent(pt.title || '') + '&page=1').then(function (data) {
       var hit = ((data && data.results) || []).filter(function (r) {
         if (r.mediaType !== pt.type) return false;
@@ -208,7 +214,7 @@
         if (pt.tvdb && String(mi.tvdbId) === String(pt.tvdb)) return true;
         return !!(pt.imdb && mi.imdbId && mi.imdbId === pt.imdb);
       })[0];
-      if (!hit) throw new Error('Couldn\'t find this title on Overseerr');
+      if (!hit) throw permanent(new Error('Couldn\'t find this title on Overseerr'));
       return hit.id;
     });
   };

@@ -377,6 +377,28 @@ test('Request seasons: on a show missing aired seasons, from the season sheet', 
   } finally { env.s.close(); }
 });
 
+test('Request seasons: a lookup that failed for now (network, an ended session) is asked again next visit', async () => {
+  const env = await signedIn();
+  try {
+    const { PL, ctx } = env;
+    const real = ctx.service;
+    let fail = 'network';
+    ctx.service = (m, p) => (m === 'lookup' && fail ? Promise.reject(Object.assign(new Error('Could not reach Overseerr'), { code: fail })) : real(m, p));
+    const explorers = await ctx.plex.metadata(byTitle('NASA Explorers').ratingKey);
+    eq((await PL.def.actions(explorers, ctx)).map((a) => a.label), ['Report a problem']);
+    fail = 'forbidden';
+    eq((await PL.def.actions(explorers, ctx)).map((a) => a.label), ['Report a problem'], 'still failing: asked again, nothing offered');
+    fail = null;
+    const again = PL.def.actions(explorers, ctx);
+    assert.equal(typeof again.then, 'function', 'not cached as "nothing to request"');
+    eq((await again).map((a) => a.label), ['Request seasons', 'Report a problem']);
+    // a show Overseerr can't match is kept as "nothing to request" (not asked on every visit)
+    const nomatch = { type: 'show', ratingKey: '99999', title: 'Nothing', Guid: [] };
+    eq((await PL.def.actions(nomatch, ctx)).map((a) => a.label), ['Report a problem']);
+    assert.ok(Array.isArray(PL.def.actions(nomatch, ctx)), 'answered from the cache');
+  } finally { env.s.close(); }
+});
+
 test('Request seasons: a list item (hold-OK menu) gets an answer within 450 ms', async () => {
   let release;
   const slow = new Promise((r) => { release = r; });

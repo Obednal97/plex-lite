@@ -71,4 +71,5 @@
 .osp-warn .osp-sub { color: #f0b44c; }
 .row.osp-row.focused .osp-sub { color: rgba(8, 8, 10, 0.55); }
 .row.osp-row.focused.osp-single .osp-label { top: 35px; }
-.osp-danger .osp-label { color: #b3261e; }
+/* on the focused (white) plate the danger label is dark red; unfocused it stays the light red above */
+.row.osp-row.focused.osp-danger .osp-label { color: #b3261e; }

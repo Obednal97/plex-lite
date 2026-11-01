@@ -94,7 +94,9 @@ hasn't aired). The lookup is the service's `lookup` with the show's seasons (a f
 cached for 10 minutes per show: the first visit answers as a promise (the details page adds the pill
 when it lands, within 5 s; the hold-OK menu gets whatever is known within 450 ms and the lookup
 carries on into the cache). Shows without a TMDB id in Plex are matched through Overseerr's search, as
-for reports.
+for reports. A show Overseerr can't match is kept as "nothing to request"; a lookup that failed for a
+reason that may pass (no network, a session that ended, Plex not answering) isn't kept, so the next
+visit asks again.
 
 ## Report a problem
 

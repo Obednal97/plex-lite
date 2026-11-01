@@ -135,7 +135,9 @@
   // ---- Missing seasons of a show that is in Plex ---------------------------------------------------
 
   // Promise<{item, open: [season]}> for a show or season page (cached 10 min per show). A show
-  // Overseerr can't match answers "nothing open", so it isn't asked again on every visit.
+  // Overseerr can't match answers "nothing open", so it isn't asked again on every visit; a failure
+  // that may pass (no network, a session that ended, Plex not answering) isn't kept, so the next
+  // visit asks again.
   function missing(ctx, item, showKey) {
     return O.cached(ctx, 'missing', showKey, MISSING_MAX_AGE, function () {
       return O.plexTitle(ctx, item.type === 'season' ? { type: 'season', parentRatingKey: showKey } : item).then(function (pt) {
@@ -149,6 +151,7 @@
         });
       }).then(null, function (err) {
         ctx.log('no missing seasons for ' + showKey + ': ' + (err && err.message));
+        if (!(err && (err.permanent || err.status === 404))) throw err;
         return { item: null, open: [] };
       });
     });
