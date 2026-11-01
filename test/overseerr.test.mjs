@@ -207,6 +207,20 @@ await (async () => {
   eq([res.source, res.list.length, res.list[0].count, res.list[0].progress], ['helper', 1, 2, 0.375], 'helper rows grouped per title');
 })().catch((e) => { failed++; console.log('FAIL helper', e && e.stack); });
 
+await (async () => {
+  // a season pack: one record per episode, each carrying the whole pack's size -> counted once
+  const { PL, O } = webContext();
+  PL.storage.set('plugin.overseerr.config', { url: 'https://seerr.example.com', helperUrl: 'http://helper.example.com:8787', profiles: {} });
+  const pack = (ep) => ({ source: 'sonarr', mediaType: 'tv', tmdbId: 9, tvdbId: 10, title: 'P Show', season: 2, episode: ep, releaseTitle: 'P.S02.1080p', status: 'downloading', size: 1000, sizeLeft: 400 });
+  const ctx = makeCtx(PL, {
+    service: (m) => m === 'login' ? Promise.resolve({ url: 'https://seerr.example.com', user: { id: 1, displayName: 'A', permissions: 2 } }) : Promise.resolve({ items: [] }),
+    http: () => Promise.resolve({ version: 1, items: [pack(1), pack(2), pack(3)] }),
+  });
+  await O.signIn(ctx, 'https://seerr.example.com');
+  const e = (await O.downloads(ctx, 0)).list[0];
+  eq([e.count, e.episodes.length, e.size, e.sizeLeft, e.progress, e.releases], [3, 3, 1000, 400, 0.6, ['P.S02.1080p']], 'season pack counted once');
+})().catch((e) => { failed++; console.log('FAIL season pack', e && e.stack); });
+
 {
   const { O } = webContext();
   const reason = O.REASONS.filter((r) => r.id === 'audio-language')[0];

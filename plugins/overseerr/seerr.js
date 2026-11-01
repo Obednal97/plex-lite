@@ -256,9 +256,16 @@
     var time = null;
     var states = {};
     var eps = [];
+    var counted = {};
     rows.forEach(function (d) {
-      size += d.size || 0;
-      left += Math.min(d.sizeLeft || 0, d.size || 0);
+      // a season pack is one download but Sonarr's queue has a record per episode, each with the
+      // whole pack's size: count each release once (104 records of a 10.8 GB pack are 10.8 GB)
+      var rel = d.title ? d.title + '|' + (d.size || 0) : null;
+      if (!rel || !counted[rel]) {
+        if (rel) counted[rel] = true;
+        size += d.size || 0;
+        left += Math.min(d.sizeLeft || 0, d.size || 0);
+      }
       var st = stateOf(d);
       states[st] = true;
       var sec = d.timeLeftSeconds != null ? d.timeLeftSeconds : parseSpan(d.timeLeft);
@@ -293,7 +300,7 @@
       state: state,
       count: rows.length,
       episodes: eps,
-      releases: rows.map(function (d) { return d.title || d.releaseTitle || ''; }).filter(Boolean).slice(0, 10),
+      releases: rows.map(function (d) { return d.title || d.releaseTitle || ''; }).filter(function (t, i, all) { return t && all.indexOf(t) === i; }).slice(0, 10),
     };
   }
 
