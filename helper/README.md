@@ -23,4 +23,4 @@ sh /opt/plex-lite/helper/install.sh        # Debian 12: creates /etc/plexlite-he
 | `lib/state.mjs` | `state.json`: handled issues, limits |
 | `helper.env.example`, `plexlite-helper.service`, `install.sh` | packaging |
 
-Tests: `node --test test/helper-report.test.mjs test/helper-api.test.mjs test/helper-review.test.mjs`.
+Tests: `node --test test/helper-report.test.mjs test/helper-api.test.mjs test/helper-review.test.mjs test/helper-nohistory.test.mjs`.

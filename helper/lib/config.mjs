@@ -61,8 +61,18 @@ export function readConfig(env = process.env) {
     dryRun: dryRunFlag(env.DRY_RUN),
     paused: pausedFlag(env.PAUSED),
     // for the start-up log: values that weren't understood (never secrets: just these two)
-    unrecognised: ['DRY_RUN', 'PAUSED'].filter((k) => !recognised(env[k])).map((k) => `${k}=${JSON.stringify(String(env[k]))}`),
+    unrecognised: [
+      ...['DRY_RUN', 'PAUSED'].filter((k) => !recognised(env[k])),
+      ...(env.NO_HISTORY_ACTION != null && !/^\s*(redownload|manual)?\s*$/i.test(String(env.NO_HISTORY_ACTION)) ? ['NO_HISTORY_ACTION'] : []),
+    ].map((k) => `${k}=${JSON.stringify(String(env[k]))}`),
     otherAction: String(env.OTHER_ACTION || 'manual').trim().toLowerCase() === 'regrab' ? 'regrab' : 'manual',
+    // a film or episode whose file has no download history at all: delete + search without a
+    // blocklist (the owner's choice), or leave it for a person. Unset = redownload; a value that
+    // isn't understood = manual.
+    noHistoryAction: (() => {
+      const v = String(env.NO_HISTORY_ACTION == null ? '' : env.NO_HISTORY_ACTION).trim().toLowerCase();
+      return v === '' || v === 'redownload' ? 'redownload' : 'manual';
+    })(),
     // 0 by default: a backfill is a deliberate one-off (--backfill-days N, or the BACKFILL_DAYS file)
     backfillDays: int(env.BACKFILL_DAYS, 0, 0, 365),
     maxIssueAgeMinutes: int(env.MAX_ISSUE_AGE_MINUTES, 15, 1, 24 * 60),
@@ -91,8 +101,9 @@ export function describeConfig(c) {
     `seerr ${on(c.seerr)}, sonarr ${on(c.sonarr)}, radarr ${on(c.radarr)}, bazarr ${on(c.bazarr)}, ` +
       `plex ${c.plex ? 'configured' + (c.plex.token ? ' (with PLEX_TOKEN)' : ' (no PLEX_TOKEN: no refresh after subtitles)') : 'not configured (actions disabled)'}`,
     ...(c.unrecognised && c.unrecognised.length ? [`WARNING: ${c.unrecognised.join(', ')} not understood (use 0 or 1, no comments on the line): treated as ` +
-      `${c.unrecognised.some((u) => u.startsWith('DRY_RUN')) ? 'dry run ON' : ''}${c.unrecognised.length > 1 ? ' and ' : ''}${c.unrecognised.some((u) => u.startsWith('PAUSED')) ? 'PAUSED' : ''}`] : []),
-    `dry run ${c.dryRun ? 'ON (nothing is changed)' : 'off'}, paused ${c.paused ? 'yes' : 'no'}, other=${c.otherAction}, ` +
+      [c.unrecognised.some((u) => u.startsWith('DRY_RUN')) && 'dry run ON', c.unrecognised.some((u) => u.startsWith('PAUSED')) && 'PAUSED',
+        c.unrecognised.some((u) => u.startsWith('NO_HISTORY_ACTION')) && 'NO_HISTORY_ACTION=manual'].filter(Boolean).join(' and ')] : []),
+    `dry run ${c.dryRun ? 'ON (nothing is changed)' : 'off'}, paused ${c.paused ? 'yes' : 'no'}, other=${c.otherAction}, no-history=${c.noHistoryAction}, ` +
       `backfill ${c.backfillDays} days, webhook secret ${c.webhookSecret ? 'set' : 'NOT SET (webhook refuses everything)'}`,
     `limits: ${c.limitPerUser24h}/user/24h, ${c.limitTotal24h}/24h, ${c.limitPerTitle7d}/title/7d, ` +
       `${c.maxFilesPerIssue} files/issue, issues younger than ${c.maxIssueAgeMinutes} min, ${c.actionsPer10Min} actions/token/10 min`,

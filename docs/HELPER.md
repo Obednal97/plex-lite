@@ -68,7 +68,18 @@ name the older imports are ignored, and a file imported by hand, which has no im
 never deleted. Then it takes the `grabbed` records of that import's `downloadId`; every one must be
 for this film (or this show, and one of the file's episodes), since that history lookup isn't
 filtered by title. It marks that grab failed (`POST /history/failed/{id}`, which also blocklists the
-release). Then it deletes the
+release).
+
+**Files with no download history.** Files that Sonarr/Radarr found on disk (a rescan, an old
+library) have no import and no grab record, so there is nothing to blocklist. With
+`NO_HISTORY_ACTION=redownload` (the default) such a file is deleted and searched again **without** a
+blocklist, but only for a **film or a single episode** whose report names **exactly** that file
+(`file=`), with every other check passing. The comment says so: "Fixed automatically: this file had
+no download history, so nothing could be blocklisted. Deleted `<file>` and searched for a new copy;
+the same release may come back." "No history" means none at all for that film or those episodes: an
+import that points to another file, or a grab without an import, is history that doesn't match, and
+that still waits for a person. Seasons with no history always wait. `NO_HISTORY_ACTION=manual` makes
+these wait too. Then it deletes the
 file, turns monitoring back on (in case "Unmonitor deleted episodes/movies" is on), and searches. The
 order matters: with a quality profile whose cutoff is already met (upgrades off), a search while the
 old file is still there grabs nothing. The torrent itself is left alone (it keeps seeding).
@@ -89,7 +100,9 @@ The helper **never deletes** when:
 - the file isn't under one of the instance's root folders;
 - any earlier step failed. If the blocklist worked but the delete failed, it doesn't search;
 - it's a season whose Plex episodes don't match Sonarr's (above);
-- it's an older report picked up by a backfill that doesn't name the file Plex played (`file=`).
+- it's an older report picked up by a backfill that doesn't name the file Plex played (`file=`);
+- the file has no download history and it's a season, the report doesn't name the file, or
+  `NO_HISTORY_ACTION=manual` (above).
 
 And it leaves the issue for a person (with a comment saying why) when:
 
@@ -267,8 +280,8 @@ Lists carry `{version: 1, updatedAt}`. Images are public URLs (from the arrs' `r
 
 ## Tests
 
-`node --test test/helper-report.test.mjs test/helper-api.test.mjs test/helper-review.test.mjs` runs the helper against fake
+`node --test test/helper-report.test.mjs test/helper-api.test.mjs test/helper-review.test.mjs test/helper-nohistory.test.mjs` runs the helper against fake
 Seerr, Sonarr, Radarr, Bazarr and Plex servers on localhost (`test/helper-fakes.mjs`): every reason
 and scope, season packs, each safety limit, backfill across restarts, dry run, auth and rate limits,
 `/coming`'s dates, `/missing`, the subtitle search, sync and Plex refresh, and (`helper-review`) the
-import/grab matching, the season check, interrupted fixes, a damaged state file and the auth limits.
+import/grab matching, files with no download history (`helper-nohistory`), the season check, interrupted fixes, a damaged state file and the auth limits.
