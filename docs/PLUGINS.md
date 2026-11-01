@@ -346,3 +346,7 @@ bundled plugins, Overseerr's Downloading included):
   soon"), `badges` ("3 episodes missing") and `actions` ("Search for missing episodes").
 - **Subtitles** (`plugins/bazarr/`): `actions` ("Subtitles…": find missing subtitles, fix their timing)
   and `badges` ("No English subtitles").
+
+The **home server helper** ([HELPER.md](HELPER.md)) is the server-side half: it acts on those reports
+through Seerr's webhook and serves `/queue`, `/coming`, `/missing` and `/subtitles` for the bundled
+plugins. It's a separate Node service for the media server, not a plugin.
