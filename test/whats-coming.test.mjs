@@ -4,6 +4,8 @@
 //   node --test test/whats-coming.test.mjs
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { makeEnv, plexItem, model, show, movie, ids, tick } from './fixtures/helper-env.mjs';
 
 const same = (a, b, m) => assert.deepEqual(JSON.parse(JSON.stringify(a)), b, m);
@@ -219,4 +221,93 @@ test('what\'s coming: dry run and nothing to search are said honestly', async ()
   await new Promise((r) => setTimeout(r, 40));
   assert.equal(env.toasts.pop(), 'Nothing missing to search for');
   await env.close();
+});
+
+// ---- Per profile, limited lookups, bounded caches -------------------------------------------------------
+
+test('what\'s coming: library matches are per Plex Home profile (a kid profile asks Plex itself)', async () => {
+  const env = await makeEnv();
+  const def = env.def('whats-coming');
+  const owner = await def.shelfRows(TV, def.ctx);
+  same(owner.items.map((i) => i.title), ['NASA ScienceCasts', 'NASA Explorers', 'Caminandes', 'NASA Explorers']);
+  // a restricted profile whose Plex token sees no shows in this section
+  env.PL.storage.set('profile', { uuid: 'kid', title: 'Kid', admin: false });
+  env.PL.plex.token = 'demo-kid-token';
+  let asked = 0;
+  env.PL.plex.get = () => { asked++; return Promise.resolve({ size: 0, Metadata: [] }); };
+  const kid = await def.shelfRows(TV, def.ctx);
+  assert.equal(kid, null, 'none of the owner\'s matches are shown to the kid');
+  assert.ok(asked > 0, 'Plex was asked as the kid');
+  await env.close();
+});
+
+test('what\'s coming: Films arriving soon is for the account owner only', async () => {
+  const env = await makeEnv();
+  const def = env.def('whats-coming');
+  assert.ok(await def.shelfRows(MOVIES, def.ctx), 'no profile picked: the account owner');
+  env.PL.storage.set('profile', { uuid: 'kid', title: 'Kid', admin: false });
+  assert.equal(await def.shelfRows(MOVIES, def.ctx), null, 'a Home profile: no films (Plex can\'t say what it may see)');
+  env.PL.storage.set('profile', { uuid: 'kid', title: 'Kid' });
+  assert.equal(await def.shelfRows(MOVIES, def.ctx), null, 'a profile kept before admin was recorded: no films');
+  env.PL.storage.set('profile', { uuid: 'own', title: 'Ollie', admin: true });
+  assert.ok(await def.shelfRows(MOVIES, def.ctx), 'the Home\'s admin profile: films');
+  await env.close();
+});
+
+test('what\'s coming: Plex is asked about two shows at a time, and no more once 20 cards are found', async () => {
+  const now = new Date();
+  const items = [];
+  for (let i = 0; i < 50; i++) {
+    const d = new Date(now.getTime() + (i + 1) * 3000000); // one an hour, all in the window
+    items.push({ source: 'sonarr', mediaType: 'tv', tvdbId: 5000 + i, title: 'Show ' + i, year: 2020, season: 1, episode: 1, episodeTitle: 'E1', airDateUtc: d.toISOString() });
+  }
+  const env = await makeEnv({ data: { coming: items, missing: {}, subtitles: {} } });
+  let running = 0;
+  let most = 0;
+  const asked = [];
+  env.PL.plex.get = (path, q) => {
+    asked.push(q.title);
+    running++;
+    most = Math.max(most, running);
+    const n = Number(String(q.title).replace('Show ', ''));
+    // every other show is in this library
+    const hit = n % 2 === 0 ? [{ ratingKey: String(9000 + n), title: q.title, year: 2020, type: 'show', Guid: [{ id: 'tvdb://' + (5000 + n) }] }] : [];
+    return new Promise((r) => setTimeout(() => { running--; r({ size: hit.length, Metadata: hit }); }, 5));
+  };
+  const def = env.def('whats-coming');
+  const shelf = await def.shelfRows(TV, def.ctx);
+  assert.equal(shelf.items.length, 20);
+  same(shelf.items.map((i) => i.title), Array.from({ length: 20 }, (_, k) => 'Show ' + k * 2), 'the first 20 in time order');
+  assert.ok(most <= 2, 'at most two at a time (' + most + ')');
+  // shows 0..38 hold the 20 matches (39 may be asked alongside 38); the rest are never asked about
+  assert.ok(asked.length <= 40, 'stopped once 20 were found (' + asked.length + ' lookups)');
+  assert.ok(!asked.some((t) => Number(t.replace('Show ', '')) >= 40), 'nothing after them');
+  await env.close();
+});
+
+test('what\'s coming and Subtitles: their caches are bounded', async () => {
+  const env = await makeEnv({ noHelper: true });
+  env.H.get = () => Promise.resolve({ seasons: [], have: [], missing: [] });
+  for (let i = 0; i < 260; i++) await env.W.missing(7000 + i);
+  assert.equal(env.W.cacheSizes().missing, 200);
+  for (let i = 0; i < 150; i++) await env.B.subtitles({ type: 'movie', tmdbId: 1000 + i });
+  assert.equal(env.B.cacheSize(), 100);
+  env.PL.plex.get = () => Promise.resolve({ size: 0, Metadata: [] });
+  for (let i = 0; i < 350; i++) await env.W.findInSection({ key: '2' }, { tvdbId: 1 + i, title: 'T' + i });
+  assert.equal(env.W.cacheSizes().matches, 300);
+});
+
+test('the profile kept on this device says whether it is the Home\'s admin (for owner-only rows)', () => {
+  const root = new URL('..', import.meta.url).pathname;
+  const ctx = { window: { addEventListener() {} }, console, setTimeout, clearTimeout };
+  vm.createContext(ctx);
+  vm.runInContext('var window = this.window;', ctx);
+  for (const f of ['js/core.js', 'js/plex.js']) vm.runInContext(readFileSync(root + f, 'utf8'), ctx, { filename: f });
+  const PL = ctx.window.PL;
+  const store = {};
+  PL.storage = { get: (k, d) => (k in store ? store[k] : d), set: (k, v) => { store[k] = JSON.parse(JSON.stringify(v)); }, del: (k) => { delete store[k]; } };
+  PL.plex.keepProfile({ uuid: 'u1', title: 'Ollie', admin: true, restricted: false });
+  same(store.profile, { uuid: 'u1', title: 'Ollie', thumb: '', admin: true });
+  PL.plex.keepProfile({ uuid: 'u2', title: 'Kid', restricted: true });
+  assert.equal(store.profile.admin, false);
 });

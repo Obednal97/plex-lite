@@ -211,7 +211,7 @@ give an item `badge: {label, tone?}` (a short word: posters are ~100 px wide the
 | `storage.get/set/del` | localStorage scoped to `plugin.<id>.*` |
 | `http(method, url, opts)` | the app's XHR helper (abortable promise) |
 | `plexToken()` | the active profile's Plex token; explicit so it can be permissioned later |
-| `profile()` | the active Plex Home profile `{uuid, title}`, or `null` for the account owner |
+| `profile()` | the active Plex Home profile `{uuid, title, admin}` (`admin`: the Home's owner, the one profile Plex never restricts), or `null` for the account owner |
 | `plex.metadata(ratingKey)`, `plex.children(ratingKey)`, `plex.image(path, w, h)` | read-only lookups on the connected server |
 | `openItem(item)` | opens the details page for a Plex item (`{ratingKey, type, title}`); the touch layout's page on phones and tablets |
 | `push(screen)`, `pop()`, `backdrop(url)` | bundled plugins only: push a screen object (`{el, show, hide, key, destroy}`) built from `ctx.ui` (which also has `spinner`, `fadeInImage`, `KEY`, `isBack`) |

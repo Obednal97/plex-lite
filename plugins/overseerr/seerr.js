@@ -351,13 +351,34 @@
 
   // A promise per id, kept for maxAge after it resolves; a failure isn't kept. All of this profile's
   // entries go when the profile changes, and a late answer never lands in another profile's store.
+  // Each cache keeps its CACHED_MAX most recently used ids.
+  var CACHED_MAX = 100;
   var stores = {};
+
+  function newStore(key) { return { key: key, map: Object.create(null), order: [] }; }
+
+  function used(st, id) {
+    var i = st.order.indexOf(id);
+    if (i >= 0) st.order.splice(i, 1);
+    st.order.push(id);
+    while (st.order.length > CACHED_MAX) delete st.map[st.order.shift()];
+  }
+
+  function unlist(st, id) {
+    var i = st.order.indexOf(id);
+    if (i >= 0) st.order.splice(i, 1);
+  }
+
   O.cached = function (ctx, name, id, maxAge, fetch) {
     var key = O.profileKey(ctx);
+    id = String(id);
     var st = stores[name];
-    if (!st || st.key !== key) st = stores[name] = { key: key, map: {} };
+    if (!st || st.key !== key) st = stores[name] = newStore(key);
     var hit = st.map[id];
-    if (hit && (hit.pending || Date.now() - hit.at < maxAge)) return hit.promise;
+    if (hit && (hit.pending || Date.now() - hit.at < maxAge)) {
+      used(st, id);
+      return hit.promise;
+    }
     var entry = { at: 0, pending: true, promise: null };
     entry.promise = fetch().then(function (v) {
       entry.pending = false;
@@ -365,17 +386,23 @@
       entry.value = v;
       return v;
     }, function (err) {
-      if (st.map[id] === entry) delete st.map[id];
+      if (st.map[id] === entry) {
+        delete st.map[id];
+        unlist(st, id);
+      }
       throw err;
     });
     st.map[id] = entry;
+    used(st, id);
     return entry.promise;
   };
+
+  O.cachedSize = function (name) { return stores[name] ? stores[name].order.length : 0; }; // (tests)
 
   // The value already in a cache (fresh or not), or undefined: for answers that must be synchronous.
   O.peek = function (ctx, name, id) {
     var st = stores[name];
-    var hit = st && st.key === O.profileKey(ctx) ? st.map[id] : null;
+    var hit = st && st.key === O.profileKey(ctx) ? st.map[String(id)] : null;
     return hit && !hit.pending ? hit.value : undefined;
   };
 
@@ -383,8 +410,13 @@
   O.forgetCached = function (name, id) {
     var st = stores[name];
     if (!st) return;
-    if (id == null) st.map = {};
-    else delete st.map[id];
+    if (id == null) {
+      st.map = Object.create(null);
+      st.order = [];
+    } else {
+      delete st.map[String(id)];
+      unlist(st, String(id));
+    }
   };
 
   // A show's seasons as Overseerr sees them, from the compact lookup (cached 10 min):

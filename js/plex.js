@@ -152,9 +152,10 @@
     });
   };
 
-  // Remembers the profile in use on this device (Settings, Who's watching).
+  // Remembers the profile in use on this device (Settings, Who's watching). admin: the Home's owner
+  // (the only profile Plex never restricts).
   plex.keepProfile = function (user) {
-    PL.storage.set('profile', { uuid: user.uuid, title: user.title, thumb: user.thumb || '' });
+    PL.storage.set('profile', { uuid: user.uuid, title: user.title, thumb: user.thumb || '', admin: user.admin === true });
     if (PL.fuzzy && PL.fuzzy.reset) PL.fuzzy.reset();
   };
 

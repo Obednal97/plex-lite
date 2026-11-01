@@ -3,11 +3,15 @@
 //     aired in the last two days or air in the next seven ("S2 E5 · Tonight 21:00"), tagged New or
 //     Premiere. OK opens the episode when it has a file, else the show.
 //   - "Films arriving soon" on movie libraries' Recommended: Radarr's monitored films with a release
-//     date in that window ("Digital release Friday").
+//     date in that window ("Digital release Friday"). For the account owner only (no Plex Home profile
+//     picked, or the Home's admin): the films aren't in Plex yet, so Plex can't say whether a
+//     restricted profile may see them, and their ratings aren't known here to check against its limits.
 //   - On a show's (or season's) details page: "3 episodes missing" from /missing, and "Search for
 //     missing episodes" (POST /missing/search).
 // Everything hides when the helper, Sonarr or Radarr isn't available. Helper answers are cached
-// (/coming 15 min, /missing 5 min per show) and so are Plex library matches (30 min).
+// (/coming 15 min, /missing 5 min per show) and so are Plex library matches (30 min, per Plex Home
+// profile: each sees only what Plex lets it). Plex is asked about at most two shows at a time, and no
+// more once the row has its 20 cards.
 'use strict';
 
 (function () {
@@ -15,6 +19,9 @@
   var MISSING_MS = 5 * 60 * 1000;
   var MATCH_MS = 30 * 60 * 1000;
   var MAX_ITEMS = 20;
+  var LOOKUPS_AT_ONCE = 2;
+  var MISSING_MAX = 200;
+  var MATCHES_MAX = 300;
   var WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var RELEASE = { digital: 'Digital release', physical: 'Disc release', cinema: 'In cinemas' };
@@ -139,29 +146,31 @@
     return mine.pending;
   };
 
-  // tvdbId -> {at, value: /missing answer | null (Sonarr doesn't have the show)}
-  var missing = {};
+  // tvdbId -> {at, value: /missing answer | null (Sonarr doesn't have the show)} (the helper's
+  // answer, the same for every profile; only asked on a show's page, which the profile can see)
+  var missing = H().lru(MISSING_MAX);
 
   W.missing = function (tvdbId, maxAge) {
-    var hit = missing[tvdbId];
-    if (hit && Date.now() - hit.at < (maxAge == null ? MISSING_MS : maxAge)) return Promise.resolve(hit.value);
+    var hit = missing.get(tvdbId);
     if (hit && hit.pending) return hit.pending;
+    if (hit && Date.now() - hit.at < (maxAge == null ? MISSING_MS : maxAge)) return Promise.resolve(hit.value);
     var p = H().get('/missing?tvdbId=' + encodeURIComponent(tvdbId), { timeout: 6000 }).then(function (data) {
-      missing[tvdbId] = { at: Date.now(), value: data };
+      missing.set(tvdbId, { at: Date.now(), value: data });
       return data;
     }, function (err) {
       if (err.code === 'not_found') {
-        missing[tvdbId] = { at: Date.now(), value: null };
+        missing.set(tvdbId, { at: Date.now(), value: null });
         return null;
       }
-      delete missing[tvdbId];
+      missing.del(tvdbId);
       throw err;
     });
-    missing[tvdbId] = { at: 0, value: null, pending: p };
+    missing.set(tvdbId, { at: 0, value: null, pending: p });
     return p;
   };
 
-  W.forgetMissing = function (tvdbId) { delete missing[tvdbId]; };
+  W.forgetMissing = function (tvdbId) { missing.del(tvdbId); };
+  W.cacheSizes = function () { return { missing: missing.size(), matches: matches.map ? matches.map.size() : 0 }; }; // (tests)
 
   // Missing aired episodes in a /missing answer (season: one season, else all but specials)
   W.missingCount = function (data, season) {
@@ -174,7 +183,15 @@
 
   // ---- Plex library matches ------------------------------------------------------------------------
 
-  var matches = {};
+  // Plex's answers depend on who asks (a profile may be limited to some libraries or ratings): one
+  // store per viewer, dropped when the profile changes, so a late answer never reaches another one.
+  var matches = { viewer: null, map: null };
+
+  function matchStore() {
+    var viewer = H().viewerKey();
+    if (matches.viewer !== viewer) matches = { viewer: viewer, map: H().lru(MATCHES_MAX) };
+    return matches.map;
+  }
 
   function normTitle(s) { return String(s || '').toLowerCase().replace(/\s*\(\d{4}\)\s*$/, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
 
@@ -189,10 +206,12 @@
     })[0] || null;
   };
 
-  // Promise<Plex item | null> in this library section (type 2 shows, 1 movies)
+  // Promise<Plex item | null> in this library section (type 2 shows, 1 movies), as the active profile
+  // sees it
   W.findInSection = function (section, want) {
+    var store = matchStore();
     var key = section.key + ':' + (want.tvdbId ? 'tv' + want.tvdbId : 'mv' + want.tmdbId);
-    var hit = matches[key];
+    var hit = store.get(key);
     if (hit && (hit.pending || Date.now() - hit.at < MATCH_MS)) return hit.pending || Promise.resolve(hit.value);
     var type = want.tvdbId ? 2 : 1;
     var ask = function (title) {
@@ -202,14 +221,42 @@
     };
     var short = String(want.title || '').replace(/\s*\(\d{4}\)\s*$/, '');
     var p = ask(want.title).then(function (m) { return m || (short !== want.title ? ask(short) : null); }).then(function (m) {
-      matches[key] = { at: Date.now(), value: m };
+      store.set(key, { at: Date.now(), value: m });
       return m;
     }, function () {
-      delete matches[key];
+      store.del(key);
       return null;
     });
-    matches[key] = { at: 0, pending: p };
+    store.set(key, { at: 0, pending: p });
     return p;
+  };
+
+  // Runs fn(list[i]) in order, at most `limit` at a time, and starts no more once enough(answers)
+  // is true. -> Promise<{index: answer}> (a failure answers null)
+  W.pool = function (list, limit, fn, enough) {
+    return new Promise(function (resolve) {
+      var out = {};
+      var next = 0;
+      var running = 0;
+      var stopped = false;
+      var launch = function () {
+        while (!stopped && running < limit && next < list.length) start(next++);
+        if (!running) resolve(out);
+      };
+      var start = function (i) {
+        running++;
+        var done = function (v) {
+          out[i] = v;
+          running--;
+          if (!stopped && enough && enough(out)) stopped = true;
+          launch();
+        };
+        var p;
+        try { p = fn(list[i]); } catch (e) { p = null; }
+        Promise.resolve(p).then(done, function () { done(null); });
+      };
+      launch();
+    });
   };
 
   // ---- Shelves --------------------------------------------------------------------------------------
@@ -231,14 +278,30 @@
   function tvShelf(section, items, ctx) {
     var now = new Date();
     var groups = W.groupEpisodes(items, now);
-    var shows = {};
-    groups.forEach(function (g) { shows[g.tvdbId] = g; });
-    return Promise.all(Object.keys(shows).map(function (id) {
-      var g = shows[id];
-      return W.findInSection(section, { tvdbId: g.tvdbId, title: g.title, year: g.year }).then(function (m) { return [id, m]; });
-    })).then(function (pairs) {
+    // each show once, in the order its first card comes
+    var shows = [];
+    var at = {};
+    groups.forEach(function (g) {
+      if (at[g.tvdbId] == null) {
+        at[g.tvdbId] = shows.length;
+        shows.push(g);
+      }
+    });
+    // enough once the first MAX_ITEMS cards (in time order) are all known to be in the library
+    var enough = function (answers) {
+      var n = 0;
+      for (var i = 0; i < groups.length && n < MAX_ITEMS; i++) {
+        var idx = at[groups[i].tvdbId];
+        if (!(idx in answers)) return false;
+        if (answers[idx]) n++;
+      }
+      return n >= MAX_ITEMS;
+    };
+    return W.pool(shows, LOOKUPS_AT_ONCE, function (g) {
+      return W.findInSection(section, { tvdbId: g.tvdbId, title: g.title, year: g.year });
+    }, enough).then(function (answers) {
       var inLib = {};
-      pairs.forEach(function (p) { if (p[1]) inLib[p[0]] = p[1]; });
+      shows.forEach(function (g, i) { if (answers[i]) inLib[g.tvdbId] = answers[i]; });
       var out = groups.filter(function (g) { return inLib[g.tvdbId]; }).slice(0, MAX_ITEMS).map(function (g) {
         var show = inLib[g.tvdbId];
         var tag = W.episodeTag(g);
@@ -357,6 +420,8 @@
       var hh = H();
       if (!hh || !hh.url() || !section || (section.type !== 'show' && section.type !== 'movie')) return null;
       var tv = section.type === 'show';
+      // films that aren't in Plex yet: only for the account owner (see the top of this file)
+      if (!tv && !hh.isOwner()) return null;
       return hh.health().then(function (h) {
         if (!h || !h.services[tv ? 'sonarr' : 'radarr']) return null;
         return W.coming().then(function (items) { return tv ? tvShelf(section, items, ctx) : filmShelf(section, items, ctx); });
@@ -383,7 +448,7 @@
       if (!hh || !showOrSeason(item) || !hh.has('sonarr')) return [];
       var tvdb = item.type === 'show' ? hh.guid(item, 'tvdb') : null;
       if (tvdb) {
-        var hit = missing[tvdb];
+        var hit = missing.get(tvdb);
         if (hit && hit.at && Date.now() - hit.at < MISSING_MS && (!hit.value || !W.missingCount(hit.value))) return [];
       } else if (item.type === 'show') {
         return [];

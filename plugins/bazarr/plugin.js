@@ -10,6 +10,7 @@
 
 (function () {
   var SUBS_MS = 3 * 60 * 1000;
+  var CACHE_MAX = 100;
   var SEARCH_TIMEOUT = 60000;
 
   var B = PL.bazarr = {};
@@ -31,25 +32,27 @@
 
   // ---- /subtitles, cached per title ------------------------------------------------------------------
 
-  var cache = {};
+  // (bounded: the least recently used titles go first)
+  var cache = H().lru(CACHE_MAX);
 
   B.subtitles = function (ids, maxAge) {
     var key = B.query(ids);
-    var hit = cache[key];
+    var hit = cache.get(key);
     if (hit && hit.pending) return hit.pending;
     if (hit && Date.now() - hit.at < (maxAge == null ? SUBS_MS : maxAge)) return Promise.resolve(hit.value);
     var p = H().get('/subtitles?' + key, { timeout: 8000 }).then(function (data) {
-      cache[key] = { at: Date.now(), value: data };
+      cache.set(key, { at: Date.now(), value: data });
       return data;
     }, function (err) {
-      delete cache[key];
+      cache.del(key);
       throw err;
     });
-    cache[key] = { at: 0, pending: p };
+    cache.set(key, { at: 0, pending: p });
     return p;
   };
 
-  B.forget = function (ids) { delete cache[B.query(ids)]; };
+  B.forget = function (ids) { cache.del(B.query(ids)); };
+  B.cacheSize = function () { return cache.size(); }; // (tests)
 
   // "English", "English (forced)", "English (SDH)"
   B.langName = function (l) {

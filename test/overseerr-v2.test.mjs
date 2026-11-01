@@ -396,6 +396,19 @@ test('Request seasons: a list item (hold-OK menu) gets an answer within 450 ms',
   } finally { env.s.close(); }
 });
 
+test('the plugin\'s small caches keep their 100 most recently used entries', async () => {
+  const { O, ctx } = plugin({ service: () => Promise.reject(new Error('none')) });
+  for (let i = 0; i < 150; i++) await O.cached(ctx, 'show', i, 1e9, () => Promise.resolve({ n: i }));
+  assert.equal(O.cachedSize('show'), 100);
+  assert.equal(O.peek(ctx, 'show', 0), undefined, 'the oldest went first');
+  eq(O.peek(ctx, 'show', 149), { n: 149 });
+  // a hit counts as a use
+  await O.cached(ctx, 'show', 50, 1e9, () => Promise.resolve({ n: -1 }));
+  await O.cached(ctx, 'show', 'new', 1e9, () => Promise.resolve({ n: 'new' }));
+  eq(O.peek(ctx, 'show', 50), { n: 50 });
+  assert.equal(O.peek(ctx, 'show', 51), undefined);
+});
+
 test('the Overseerr page\'s rows', async () => {
   const env = await signedIn();
   try {

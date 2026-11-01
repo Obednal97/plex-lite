@@ -13,7 +13,8 @@
 //   post(path, body, ctx, {timeout})  the same, with X-Plex-Token from the calling plugin's profile
 //   onChange(fn)             fn({url, health}) when the address or the services change; returns off()
 // Extras for the bundled plugins: has(service) (sync, from the last /healthz), blocked(url),
-// errorText(err, what), busy(text), idle(), titleIds(ctx, item), guid(item, scheme).
+// errorText(err, what), busy(text), idle(), titleIds(ctx, item), guid(item, scheme), lru(max),
+// viewerKey(), isOwner().
 'use strict';
 
 (function () {
@@ -284,6 +285,71 @@
     var busy = !!(spin && node && spin.parentNode === node);
     dropSpinner();
     if (busy) node.classList.remove('show');
+  };
+
+  // ---- Small caches -----------------------------------------------------------------------------------
+
+  // A bounded map (least recently used entries go first) for the plugins' caches, so a long session
+  // browsing hundreds of titles doesn't keep every answer.
+  H.lru = function (max) {
+    var map = Object.create(null);
+    var order = [];
+    var drop = function (k) {
+      var i = order.indexOf(k);
+      if (i >= 0) order.splice(i, 1);
+    };
+    return {
+      get: function (k) {
+        k = String(k);
+        if (!(k in map)) return undefined;
+        drop(k);
+        order.push(k);
+        return map[k];
+      },
+      set: function (k, v) {
+        k = String(k);
+        drop(k);
+        order.push(k);
+        map[k] = v;
+        while (order.length > max) delete map[order.shift()];
+      },
+      del: function (k) {
+        k = String(k);
+        drop(k);
+        delete map[k];
+      },
+      clear: function () {
+        map = Object.create(null);
+        order = [];
+      },
+      size: function () { return order.length; },
+    };
+  };
+
+  // 32-bit FNV-1a, hex: tells tokens apart without keeping them
+  function fingerprint(s) {
+    var h = 0x811c9dc5;
+    s = String(s || '');
+    for (var i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    return ('0000000' + h.toString(16)).slice(-8);
+  }
+
+  // Who is watching, for caches of what Plex lets them see: the Plex Home profile, else the account
+  // (by a fingerprint of its token, as Overseerr's sessions are keyed).
+  H.viewerKey = function () {
+    var p = PL.storage.get('profile', null);
+    if (p && p.uuid) return 'p-' + String(p.uuid);
+    return 'o-' + fingerprint(PL.plex && PL.plex.token);
+  };
+
+  // The account owner: no Plex Home profile picked, or the Home's admin profile (Plex can restrict
+  // every other profile's libraries and ratings).
+  H.isOwner = function () {
+    var p = PL.storage.get('profile', null);
+    return !p || p.admin === true;
   };
 
   // ---- Identifying a title ---------------------------------------------------------------------------
