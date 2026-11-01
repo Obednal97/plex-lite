@@ -427,12 +427,18 @@
     this.idleAt = Date.now();
     var self = this;
     var seq = ++this.idleSeq;
+    this.idleLoading = true;
     PL.plugins.searchIdleRows().then(function (rows) {
       if (!self.alive || seq !== self.idleSeq) return;
+      self.idleLoading = false;
       self.idleRows = rows || [];
       if (!rows || !rows.length) self.idleAt = 0;
       if (!self.query.trim()) self.render();
-    }, function () { self.idleAt = 0; });
+    }, function () {
+      if (seq !== self.idleSeq) return;
+      self.idleLoading = false;
+      self.idleAt = 0;
+    });
   };
 
   // Stale answers (the query moved on, or the screen went away) are dropped.
@@ -745,6 +751,12 @@
     this.visible = false;
     clearTimeout(this.guideTimer);
     clearTimeout(this.idleTimer);
+    // idle rows still on their way are dropped (no render while hidden) and asked again next time
+    this.idleSeq++;
+    if (this.idleLoading) {
+      this.idleLoading = false;
+      this.idleAt = 0;
+    }
     if (this.tvSoon) this.tvSoon.cancel();
     if (this.runTv) this.runTv.cancel();
     this.ambient.cancel();
