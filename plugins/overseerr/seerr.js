@@ -449,7 +449,8 @@
     var today = new Date().toISOString().slice(0, 10);
     return (seasons || []).filter(function (s) {
       if (s.status > 1 || s.requested) return false;
-      if (aired && (!s.episodes || (s.airDate && s.airDate > today))) return false;
+      // a season with no air date yet (TMDB often lists one placeholder episode) hasn't started
+      if (aired && (!s.episodes || !s.airDate || s.airDate > today)) return false;
       return true;
     });
   };
@@ -656,10 +657,12 @@
     };
   };
 
+  O.REQUESTS_TAKE = 50;
+
   // Promise<{list: [entry], at}>, cached for 20 s (the Overseerr page and the screen share it).
   O.requests = function (ctx, maxAge) {
     return O.cached(ctx, 'requests', 'mine', maxAge == null ? 20000 : maxAge, function () {
-      return O.svc(ctx, 'requests', { take: 50 }).then(function (r) {
+      return O.svc(ctx, 'requests', { take: O.REQUESTS_TAKE }).then(function (r) {
         return { list: (r.items || []).map(O.requestEntry), at: r.at || Date.now() };
       });
     });

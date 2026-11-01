@@ -65,7 +65,7 @@
     var rows = [];
     var s = state();
     if (s === 'unset') {
-      rows.push({ label: 'Set up the helper', sub: 'Its address on your home network', action: function () { editAddress(ctx); } });
+      rows.push({ label: 'Set up the helper', sub: 'Its address on your network', action: function () { editAddress(ctx); } });
     } else {
       if (s === 'blocked') {
         rows.push({ label: 'Not available in this browser', sub: 'Browsers block http addresses on https pages · the TV app can use it', action: function () {} });

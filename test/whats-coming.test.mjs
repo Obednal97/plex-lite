@@ -311,3 +311,26 @@ test('the profile kept on this device says whether it is the Home\'s admin (for 
   PL.plex.keepProfile({ uuid: 'u2', title: 'Kid', restricted: true });
   assert.equal(store.profile.admin, false);
 });
+
+test('a profile kept by an older build gets its admin flag from plex.tv once', async () => {
+  const root = new URL('..', import.meta.url).pathname;
+  const ctx = { window: { addEventListener() {} }, console, setTimeout, clearTimeout };
+  vm.createContext(ctx);
+  vm.runInContext('var window = this.window;', ctx);
+  for (const f of ['js/core.js', 'js/plex.js']) vm.runInContext(readFileSync(root + f, 'utf8'), ctx, { filename: f });
+  const PL = ctx.window.PL;
+  const store = { profile: { uuid: 'u1', title: 'Ollie' } };
+  PL.storage = { get: (k, d) => (k in store ? store[k] : d), set: (k, v) => { store[k] = JSON.parse(JSON.stringify(v)); }, del: (k) => { delete store[k]; } };
+  let asked = 0;
+  PL.plex.homeUsers = () => { asked++; return Promise.resolve([{ uuid: 'u2', admin: false }, { uuid: 'u1', admin: true }]); };
+  await PL.plex.checkProfileAdmin();
+  same(store.profile, { uuid: 'u1', title: 'Ollie', admin: true });
+  await PL.plex.checkProfileAdmin();
+  assert.equal(asked, 1, 'asked only while the flag was missing');
+  store.profile = { uuid: 'u3', title: 'Gone' };
+  await PL.plex.checkProfileAdmin();
+  assert.equal(store.profile.admin, undefined, 'a profile plex.tv no longer lists is left alone');
+  PL.plex.homeUsers = () => Promise.reject(new Error('offline'));
+  await PL.plex.checkProfileAdmin();
+  assert.equal(store.profile.admin, undefined);
+});

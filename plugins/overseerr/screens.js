@@ -143,7 +143,8 @@
       load: function (maxAge) {
         return O.requests(ctx, maxAge).then(function (res) {
           var n = res.list.length;
-          return { entries: res.list, meta: (n ? n + (n === 1 ? ' request' : ' requests') + ' · ' : '') + 'updated ' + clock(res.at) };
+          var count = n >= O.REQUESTS_TAKE ? 'Your newest ' + n + ' requests' : n + (n === 1 ? ' request' : ' requests');
+          return { entries: res.list, meta: (n ? count + ' · ' : '') + 'updated ' + clock(res.at) };
         });
       },
       fill: function (e) {

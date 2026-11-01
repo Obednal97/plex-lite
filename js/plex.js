@@ -159,6 +159,21 @@
     if (PL.fuzzy && PL.fuzzy.reset) PL.fuzzy.reset();
   };
 
+  // Profiles kept by builds before 0.2 have no admin flag: look it up once from plex.tv's Home users
+  // (quietly; nothing changes when plex.tv can't be reached or the profile is gone).
+  plex.checkProfileAdmin = function () {
+    var p = PL.storage.get('profile', null);
+    if (!p || typeof p.admin === 'boolean') return Promise.resolve(p);
+    return plex.homeUsers().then(function (users) {
+      var me = (users || []).filter(function (u) { return u.uuid === p.uuid; })[0];
+      var cur = PL.storage.get('profile', null);
+      if (!me || !cur || cur.uuid !== p.uuid) return cur;
+      cur.admin = me.admin === true;
+      PL.storage.set('profile', cur);
+      return cur;
+    }, function () { return PL.storage.get('profile', null); });
+  };
+
   // An error from plex.tv itself (not the media server) is marked err.plexTv.
   plex.listServers = function () {
     return plex.tvRequest('GET', '/api/v2/resources', { includeHttps: 1, includeRelay: 1 }).then(function (list) {

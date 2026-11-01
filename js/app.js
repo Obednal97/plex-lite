@@ -455,6 +455,7 @@
       app.buildTabs();
       app.selectTab(app.startTab());
       app.ready = true;
+      PL.plex.checkProfileAdmin();
       // plugins that loaded after the 3 s wait may add tabs: rebuild, keeping the tab
       if (PL.pluginHost && PL.pluginHost.booted) {
         PL.pluginHost.booted.then(function () {

@@ -123,7 +123,7 @@
         var soon = s.airDate && s.airDate > today ? 'Starts ' + O.date(s.airDate) : '';
         rows.push({
           label: s.name || ('Season ' + s.season),
-          sub: st || soon || (s.episodes ? s.episodes + ' episodes' : ''),
+          sub: st || soon || (s.episodes ? s.episodes + (s.episodes === 1 ? ' episode' : ' episodes') : ''),
           action: st ? noop : function () { submit(ctx, item, [s.season]); },
         });
       });
@@ -257,7 +257,9 @@
     var known = O.peek(ctx, 'requests', 'mine');
     if (!known) return '';
     var pending = known.list.filter(function (e) { return e.state === 'pending'; }).length;
-    return known.list.length ? known.list.length + (pending ? ' · ' + pending + ' waiting' : '') : 'None yet';
+    // the list holds the newest 50 (O.REQUESTS_TAKE): a full page means there may be more
+    var n = known.list.length >= O.REQUESTS_TAKE ? O.REQUESTS_TAKE + '+' : String(known.list.length);
+    return known.list.length ? n + (pending ? ' · ' + pending + ' waiting' : '') : 'None yet';
   }
 
   function downloadsValue(ctx) {
