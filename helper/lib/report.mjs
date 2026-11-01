@@ -51,6 +51,16 @@ function interruptedText(r) {
   const arr = r.arr || 'Sonarr/Radarr';
   const rel = ticks(r.releases || []) || 'the release';
   const pre = 'Not fixed automatically: the helper was interrupted (a restart or crash)';
+  if (r.noHistory) {
+    const none = '(it had no download history, so nothing was blocklisted)';
+    switch (r.step) {
+      case 'deleting': return `${pre} while deleting the file ${none}: check ${arr} for the file, then search. Left for a person.`;
+      case 'deleted':
+      case 'searching': return `${pre} after deleting the file ${none}, before the search started: search for it in ${arr}. Left for a person.`;
+      case 'searched': return `${pre} after deleting the file ${none} and starting a search: check ${arr} → Queue. Left for a person.`;
+      default: break;
+    }
+  }
   switch (r.step) {
     case 'blocklisting': return `${pre} while blocklisting ${rel}: some may be blocklisted, nothing was deleted. Check ${arr}'s blocklist and the file. Left for a person.`;
     case 'blocklisted': return `${pre} after blocklisting ${rel}, before deleting the file: check ${arr} (delete the file, then search). Left for a person.`;
@@ -321,10 +331,12 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
     const releases = plan.grabs.map((g) => `\`${g.release}\``).join(', ');
     const fileNames = plan.files.map((f) => `\`${basename(f.relativePath)}\``).join(', ');
     const searchWhat = plan.seasonSearch ? `a season search for Season ${season}` : 'a search for a new copy';
-    log(`issue #${id}: plan: blocklist ${plan.grabs.length} grab(s) [${plan.grabs.map((g) => g.grabbedId).join(',')}], ` +
+    log(`issue #${id}: plan: ${plan.noHistory ? 'no download history, no blocklist' : `blocklist ${plan.grabs.length} grab(s) [${plan.grabs.map((g) => g.grabbedId).join(',')}]`}, ` +
       `delete ${plan.files.length} file(s) [${plan.files.map((f) => f.id).join(',')}], ${searchWhat}`);
     if (dry) {
-      await comment(id, `would blocklist ${releases}, delete ${fileNames} and start ${searchWhat}.`, true);
+      await comment(id, plan.noHistory
+        ? `would delete ${fileNames} and search for a new copy. It has no download history, so nothing can be blocklisted and the same release may come back.`
+        : `would blocklist ${releases}, delete ${fileNames} and start ${searchWhat}.`, true);
       return ['dry_run', { plan }];
     }
 
@@ -345,7 +357,7 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
 
     // From here the sequence runs to the end even if the helper is asked to stop; each step is
     // recorded first, so a crash leaves a trail that the next start reports on the issue.
-    state.setStep(id, false, 'blocklisting', { arr: arrName, releases: plan.grabs.map((g) => g.release) });
+    state.setStep(id, false, plan.noHistory ? 'deleting' : 'blocklisting', { arr: arrName, releases: plan.grabs.map((g) => g.release), noHistory: !!plan.noHistory });
     const blocklisted = [];
     for (const g of plan.grabs) {
       try {
@@ -365,7 +377,9 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
       else await arr.call('DELETE', '/episodefile/bulk', { body: { episodeFileIds: plan.files.map((f) => f.id) } });
     } catch (e) {
       log(`issue #${id}: delete failed: ${e.message}`);
-      await comment(id, `Not fixed automatically: blocklisted ${releases}, but deleting the file failed (${SEE_LOG}), so no search was started. Left for a person.`, false);
+      await comment(id, plan.noHistory
+        ? `Not fixed automatically: deleting ${fileNames} failed (${SEE_LOG}). Nothing was changed; left for a person.`
+        : `Not fixed automatically: blocklisted ${releases}, but deleting the file failed (${SEE_LOG}), so no search was started. Left for a person.`, false);
       return ['error'];
     }
     state.setStep(id, false, 'deleted');
@@ -385,11 +399,14 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
       else await arr.post('/command', { name: 'EpisodeSearch', episodeIds: plan.episodeIds });
     } catch (e) {
       log(`issue #${id}: search failed: ${e.message}`);
-      await comment(id, `Blocklisted ${releases} and deleted the file, but starting the search failed (${SEE_LOG}). Left open: search for it in ${arrName}.`, false);
+      await comment(id, `${plan.noHistory ? `Deleted ${fileNames} (it had no download history, so nothing was blocklisted)` : `Blocklisted ${releases} and deleted the file`}, ` +
+        `but starting the search failed (${SEE_LOG}). Left open: search for it in ${arrName}.`, false);
       return ['search_failed'];
     }
     state.setStep(id, false, 'searched');
-    let text = `Fixed automatically: blocklisted ${releases}, deleted the file and searched for a new copy. It shows in Plex Lite → Downloading. If the new one is wrong too, report it again.`;
+    let text = plan.noHistory
+      ? `Fixed automatically: this file had no download history, so nothing could be blocklisted. Deleted ${fileNames} and searched for a new copy; the same release may come back. It shows in Plex Lite → Downloading. If the new one is wrong too, report it again.`
+      : `Fixed automatically: blocklisted ${releases}, deleted the file and searched for a new copy. It shows in Plex Lite → Downloading. If the new one is wrong too, report it again.`;
     if (earlierLanguage) text += ' This title was reported for the wrong language before: if every release is in that language, the next copy may be too.';
     await comment(id, text, false);
     await resolve(id);
@@ -408,6 +425,11 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
     const name = basename(file.relativePath);
     const mine = (r) => (target.movieId != null ? r.movieId == null || r.movieId === target.movieId
       : (r.seriesId == null || r.seriesId === target.seriesId) && (r.episodeId == null || target.episodeIds.includes(r.episodeId)));
+    // "no history at all": not one download import and not one grab for this film / these episodes
+    // (an import that points to another file, or a lone grab, is history that doesn't match)
+    if (!importRecords.some((r) => (isEvent(r, 'downloadFolderImported') || isEvent(r, 'grabbed')) && mine(r))) {
+      return { none: true, why: `\`${name}\` has no download history` };
+    }
     const imports = importRecords
       .filter((r) => isEvent(r, 'downloadFolderImported') && r.data && String(r.data.importedPath || '').endsWith(file.relativePath) && mine(r))
       .sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
@@ -427,6 +449,17 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
     const ours = target.movieId != null ? all : all.filter((x) => target.episodeIds.includes(x.episodeId));
     if (!ours.length) return { why: `no grab record of the download of \`${name}\` for its episode` };
     return { grab: { grabbedId: ours[0].id, downloadId: newest.downloadId, release: ours[0].sourceTitle || name } };
+  }
+
+  // A file with no download history may be deleted and searched again without a blocklist (owner's
+  // option B) only for a film or a single episode whose report names exactly this file (the
+  // mismatch check has already run). Returns why it must wait, or null.
+  function noHistoryStop(ctx, why) {
+    const none = `${why}, so nothing can be blocklisted`;
+    if (ctx.scope !== 'movie' && ctx.scope !== 'episode') return `${none}; a season with no download history needs a person`;
+    if (cfg.noHistoryAction !== 'redownload') return `${none} (NO_HISTORY_ACTION=manual)`;
+    if (!ctx.tail.file) return `${none}, and the report doesn't name the file Plex played`;
+    return null;
   }
 
   function fileMismatch(tail, names) {
@@ -449,10 +482,15 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
     if (!underRoot(file.path, roots)) return { why: `Radarr's file isn't under one of its root folders` };
     const q = await queue(svc.radarr, { movieIds: movie.id });
     if (q.some((x) => x.movieId === movie.id)) return { why: `a download for ${movie.title} is already in Radarr's queue` };
-    const hist = await svc.radarr.get('/history/movie', { movieId: movie.id, eventType: 'downloadFolderImported' });
+    // every event type: "no history" needs to see grabs too
+    const hist = await svc.radarr.get('/history/movie', { movieId: movie.id });
     const g = await grabFor(svc.radarr, Array.isArray(hist) ? hist : [], file, { movieId: movie.id });
-    if (!g.grab) return { why: g.why };
     ctx.title = movie.title;
+    if (g.none) {
+      const why = noHistoryStop(ctx, g.why);
+      return why ? { why } : { ok: true, noHistory: true, grabs: [], files: [file], movieId: movie.id };
+    }
+    if (!g.grab) return { why: g.why };
     return { ok: true, grabs: [g.grab], files: [file], movieId: movie.id };
   }
 
@@ -505,17 +543,31 @@ export function makeReports({ cfg, svc, state, plex, subs, now, log, isPaused })
       return { why: `a download for ${scope === 'season' ? `Season ${season}` : epLabel(season, episode)} is already in Sonarr's queue` };
     }
     const grabs = new Map();
+    let noHistory = false;
+    ctx.title = series.title;
     for (const f of files) {
-      const ep = affected.find((e) => e.episodeFileId === f.id);
-      const r = await svc.sonarr.get('/history', { episodeId: ep.id, eventType: EVENT.downloadFolderImported, page: 1, pageSize: 50, sortKey: 'date', sortDirection: 'descending' });
-      const g = await grabFor(svc.sonarr, (r && r.records) || [], f, { seriesId: series.id, episodeIds: affected.filter((e) => e.episodeFileId === f.id).map((e) => e.id) });
+      const held = affected.filter((e) => e.episodeFileId === f.id);
+      // imports and grabs of every episode the file holds
+      let records = [];
+      for (const ep of held) {
+        const r = await svc.sonarr.get('/history', {
+          episodeId: ep.id, eventType: [EVENT.grabbed, EVENT.downloadFolderImported], page: 1, pageSize: 100, sortKey: 'date', sortDirection: 'descending',
+        });
+        records = records.concat((r && r.records) || []);
+      }
+      const g = await grabFor(svc.sonarr, records, f, { seriesId: series.id, episodeIds: held.map((e) => e.id) });
+      if (g.none) {
+        const why = noHistoryStop(ctx, g.why);
+        if (why) return { why };
+        noHistory = true;
+        continue;
+      }
       // one ambiguous file stops the whole issue
       if (!g.grab) return { why: g.why };
       if (!grabs.has(g.grab.downloadId)) grabs.set(g.grab.downloadId, g.grab);
     }
-    ctx.title = series.title;
     return {
-      ok: true, grabs: [...grabs.values()], files, seriesId: series.id,
+      ok: true, noHistory, grabs: [...grabs.values()], files, seriesId: series.id,
       episodeIds: affected.map((e) => e.id), seasonSearch: scope === 'season',
     };
   }
