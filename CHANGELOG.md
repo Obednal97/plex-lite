@@ -50,7 +50,11 @@ releases are fixes only.
   have aired but aren't in Plex or asked for yet.
 - **Plugin API:** a `searchIdleRows` hook (Search before typing), `shelf.at` (place a row after that
   many of the library's own rows), `item.badge` (drawn on touch cards), and a bundled plugin's
-  `actions` may answer with a promise (docs/PLUGINS.md).
+  `actions` may answer with a promise (docs/PLUGINS.md). One plugin's slow answer never holds back
+  the others': details pills, the hold-OK menu and Recommended's rows show what is known at once and
+  add a slower plugin's when it comes, without moving the focus. A sheet or page a plugin opens after
+  waiting goes only over the screen it was asked from, never over another one or a player.
+  `ctx.profile()` says whether the profile is the Home's admin.
 
 - **Home Assistant plugin: Movie mode** (`plugins/home-assistant/`, its README): tells Home Assistant
   through a webhook when a film or show starts, pauses or stops, so an automation there can dim the
@@ -68,15 +72,16 @@ releases are fixes only.
   and its category. Nothing that identifies the server or the account. Plugins hear about it after the
   frame, never while a key press is handled, and a slow or failing plugin can't affect playback.
   Catalogue plugins need the new `playback` permission ("See what you're watching and when it plays or
-  pauses").
+  pauses") and hear about it about 4 s later, so their sandbox never starts while a video does.
 - **Home server helper** (Settings → Plugins): the address of the helper on your home server and its
-  status ("Connected · Sonarr, Radarr, Bazarr"). Overseerr's "Download queue address" moves into it.
-  On the web it says when the browser can't reach an `http` helper. See
-  [docs/HOME-HELPER.md](docs/HOME-HELPER.md).
-- **What's coming**: "New episodes this week" on TV libraries (shows in that library, "S2 E5 · Tonight
-  21:00", tagged New or Premiere) and "Films arriving soon" on movie libraries ("Digital release
-  Friday"), from Sonarr and Radarr through the helper. A show's page says "3 episodes missing" and
-  offers **Search for missing episodes**.
+  status ("Connected · Sonarr, Radarr, Bazarr"). Overseerr's "Download queue address" moves into it;
+  removing the address or switching the plugin off stops Overseerr using the helper too. On the web
+  it says when the browser can't reach an `http` helper. See [docs/HOME-HELPER.md](docs/HOME-HELPER.md).
+- **What's coming**: "New episodes this week" on TV libraries (shows in that library as the current
+  Plex Home profile sees it, "S2 E5 · Tonight 21:00", tagged New or Premiere) and "Films arriving
+  soon" on movie libraries ("Digital release Friday", for the account owner only: Plex can't say yet
+  whether a restricted profile may see them), from Sonarr and Radarr through the helper. A show's page
+  says "3 episodes missing" and offers **Search for missing episodes**.
 - **Subtitles**: **Subtitles…** on films and episodes (details and hold OK) lists the subtitles a title
   has, finds missing ones with Bazarr ("Found English subtitles") and fixes their timing; a "No English
   subtitles" badge when a language is missing. Dry runs on the helper are said as such.
