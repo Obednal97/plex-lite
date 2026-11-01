@@ -380,17 +380,25 @@
     PL.app.push(screens.person({ id: person.id, name: person.name, thumb: person.thumb, role: person.role }, { filter: person.filter || 'actor' }));
   };
 
-  // Plugin actions (e.g. "Request on Overseerr") become extra pills once they're known.
+  // Plugin actions (e.g. "Request on Overseerr") become extra pills: the ones known at once with the
+  // page, a slower plugin's when it answers. The focus stays on the pill it was on, and an answer for
+  // an earlier load of this page (a reload since) is dropped.
   DetailsScreen.prototype.loadPluginActions = function (item) {
     if (!PL.plugins || !PL.plugins.actions) return;
     var self = this;
-    var got = PL.plugins.actions(item);
     var apply = function (list) {
-      if (!self.alive || !list || !list.length || !self.buttonRow) return;
+      if (!self.alive || !list || !list.length || !self.buttonRow || self.full !== item) return;
+      var row = self.buttonRow;
+      var was = row.buttons[row.index];
       self.pluginActions = list;
-      self.buttonRow.setButtons(self.buttons());
+      var next = self.buttons();
+      var at = -1;
+      next.forEach(function (b, i) { if (at < 0 && was && b.label === was.label && b.icon === was.icon) at = i; });
+      if (at >= 0) row.index = at;
+      row.setButtons(next);
     };
-    if (got && typeof got.then === 'function') got.then(apply, function () {});
+    var got = PL.plugins.actions(item, apply);
+    if (got && typeof got.then === 'function') got.then(apply, function () {}); // (a host without onLate)
     else apply(got);
   };
 

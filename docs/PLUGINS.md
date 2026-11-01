@@ -93,18 +93,21 @@ has one.
 Extra shelves on a library's Recommended view. `section` is the Plex section (`{key, type, title}`).
 A shelf with `at: n` goes after the library's first `n` rows (Overseerr puts Trending after 2,
 Popular after 4, Upcoming after 6); without it, after all of them. Rows placed at the same point keep
-the plugins' order, and a library with fewer rows gets them at the end. They arrive after Plex's rows
-and are put in without moving the focus off its row.
+the plugins' order, and a library with fewer rows gets them at the end. They arrive after Plex's rows:
+each plugin's as soon as it answers (a slow plugin doesn't hold back the others'), put in without
+moving the focus off its row.
 
 ### actions(item, ctx) → [{label, icon?, run()}] | Promise<[…]>
 
 Extra actions for a Plex item, shown as pills on its details page and in the hold-OK menu. Answer at
 once when you can (no network calls for the common case; fetch in `run()`). An action that depends
-on a lookup may answer with a promise: the details page adds the pills when it settles, but the
-hold-OK menu waits only 600 ms for plugins, so answer within ~450 ms with what you know and keep the
-lookup going into a cache for next time. Overseerr's "Request seasons" does this: a details page
-passes the full item (with `Guid`s) and it waits up to 5 s; a list item gets 450 ms. A promise that
-takes 8 s drops all of that plugin's actions.
+on a lookup may answer with a promise. The details page and the hold-OK menu open with the actions
+the plugins answered at once and add a slower plugin's when its promise settles (the focus stays on
+the pill or row it was on), so one plugin's lookup never holds back another's. Your own actions all
+wait for your promise, though: answer within ~450 ms with what you know and keep the lookup going
+into a cache for next time, rather than have rows join a menu the viewer is already using. Overseerr's
+"Request seasons" does this: a details page passes the full item (with `Guid`s) and it waits up to
+5 s; a list item gets 450 ms. A promise that takes 8 s drops all of that plugin's actions.
 
 ```js
 actions: function (item, ctx) {

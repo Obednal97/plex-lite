@@ -102,32 +102,43 @@
     }
 
     // Plugins may add shelves among Plex's (shelf.at: after that many of them, else at the end;
-    // e.g. Overseerr's Trending films); a failure never shows. An item's badge goes on its card.
+    // e.g. Overseerr's Trending films); a failure never shows. An item's badge goes on its card. Each
+    // plugin's come when it answers: a slow plugin doesn't hold back the others'.
     let plexShelves = [];
     function addPluginShelves() {
       if (!PL.plugins || !PL.plugins.shelfRows) return;
       const mine = plexShelves;
-      PL.plugins.shelfRows(section).then((list) => {
-        if (!alive || !list || mine !== plexShelves) return;
-        list.filter((sh) => sh && sh.items && sh.items.length).forEach((sh) => {
-          const node = ui.shelf({
-            title: sh.title,
-            kind: sh.kind === 'wide' ? 'wide' : 'poster',
-            items: sh.items,
-            card: (item) => {
-              const n = (sh.kind === 'wide' ? ui.wide : ui.poster)(item, { onSelect: sh.onSelect || T.open, caption: sh.kind !== 'wide' && !item.ratingKey });
-              if (item.badge && item.badge.label) {
-                const frame = n.querySelector('.t-card-frame') || n;
-                frame.appendChild(h('span.t-pbadge' + (item.badge.tone ? '.t-pbadge-' + item.badge.tone : ''), { text: item.badge.label }));
-              }
-              return n;
-            },
-          });
-          // before the Plex row that comes after it (rows placed at the same point keep their order)
-          const after = typeof sh.at === 'number' ? mine[sh.at] : null;
-          shelves.insertBefore(node, after && after.parentNode === shelves ? after : null);
+      const made = new Map();
+      const nodeFor = (sh) => {
+        if (made.has(sh)) return made.get(sh);
+        const node = ui.shelf({
+          title: sh.title,
+          kind: sh.kind === 'wide' ? 'wide' : 'poster',
+          items: sh.items,
+          card: (item) => {
+            const n = (sh.kind === 'wide' ? ui.wide : ui.poster)(item, { onSelect: sh.onSelect || T.open, caption: sh.kind !== 'wide' && !item.ratingKey });
+            if (item.badge && item.badge.label) {
+              const frame = n.querySelector('.t-card-frame') || n;
+              frame.appendChild(h('span.t-pbadge' + (item.badge.tone ? '.t-pbadge-' + item.badge.tone : ''), { text: item.badge.label }));
+            }
+            return n;
+          },
         });
-      }, () => {});
+        made.set(sh, node);
+        return node;
+      };
+      PL.plugins.shelfRows(section, (all) => {
+        if (!alive || mine !== plexShelves) return;
+        const extra = all.filter((sh) => sh && sh.items && sh.items.length).map((sh) => ({ at: sh.at, row: nodeFor(sh) }));
+        // where every row goes (rows placed at the same point keep the plugins' order); a new one goes
+        // before the next row after it that is already on the page
+        const order = PL.plugins.placeRows(mine, extra);
+        order.forEach((node, i) => {
+          if (node.parentNode === shelves) return;
+          const next = order.slice(i + 1).find((n) => n.parentNode === shelves) || null;
+          shelves.insertBefore(node, next);
+        });
+      }).then(null, () => {});
     }
 
     function load(force) {

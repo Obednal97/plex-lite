@@ -206,23 +206,31 @@
   };
 
   // Plugins may add shelves among the Plex rows (shelf.at: after that many of them; at the end
-  // without it). They arrive late and are put in without moving the focus off its row.
+  // without it). Each plugin's arrive when it answers (a slow one doesn't hold back the others) and
+  // are put in without moving the focus off its row.
   RecommendedMode.prototype.addPluginShelves = function (base) {
     if (!PL.plugins || !PL.plugins.shelfRows) return;
     var self = this;
     var shadow = this.screen.shadow;
-    PL.plugins.shelfRows(this.screen.section).then(function (shelves) {
-      if (!self.alive || !shelves || !shelves.length) return;
+    var made = [];
+    var zoneFor = function (sh) {
+      for (var i = 0; i < made.length; i++) if (made[i].src === sh) return made[i].row;
+      var row = new ui.Shelf({
+        title: sh.title,
+        items: sh.items,
+        kind: sh.kind || 'poster',
+        shadow: shadow,
+        makeCard: sh.makeCard,
+        onFocusItem: function (item) { if (item.art || item.ratingKey) self.hero.update(item); },
+        onSelect: sh.onSelect || function (item) { PL.app.push(screens.details(item)); },
+      });
+      made.push({ src: sh, row: row });
+      return row;
+    };
+    var place = function (shelves) {
+      if (!self.alive || self.baseZones !== base || !shelves || !shelves.length) return;
       var extra = shelves.filter(function (sh) { return sh && sh.items && sh.items.length; }).map(function (sh) {
-        return { at: sh.at, row: new ui.Shelf({
-          title: sh.title,
-          items: sh.items,
-          kind: sh.kind || 'poster',
-          shadow: shadow,
-          makeCard: sh.makeCard,
-          onFocusItem: function (item) { if (item.art || item.ratingKey) self.hero.update(item); },
-          onSelect: sh.onSelect || function (item) { PL.app.push(screens.details(item)); },
-        }) };
+        return { at: sh.at, row: zoneFor(sh) };
       });
       if (!extra.length) return;
       var focused = self.focused;
@@ -231,7 +239,8 @@
       var zones = PL.plugins.placeRows(base, extra);
       self.stack.setZones(zones, Math.max(0, zones.indexOf(current)));
       if (focused) self.stack.focus(true);
-    }, function () { /* plugin failures never affect the screen */ });
+    };
+    PL.plugins.shelfRows(this.screen.section, place).then(null, function () { /* plugin failures never affect the screen */ });
   };
 
   // Called when coming back from details or the player: progress may have changed.

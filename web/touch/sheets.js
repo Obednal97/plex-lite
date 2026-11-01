@@ -28,11 +28,13 @@
     }
     const body = h('div.t-sheet-body');
     const sections = opts.sections || (opts.rows ? [{ rows: opts.rows }] : []);
+    const lists = [];
     sections.forEach((sec) => {
       if (sec.heading) body.appendChild(h('div.t-sheet-heading', { text: sec.heading }));
       const list = h('div.t-sheet-list');
       sec.rows.forEach((r) => list.appendChild(row(r)));
       body.appendChild(list);
+      lists.push(list);
     });
     if (opts.content) body.appendChild(opts.content);
     card.appendChild(body);
@@ -41,6 +43,7 @@
 
     function row(r) {
       const n = h('button.t-sheet-row' + (r.checked ? '.on' : '') + (r.danger ? '.t-danger' : ''), { type: 'button', role: r.checked != null ? 'menuitemradio' : 'menuitem' });
+      n.sheetRow = r;
       if (r.checked != null) n.setAttribute('aria-checked', String(!!r.checked));
       if (r.icon) n.appendChild(ui.icon(r.icon, 't-sheet-icon'));
       const text = h('span.t-sheet-text', null, h('span.t-sheet-label', { text: r.label }));
@@ -71,6 +74,16 @@
     if (first && PL.input.nav() === 'keys') first.focus({ preventScroll: true });
     entry.close = (then) => close(entry, then);
     entry.body = body;
+    // Other rows for the first list (a plugin's late actions in a title's menu): the rows already
+    // shown keep their buttons, so the one with the keyboard focus keeps it.
+    entry.setRows = (rowsNow) => {
+      const list = lists[0];
+      if (!list || entry.closing) return;
+      const had = Array.from(list.children);
+      const next = rowsNow.map((r) => had.find((n) => n.sheetRow === r) || row(r));
+      had.forEach((n) => { if (next.indexOf(n) === -1) n.remove(); });
+      next.forEach((n, i) => { if (list.children[i] !== n) list.insertBefore(n, list.children[i] || null); });
+    };
     return entry;
   }
 
@@ -169,23 +182,21 @@
     const list = rows.map((r) => ({ label: r.label, icon: ICON[r.id], action: act[r.id] }));
     const title = item.type === 'episode' ? (item.grandparentTitle || '') + ' · ' + PL.fmt.episode(item) : (P.itemTitle(item) || '');
     const sub = item.type === 'episode' ? item.title : P.metaLine(item);
-    let shown = null;
-    const finish = (extra) => {
-      if (shown) return;
-      // plugins (Overseerr: Request, Report a problem) add theirs before Details
-      const plug = (extra || []).filter((a) => a && a.label && a.run).map((a) => ({ label: a.label, icon: 'sparkle', action: a.run }));
-      // plugin actions go before the title's pages (Details / Go to episode, Go to show), as on the TV
+    // plugins (Overseerr: Request, Report a problem) add theirs before the title's pages (Details /
+    // Go to episode, Go to show), as on the TV: the menu opens with what they know at once and a
+    // slower plugin's rows join it when they come
+    const made = new Map();
+    const rowsWith = (extra) => {
+      const plug = (extra || []).filter((a) => a && a.label && a.run).map((a) => {
+        if (!made.has(a)) made.set(a, { label: a.label, icon: 'sparkle', action: a.run });
+        return made.get(a);
+      });
       const at = rows.findIndex((r) => r.id === 'details' || r.id === 'show');
-      const all = at < 0 ? list.concat(plug) : list.slice(0, at).concat(plug, list.slice(at));
-      shown = sheet({ title, sub, rows: all, cls: 't-menu' });
+      return at < 0 ? list.concat(plug) : list.slice(0, at).concat(plug, list.slice(at));
     };
-    const extra = PL.plugins && PL.plugins.actions ? PL.plugins.actions(item) : null;
-    if (extra && typeof extra.then === 'function') {
-      extra.then(finish, () => finish(null));
-      setTimeout(() => finish(null), 600);
-    } else {
-      finish(extra);
-    }
+    let shown = null;
+    const now = PL.plugins && PL.plugins.actions ? PL.plugins.actions(item, (all) => { if (shown) shown.setRows(rowsWith(all)); }) : null;
+    shown = sheet({ title, sub, rows: rowsWith(Array.isArray(now) ? now : null), cls: 't-menu' });
     return true;
   };
 

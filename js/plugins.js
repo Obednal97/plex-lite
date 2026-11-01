@@ -5,7 +5,9 @@
 //   def.searchRows(q, ctx)       -> Promise<shelf | [shelf] | null>          shelves after Search's own
 //   def.searchIdleRows(ctx)      -> Promise<shelf | [shelf] | null>          Search before anything is typed
 //   def.shelfRows(section, ctx)  -> Promise<[shelf]>                         shelves on a library's Recommended
+//                                   (each plugin's put in as it answers)
 //   def.actions(item, ctx)       -> [{label, icon?, run()}] | Promise<[…]>  details pills + hold-OK menu
+//                                   (shown at once; a promise's when it settles)
 //   def.badges(item, ctx)        -> Promise<[{label, tone?}]>                 keyline badges on a details page
 //   def.onSelect(item, ctx)      OK on an item that came from one of its shelves
 //   def.onPlayback(event, ctx)   playback events (play, pause, resume, stop, ended, buffering-*), fire-and-forget
@@ -143,6 +145,11 @@
     });
   }
 
+  // a screen's callback for late answers: its failure is the screen's, not the plugin's
+  function tell(hook, fn) {
+    try { fn(); } catch (err) { PL.warn('plugins ' + hook + ' listener failed: ' + (err && err.message)); }
+  }
+
   function flatten(lists) {
     return lists.reduce(function (all, l) { return all.concat(l || []); }, []);
   }
@@ -190,11 +197,21 @@
     return out.map(function (o) { return o.row; });
   };
 
-  // section: the Plex library section object ({key, type, title})
-  plugins.shelfRows = function (section) {
-    return Promise.all(active().filter(function (d) { return d.shelfRows; }).map(function (d) {
+  // section: the Plex library section object ({key, type, title}). -> Promise of every plugin's
+  // shelves, in plugin order. onRows(all, added) (optional) is called as each plugin answers with
+  // shelves, so a slow plugin never holds back the others' rows: all is everything so far, in plugin
+  // order, added the shelves that just came.
+  plugins.shelfRows = function (section, onRows) {
+    var slots = [];
+    return Promise.all(active().filter(function (d) { return d.shelfRows; }).map(function (d, i) {
+      slots[i] = [];
       return safeAsync(d, 'shelfRows', function () { return d.shelfRows(section, d.ctx); })
-        .then(function (v) { return safe(d, 'shelfRows', [], function () { return normalizeShelves(d, v); }); });
+        .then(function (v) { return safe(d, 'shelfRows', [], function () { return normalizeShelves(d, v); }); })
+        .then(function (list) {
+          slots[i] = list;
+          if (onRows && list.length) tell('shelfRows', function () { onRows(flatten(slots), list); });
+          return list;
+        });
     })).then(flatten);
   };
 
@@ -206,24 +223,38 @@
 
   // [{label, icon?, run()}] for a Plex item (details pills, hold-OK menu). Bundled plugins usually
   // answer at once; one that needs a lookup may answer with a Promise, and external plugins always
-  // do. Then the result is a Promise of everything, in plugin order (callers handle both).
-  plugins.actions = function (item) {
+  // do.
+  //   actions(item)          everything, in plugin order: an array when every plugin answered at once,
+  //                          else a Promise of it
+  //   actions(item, onLate)  what the plugins answered at once (an array, in plugin order) right away,
+  //                          and onLate(all) each time a late plugin answers with actions (all:
+  //                          everything so far, in plugin order), so one slow plugin never holds back
+  //                          the others
+  plugins.actions = function (item, onLate) {
     var withActions = active().filter(function (d) { return d.actions; });
-    var later = false;
-    var answers = withActions.map(function (d) {
+    var slots = [];
+    var pending = [];
+    withActions.forEach(function (d, i) {
+      var late = null;
       if (d.external) {
-        later = true;
-        return safeAsync(d, 'actions', function () { return d.actions(item); }).then(function (l) { return cleanActions(d, l); });
+        late = safeAsync(d, 'actions', function () { return d.actions(item); }).then(function (l) { return cleanActions(d, l); });
+      } else {
+        var got = safe(d, 'actions', [], function () { return d.actions(item, d.ctx); });
+        if (got && typeof got.then === 'function') {
+          late = safeAsync(d, 'actions', function () { return got; }).then(function (l) { return safe(d, 'actions', [], function () { return cleanActions(d, l); }); });
+        } else {
+          slots[i] = safe(d, 'actions', [], function () { return cleanActions(d, got); });
+          return;
+        }
       }
-      var got = safe(d, 'actions', [], function () { return d.actions(item, d.ctx); });
-      if (got && typeof got.then === 'function') {
-        later = true;
-        return safeAsync(d, 'actions', function () { return got; }).then(function (l) { return safe(d, 'actions', [], function () { return cleanActions(d, l); }); });
-      }
-      return safe(d, 'actions', [], function () { return cleanActions(d, got); });
+      slots[i] = [];
+      pending.push(late.then(function (list) {
+        slots[i] = list || [];
+        if (onLate && slots[i].length) tell('actions', function () { onLate(flatten(slots)); });
+      }));
     });
-    if (!later) return flatten(answers);
-    return Promise.all(answers).then(flatten);
+    if (onLate || !pending.length) return flatten(slots);
+    return Promise.all(pending).then(function () { return flatten(slots); });
   };
 
   // ---- Tabs (declarative screens) ----------------------------------------------------------------

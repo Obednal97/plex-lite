@@ -74,8 +74,8 @@ offer.
   says nothing is missing, or that Sonarr doesn't have the show.
 
 Caching: `/coming` 15 minutes, `/missing` 5 minutes per show (the 200 most recent shows), library
-matches 30 minutes (per profile, the 300 most recent). Shelves are added after Plex's own rows, in
-plugin order (Overseerr's Downloading first), as every plugin shelf is.
+matches 30 minutes (per profile, the 300 most recent). The rows go among Plex's own (`at`), each
+plugin's as soon as it answers, as every plugin shelf does.
 
 ## Subtitles
 
