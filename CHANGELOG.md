@@ -29,6 +29,19 @@ releases are fixes only.
 
 ### Added
 
+- **Home server helper** (`helper/`, docs/HELPER.md): a small Node service (Node 18+, no
+  dependencies, systemd unit and install script for Debian 12) for the server that runs Seerr,
+  Sonarr, Radarr and Bazarr. Seerr's "Issue reported" webhook makes **Report a problem** fix the file:
+  it blocklists the release, deletes the file and searches again (once per download, so a season pack
+  is blocklisted once), comments on the issue and resolves it; missing subtitles go to Bazarr instead.
+  Whole-show and "Something else" reports wait for a person. It starts in dry run (anything but an
+  explicit `DRY_RUN=0` stays dry), and never deletes when the history doesn't tie the current file to
+  one grab of this title, the file isn't the one Plex played, a season in Plex isn't Sonarr's season,
+  the title is already downloading, or a limit is reached (3 fixes per person a day, 10 a day, 2 per
+  title a week). A fix cut short by a crash is reported on the issue at the next start. Older reports
+  are handled by a one-off backfill (`--backfill-days N`, or a `BACKFILL_DAYS` file). It also serves the full download
+  queue (`/queue`), What's coming (`/coming`, `/missing`, `/missing/search`) and Bazarr subtitles
+  (`/subtitles`, search, sync, then a Plex refresh). Actions need a Plex token the server accepts.
 - **Phones and tablets** (docs/WEB.md, "Phones and tablets"): the web build has its own layout under
   1100 px wide and on touch tablets: bottom tabs (Movies, TV Shows, Live TV, Search), Settings under
   the profile picture, a full-bleed hero and rows that scroll sideways, Library with sort, filters and
