@@ -99,7 +99,7 @@ export function createSeerr(model) {
     Object.assign(t, extra || {});
     return r;
   };
-  request(find('movie', 'Metropolis'), 1, 1, 0.2, null, { status: 2 });
+  request(find('movie', 'Metropolis'), 1, 1, 0, null, { status: 2 }); // just now: "today" at any time of day
   request(find('movie', 'The Kid'), 1, 2, 2, null, { status: 3, downloads: [{ title: 'The.Kid.1921.1080p', status: 'downloading', size: 4e9, sizeLeft: 2.2e9, timeLeft: '00:18:00' }] });
   request(find('tv', 'NASA ScienceCasts'), 1, 1, 1, [3]);
   const flat = request(find('tv', 'Flatland Stories'), 1, 2, 9, [1, 2], { status: 4, seasons: find('tv', 'Flatland Stories').seasons.map((s) => ({ ...s, status: s.seasonNumber === 1 ? 5 : s.seasonNumber === 2 ? 3 : 1 })) });

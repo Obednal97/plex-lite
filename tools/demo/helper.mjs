@@ -202,7 +202,7 @@ export function demoData(model, now, img) {
     tv(sc, lastSc.index, lastSc._episodes.length, lastSc._episodes[lastSc._episodes.length - 1].title, at(-1, 18), { hasFile: true }),
     tv(nx, 6, 1, 'Return to the Moon', at(0, 21), { seasonPremiere: true }),
     tv(cam, 1, 4, 'Llama Lift-Off', at(3, 20)),
-    tv(nx, 6, 2, 'Artemis in Orbit', at(7, 21)),
+    tv(nx, 6, 2, 'Artemis in Orbit', at(6, 21)), // (day 7 at 21:00 is past the window before 21:00)
     // a show that isn't in the library: never shown
     { ...tv(cam, 1, 1, 'Pilot', at(1, 20)), tvdbId: 1, tmdbId: 1, title: 'A Show Not In Plex', year: 2026 },
     film('wing-it', wing.title, wing.year, day(-1), 'digital', { tmdbId: Number(ids(wing).tmdb), hasFile: true, posterUrl: img('poster', 'wing-it'), fanartUrl: img('art', 'wing-it') }),
