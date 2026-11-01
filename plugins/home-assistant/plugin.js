@@ -257,7 +257,8 @@
 
   var mode = new HA.MovieMode({
     config: function () { return plugCtx ? HA.config(plugCtx) : { movieMode: false }; },
-    send: function (ev) { if (plugCtx) send(plugCtx, ev).then(null, function () {}); },
+    // (a webhook removed while the lights were down: nothing to send to, and no error to keep)
+    send: function (ev) { if (plugCtx && HA.usable(HA.config(plugCtx), PL.isWeb)) send(plugCtx, ev).then(null, function () {}); },
     hidden: function () { return !!PL.leaving || (typeof document !== 'undefined' && !!document.hidden); },
   });
   HA._mode = mode;
@@ -368,6 +369,8 @@
     },
     onPlayback: function (ev, ctx) {
       plugCtx = ctx;
+      // not set up (or, in a browser, no remote webhook): nothing at all, not even Movie mode's state
+      if (!HA.usable(HA.config(ctx), PL.isWeb)) return;
       mode.onEvent(ev);
     },
   });

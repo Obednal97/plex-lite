@@ -298,3 +298,28 @@ test('plugin: during playback a failure is only logged and kept for the settings
   const st = JSON.parse(store['plugin.home-assistant.status']);
   assert.equal(st.error.message, 'No answer from Home Assistant');
 });
+
+test('plugin: not set up, playback changes nothing (no status written, the lights aren\'t "down")', async () => {
+  let posted = 0;
+  const env = load({ fetchImpl: () => { posted++; return Promise.resolve({}); } });
+  const { PL, store, HA } = env;
+  const s = PL.plugins.playbackSession();
+  s.playing('901', { type: 'movie', title: 'Sintel' }, false, 0);
+  env.advance(200);
+  s.stopped(1000);
+  env.advance(6000);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(posted, 0);
+  assert.equal(store['plugin.home-assistant.status'], undefined, 'no "Not set up" error kept');
+  assert.equal(HA._mode.dimmed, false);
+  // a browser without a remote webhook is the same, a local one only works on the TV
+  const web = load({ isWeb: true, fetchImpl: () => { posted++; return Promise.resolve({}); } });
+  web.PL.storage.set('plugin.home-assistant.config', { localUrl: LOCAL, movieMode: true, delaySec: 0 });
+  const w = web.PL.plugins.playbackSession();
+  w.playing('901', { type: 'movie', title: 'Sintel' }, false, 0);
+  web.advance(200);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(posted, 0);
+  assert.equal(web.store['plugin.home-assistant.status'], undefined);
+  assert.equal(web.HA._mode.dimmed, false);
+});
