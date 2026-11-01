@@ -562,11 +562,13 @@
   // ---- ctx: what a plugin may use ---------------------------------------------------------------
 
   // Every function of a ctx marks the plugin as in use when called in a user task (see Late answers).
+  // (Only the ctx's own groups: ui.KEY is the app's shared key table, left as it is.)
+  var GROUPS = { ui: 1, storage: 1, plex: 1 };
   function touching(obj, st) {
     Object.keys(obj).forEach(function (k) {
       var v = obj[k];
       if (typeof v === 'function') obj[k] = function () { touch(st); return v.apply(this, arguments); };
-      else if (v && typeof v === 'object') touching(v, st);
+      else if (v && typeof v === 'object' && GROUPS[k]) touching(v, st);
     });
     return obj;
   }
