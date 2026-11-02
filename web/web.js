@@ -34,15 +34,38 @@
 
   // On-screen key names follow the input mode: web/web-input.js sets PL.keyLabels.
 
-  // ---- The stage: 1920 px wide, as tall as the window (docs/WEB.md, "The window") ---------------
+  // ---- The stage (docs/WEB.md, "The window") -----------------------------------------------------
 
-  // The layout is 1920 stage px wide, scaled to the window's width, and its height follows the
-  // window (--stage-h, PL.ui.SCREEN_H): no bars. Wider than 1920x900 (ultra-wide, or a short
-  // window) the stage stays 900 tall with bars at the sides; narrower than 4:3 it falls back to the
-  // 1920x1080 stage letterboxed (phones and narrow windows get web/touch/ instead).
-  var MIN_H = 900;
-  var MAX_H = 1440;
-  web.stage = { w: 1920, h: 1080, scale: 1 };
+  // Two ways to fit the stage to the window (web/web-stage.js): the desk view on a laptop or desktop
+  // with a mouse (a fixed 0.6 CSS px per stage px, the stage as wide and tall as the window holds, so
+  // browser zoom and window size work as on any site), and the 10-foot view (the TV's 1920 px wide
+  // stage scaled to the window's width) in remote mode, under the touch layer and for full-screen
+  // stage screens such as the player. The size goes to --stage-w / --stage-h (web/web.css) and
+  // PL.ui.SCREEN_W / SCREEN_H, and 'pl-stageresize' fires on document when it changes.
+  var NARROW = 1100; // web/touch/logic.js: below this the phone and tablet layer takes over
+  web.stage = { w: 1920, h: 1080, scale: 1, desk: false };
+
+  // The player keeps the 10-foot view: it fills the screen, and its bar and menus are laid out for
+  // 1920 px.
+  function fullScreen(screen) {
+    return !!screen && !!PL.Player && screen instanceof PL.Player;
+  }
+
+  function deskWanted(w) {
+    if (w < NARROW || !PL.input || PL.input.mode() === 'remote') return false;
+    var T = PL.touch;
+    if (T && (T.engaged || T.visible)) return false;
+    return !fullScreen(underneath());
+  }
+  // The screen that fills the stage: the top one, or the one under overlays (a menu over the player).
+  // incoming: a screen about to be pushed, so it is built (and its art asked for) at its own fit.
+  var incoming = null;
+  function underneath() {
+    if (incoming && !incoming.overlay) return incoming;
+    var stack = (PL.app && PL.app.stack) || [];
+    for (var i = stack.length - 1; i >= 0; i--) if (!stack[i].overlay) return stack[i];
+    return null;
+  }
 
   // The layout viewport, not innerWidth: a phone's browser zooms out to show the 1920 px body
   // before it is scaled, which makes innerWidth that wide too.
@@ -54,27 +77,25 @@
     }
     var w = document.documentElement.clientWidth || window.innerWidth;
     var h = document.documentElement.clientHeight || window.innerHeight;
-    var s = w / 1920;
-    var H = h / s;
-    if (H < MIN_H) {
-      H = MIN_H;
-      s = h / MIN_H;
-    } else if (H > MAX_H) {
-      H = 1080;
-      s = Math.min(w / 1920, h / 1080);
+    var desk = deskWanted(w);
+    var st = PL.webStage.size(w, h, desk);
+    var changed = st.h !== web.stage.h || st.w !== web.stage.w;
+    web.stage = { w: st.w, h: st.h, scale: st.scale, desk: desk };
+    PL.stageScale = st.scale;
+    if (PL.ui) {
+      PL.ui.SCREEN_W = st.w;
+      PL.ui.SCREEN_H = st.h;
     }
-    H = Math.round(H);
-    var x = Math.round((w - 1920 * s) / 2);
-    var y = Math.max(0, Math.round((h - H * s) / 2));
-    var changed = H !== web.stage.h;
-    web.stage = { w: 1920, h: H, scale: s };
-    PL.stageScale = s;
-    if (PL.ui) PL.ui.SCREEN_H = H;
-    document.documentElement.style.setProperty('--stage-h', H + 'px');
-    document.body.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + s + ')';
+    var root = document.documentElement;
+    root.style.setProperty('--stage-w', st.w + 'px');
+    root.style.setProperty('--stage-h', st.h + 'px');
+    // the Live TV guide's extra width, up to the hour it has loaded beyond the TV's two (web/web.css)
+    root.style.setProperty('--guide-ex', Math.min(st.w - 1920, 700) + 'px');
+    root.classList.toggle('pl-desk', desk);
+    document.body.style.transform = 'translate(' + st.x + 'px,' + st.y + 'px) scale(' + st.scale + ')';
     if (changed) {
       var ev;
-      try { ev = new CustomEvent('pl-stageresize', { detail: { h: H } }); } catch (e) { ev = null; }
+      try { ev = new CustomEvent('pl-stageresize', { detail: { w: st.w, h: st.h } }); } catch (e) { ev = null; }
       if (ev) document.dispatchEvent(ev);
     }
   }
@@ -82,6 +103,87 @@
   window.addEventListener('resize', PL.rafThrottle(fit));
   fit(); // this script runs at the end of <body>: scale before the first layout
   document.addEventListener('DOMContentLoaded', fit);
+  // the fit depends on the input mode (remote: the 10-foot view) and on the screen on top (the
+  // player): look again after each change, before the browser draws
+  PL.input.on(function () { fit(); });
+  ['push', 'pop', 'replaceTop', 'setRoot'].forEach(function (name) {
+    var orig = PL.app[name];
+    PL.app[name] = function (screen) {
+      if (screen && name !== 'pop') {
+        incoming = screen;
+        fit();
+        incoming = null;
+      }
+      var out = orig.apply(this, arguments);
+      fit();
+      return out;
+    };
+  });
+
+  // ---- Artwork at the size it is drawn ---------------------------------------------------------------
+
+  // Plex's photo transcoder is asked for a card's size in stage px, the TV's 1:1. In a browser that
+  // is too small on a Retina screen (or a big window): web/web-stage.js says how much bigger to ask,
+  // in steps, from the stage's scale and devicePixelRatio. The TV never loads this. The phone and
+  // tablet layer asks in device pixels already (web/touch/kit.js), so it is left alone.
+  var plexImage = PL.plex.image;
+  PL.plex.image = function (path, width, height, extra) {
+    var T = PL.touch;
+    if (T && (T.engaged || T.visible)) return plexImage.apply(this, arguments);
+    var k = PL.webStage.imageScale(width, !!(extra && extra.blur), web.stage.scale, window.devicePixelRatio || 1,
+      document.documentElement.clientWidth || window.innerWidth);
+    return plexImage.call(this, path, width * k, height * k, extra);
+  };
+
+  // ---- A wider stage: grids take more columns, rows fill the width ------------------------------------
+
+  // Grids are built with the TV's column count (6 across 1920 px); a wider stage adds a column for
+  // every card pitch it gains. The focus stays on the same title.
+  var ui = PL.ui;
+  var gridRender = ui.Grid.prototype.render;
+  ui.Grid.prototype.render = function () {
+    if (this.tvCols == null) this.tvCols = this.cols;
+    var cols = this.tvCols + Math.max(0, Math.floor((ui.SCREEN_W - 1920) / this.geo.pitch));
+    if (cols !== this.cols) {
+      var self = this;
+      Object.keys(this.nodes).forEach(function (k) { self.inner.removeChild(self.nodes[k]); });
+      this.nodes = {};
+      this.cols = cols;
+      this.lastScroll = null;
+    }
+    return gridRender.apply(this, arguments);
+  };
+
+  // A page draws the rows within `keep` of the focused one (3: what a 1080 px screen shows); a taller
+  // stage shows more of them, so it keeps one more for every 300 px it gains.
+  var vstackLayout = ui.VStack.prototype.layout;
+  ui.VStack.prototype.layout = function () {
+    if (this.tvKeep === undefined) this.tvKeep = this.opts.keep || 3;
+    this.opts.keep = this.tvKeep + Math.max(0, Math.ceil((ui.SCREEN_H - 1080) / 300));
+    return vstackLayout.apply(this, arguments);
+  };
+
+  // After the stage changes width, the rows and grids of the screens on the stack draw the cards the
+  // new width shows (the TV's never changes, so they only draw on a move).
+  function redraw(o, seen) {
+    if (!o || typeof o !== 'object' || seen.indexOf(o) >= 0) return;
+    seen.push(o);
+    if (o instanceof ui.Grid) { o.render(); return; }
+    if (o instanceof ui.Shelf) { if (o.attached) o.render(); return; }
+    if (o instanceof ui.VStack) {
+      o.zones.forEach(function (z) { redraw(z, seen); });
+      o.layout();
+    }
+  }
+  document.addEventListener('pl-stageresize', function () {
+    (PL.app.stack || []).forEach(function (s) {
+      var seen = [];
+      [s, s.mode].forEach(function (o) {
+        if (!o || typeof o !== 'object') return;
+        Object.keys(o).forEach(function (k) { redraw(o[k], seen); });
+      });
+    });
+  });
 
   web.toggleFullscreen = function () {
     var d = document;

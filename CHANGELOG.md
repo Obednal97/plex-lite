@@ -11,6 +11,17 @@ releases are fixes only.
 
 ### Changed
 
+- **The web app reads like a web page on laptops and desktops.** With a mouse and keyboard the stage
+  is no longer the TV's 1920 px scaled to the window's width: one stage px is 0.6 CSS px and the
+  stage is as wide and tall as the window holds, so text and cards are a desktop size (body text about
+  16 px on a 1440x900 laptop instead of 20), a wider window shows more cards and grid columns, and
+  browser zoom works as on any site instead of being undone. Remote mode, TV browsers and the player
+  keep the 10-foot view. See docs/WEB.md, "The window".
+- **Sharp artwork in browsers.** On the web, posters, stills and the hero and details backgrounds
+  are fetched at the size they are drawn on this screen (the stage's scale × the screen's pixel
+  density, in a few steps), instead of the TV's size: on a Retina laptop the background was fetched
+  at 1280 px wide for a 2880 px wide window, cards at about half their drawn resolution.
+
 - **Overseerr has its own page.** Settings → Plugins → Overseerr opens a page (on the TV and on
   phones and tablets) instead of a menu: Your requests, Downloads, the Trending/Popular/Upcoming rows
   switch, who you're signed in as (and whether you can report problems), Sign in again, Sign out and

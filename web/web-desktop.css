@@ -1,6 +1,6 @@
 /* Laptop and desktop (web/web-desktop.js, docs/WEB.md "Mouse and keyboard"): the Back [Esc]
-   button, tooltips and the "?" shortcuts overlay. Web build only; sizes are stage px (the window
-   shows them at window width / 1920). */
+   button, tooltips and the "?" shortcuts overlay. Web build only; sizes are stage px (web/web.js
+   scales the stage to the window; --stage-w is its width). */
 
 /* ---- Keycaps in web chrome (lighter than the player's outlined ones) ---------------------------- */
 
@@ -40,10 +40,10 @@
 
 /* ---- The "?" shortcuts overlay (D4) ------------------------------------------------------------------ */
 
-.web-keys-screen { position: absolute; left: 0; top: 0; width: 1920px; height: var(--stage-h); z-index: 50; }
-.web-keys-scrim { position: absolute; left: 0; top: 0; width: 1920px; height: var(--stage-h); background: rgba(5, 5, 8, 0.62); }
+.web-keys-screen { position: absolute; left: 0; top: 0; width: var(--stage-w); height: var(--stage-h); z-index: 50; }
+.web-keys-scrim { position: absolute; left: 0; top: 0; width: var(--stage-w); height: var(--stage-h); background: rgba(5, 5, 8, 0.62); }
 .web-keys {
-  position: absolute; left: 262px; top: calc(var(--stage-h) / 2 - 426px); width: 1396px; height: 852px; box-sizing: border-box;
+  position: absolute; left: calc(262px + var(--stage-dx)); top: calc(var(--stage-h) / 2 - 426px); width: 1396px; height: 852px; box-sizing: border-box;
   padding: 58px 58px 0; border-radius: 40px; color: var(--text);
   background: linear-gradient(180deg, rgba(58, 58, 64, 0.97), rgba(36, 36, 40, 0.98));
   box-shadow: inset 0 0 0 1px var(--rim), inset 0 1px 0 var(--rim-light), 0 30px 80px rgba(0, 0, 0, 0.5);

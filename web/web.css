@@ -1,15 +1,27 @@
-/* The web build only (tools/build-web.mjs). The app is drawn on a stage 1920 px wide (css/app.css);
-   web/web.js scales the body to the window's width and sets the stage's height to fill the window
-   (--stage-h, 900 to 1440; 1080 on the TV). */
-:root { --stage-h: 1080px; }
+/* The web build only (tools/build-web.mjs). The app is drawn on a stage (css/app.css: 1920x1080 on
+   the TV). web/web.js scales it to the window and sets its size: --stage-w (1920, or wider on a
+   laptop or desktop: the stage is as wide as the window holds at 0.6 CSS px per stage px) and
+   --stage-h (as tall as the window holds). Everything laid out for the TV's 1920 px follows here:
+   what spans the screen takes the stage's size, what is centred moves by half the extra width
+   (--stage-dx), and what sits at the right edge by all of it (--stage-ex). */
+:root {
+  --stage-w: 1920px; --stage-h: 1080px;
+  --stage-dx: calc((var(--stage-w) - 1920px) / 2); --stage-ex: calc(var(--stage-w) - 1920px);
+}
 html { width: 100%; height: 100%; background: var(--ground, #2b2b2e); }
 body { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 
-/* ---- Full window: what spans the screen takes the stage's height --------------------------------- */
+/* ---- Full window: what spans the screen takes the stage's size ------------------------------------ */
 
 body, #app, .backdrop, .backdrop-shade, .screens, .screen, .grid, .sheet-scrim, .player video, .player-veil,
 .search-results, .lg, .live, .live-guide, .live-wedge, .lb, .lb-scrim, .lb-panel, .lw, .osdl-screen { height: var(--stage-h); }
-.backdrop-ambient .backdrop-img, .backdrop-detail .backdrop-img { height: var(--stage-h); object-fit: cover; }
+body, #app, .backdrop, .backdrop-shade, .screens, .screen, .tabbar, .chip-row, .vstack, .shelf, .grid, .sheet-scrim,
+.player video, .player-veil, .search-results, .loading, .player-status, .osd, .osd-scrim, .osd-scrim-tall, .osd-upper,
+.lg, .lg-ruler, .lg-grid, .lg-fade, .lg-status, .live, .live-banner, .live-guide, .lb, .lb-scrim, .lw, .lw-clip, .lw-empty,
+.az-flash, .osdl-screen, .osdl-view, .osdl-list, .osp-screen { width: var(--stage-w); }
+.backdrop-ambient .backdrop-img, .backdrop-detail .backdrop-img, .backdrop-hero .backdrop-img, .backdrop-hero .backdrop-shade {
+  width: var(--stage-w); height: var(--stage-h); object-fit: cover;
+}
 .player { background: #000; }
 /* what fills down to the bottom from a fixed top */
 .lg-grid, .lg-chans, .lg-progs, .lg-now { height: calc(var(--stage-h) - 506px); }
@@ -17,13 +29,18 @@ body, #app, .backdrop, .backdrop-shade, .screens, .screen, .grid, .sheet-scrim, 
 .osdl-view { height: calc(var(--stage-h) - 290px); }
 .live-guide-clip { height: calc(var(--stage-h) - 248px); }
 .sheet { max-height: calc(var(--stage-h) - 224px); }
-/* Search's results clip (js/screens/search.js sets its size inline, from the height at the time) */
-.search-clip { height: var(--stage-h) !important; }
+/* Search's results clip (js/screens/search.js sets its size inline, from the size at the time) */
+.search-clip { height: var(--stage-h) !important; width: calc(var(--stage-w) - 600px) !important; }
+.search-status { width: calc(var(--stage-w) - 740px); }
 /* the home hero sits on the shelves below it, which are placed from the top */
 .hero { bottom: calc(500px + var(--stage-h) - 1080px); }
 /* centred on the screen */
 .loading, .az-flash { top: calc(var(--stage-h) / 2 - 70px); }
 .player-status { top: calc(var(--stage-h) / 2 - 60px); }
+.panel { margin-left: var(--stage-dx); }
+.center-card { margin-left: var(--stage-dx); }
+/* at the right edge */
+.az-rail { margin-left: var(--stage-ex); }
 
 /* Buttons under the explanation cards (web/web.js) */
 .web-signin-buttons { margin: 8px 0 28px; }
@@ -48,3 +65,13 @@ html body, html body input { font-family: "Inter", "Helvetica Neue", Arial, sans
    entry's hint stays: it is the only Save / Cancel there is until the touch layout adds buttons. */
 html[data-nav="touch"]:not([data-input="remote"]) .osd-hints,
 html[data-nav="touch"]:not([data-input="remote"]) .lb-hints { display: none; }
+
+/* ---- Wider stage: the rest of what the TV lays out for 1920 px ---------------------------------------- */
+
+/* Settings and plugin pages: the title lines up with the centred panel */
+.settings .page-title, .osp-title, .osp-line { margin-left: var(--stage-dx); }
+/* Overseerr's list rows span the screen less the margins */
+.osdl-row { width: calc(var(--stage-w) - 192px); }
+/* The Live TV guide shows later programmes in the extra width, up to the hour beyond the two the TV
+   shows that js/screens/livetv.js loads and draws (--guide-ex: web/web.js) */
+.lg-ruler-clip, .lg-progs { width: calc(1412px + var(--guide-ex, 0px)); }
