@@ -37,6 +37,7 @@ const WEB = {
   'web/vendor/hls.js/hls.light.min.js': 'web/vendor/hls.js/hls.light.min.js', 'web/vendor/hls.js/LICENSE': 'web/vendor/hls.js/LICENSE',
   'web/signed-in.html': 'signed-in.html', 'web/signed-in.js': 'signed-in.js', 'web/signed-in.css': 'signed-in.css',
   'web/robots.txt': 'robots.txt', 'web/firstrun-web.css': 'web/firstrun-web.css',
+  'web/img/wall-2x.jpg': 'web/img/wall-2x.jpg',
   'web/fonts/inter.css': 'web/fonts/inter.css', 'web/fonts/inter-latin.woff2': 'web/fonts/inter-latin.woff2',
   'web/fonts/inter-latin-ext.woff2': 'web/fonts/inter-latin-ext.woff2', 'web/fonts/OFL.txt': 'web/fonts/OFL.txt',
 };

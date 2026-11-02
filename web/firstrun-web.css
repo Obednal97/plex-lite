@@ -3,8 +3,9 @@
    CSS: the TV never loads it (tools/check.mjs lets it off the Chrome 53 rules).
 
    Three layouts, picked in js/screens/firstrun.js (fitWeb) and set as a class with a zoom factor:
-     .fr-l-desk   the boards at 1440x900: a left column over the wall; --frz scales it from small
-                  laptop windows (0.7) to 1920 and ultrawide screens (1.2+), --frmx widens the margin
+     .fr-l-desk   the boards at 1440x900: a left column over the wall, drawn at board size like a web
+                  page (--frz: the size setting; smaller only in windows that can't hold the boards,
+                  down to 0.7; larger on very wide screens), --frmx widens the margin
      .fr-l-stack  portrait phones and tablets: a block at the bottom (welcome), or a column with the
                   buttons at the bottom; the sheets lose their glass and fill the screen
      .fr-l-short  phones in landscape (height <= 500): a compact left column; other views scroll */
@@ -30,6 +31,11 @@ html.fr-on #app { display: none; }
 .fr-web .fr-wall-soft {
   width: max(100vw + 120px, 198vh); height: calc(max(100vw + 120px, 198vh) / 1.694);
   left: calc(50% - max(100vw + 120px, 198vh) / 2); top: calc(50% - max(100vw + 120px, 198vh) / 3.388);
+}
+/* a high-density screen gets the wall composed at 1.5x (web/img/wall-2x.jpg, tools/make-wall.mjs
+   --hidpi): the TV's 2400 px wall is drawn across up to ~3600 device pixels on a Retina laptop */
+@media (min-resolution: 1.5dppx), (-webkit-min-device-pixel-ratio: 1.5) {
+  .fr-l-desk .fr-wall-sharp { background-image: url("img/wall-2x.jpg"); }
 }
 @media (prefers-reduced-motion: reduce) {
   .fr-web .fr-wall-img { animation: none !important; }

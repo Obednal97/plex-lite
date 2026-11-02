@@ -12,6 +12,7 @@ and sign-in screens, a pre-blurred copy behind the later ones.
 | `web/firstrun-web.css` | The web build's full-window, responsive layout. Modern CSS: the TV never loads it, and `tools/check.mjs` lets it off. |
 | `web/web-signin.js` | Plex's own sign-in page in a popup (or this tab when popups are blocked). |
 | `img/firstrun/` | The wall (`wall.jpg` 2400 px, `wall-phone.jpg`, the blurred `wall-soft.jpg`) from `tools/make-wall.mjs`, and the wordmark. |
+| `web/img/wall-2x.jpg` | The web build's wall for high-density desktop screens (3600 px, `tools/make-wall.mjs --hidpi`); the TV never loads it. |
 | `js/vendor/qrcodegen.js` | Project Nayuki's QR code generator (MIT), compiled to ES2015. |
 | `web/fonts/` | Inter (OFL), the web build's typeface. The TV keeps LG Display. |
 
@@ -84,7 +85,7 @@ unscaled and hidden while it shows). `PL.firstrunLogic.webLayout` picks one of t
 
 | Layout | When | |
 | --- | --- | --- |
-| `desk` | otherwise | The 1440×900 boards, zoomed 0.7 to 1.45 by the window; the margin widens on wide screens (ultrawide 2560×1080: 160 px). |
+| `desk` | otherwise | The 1440×900 boards at their own size, like a web page (browser zoom works; Settings → Size on this screen scales them): smaller only when the window can't hold the code view (about 1300×760, down to 0.7), a little larger past 2496 px wide; the margin widens on wide screens (ultrawide 2560×1080: 160 px). |
 | `stack` | portrait below 1024 px wide, or under 700 px | Phones: the welcome block at the bottom; codes, profiles (2×2), PIN and the sheets in one column with the buttons at the bottom; tablets zoom it up to 1.35. |
 | `short` | landscape, 500 px tall or less | A compact left column on the welcome screen; other views scroll. |
 
@@ -100,5 +101,6 @@ sheets use the desktop sizes at 1.25×. The wall is one layer drifting by `trans
 `tools/make-wall.mjs` composes the wall from the demo library's posters (`tools/demo`, Blender open
 movies under CC BY / CC BY-SA and public-domain classics) with ImageMagick. The welcome screen (and
 on the TV, which has none, the code screen) credits them in a line and THIRD-PARTY-NOTICES.md lists each poster. Images: `wall.jpg` 442 KB,
-`wall-phone.jpg` 140 KB (phones), `wall-soft.jpg` 12 KB. Inter: 48 KB (Latin; Latin Extended 85 KB,
+`wall-phone.jpg` 140 KB (phones), `wall-soft.jpg` 12 KB, and on the web only `wall-2x.jpg` 910 KB
+(high-density desktop screens). Inter: 48 KB (Latin; Latin Extended 85 KB,
 fetched only for those characters).

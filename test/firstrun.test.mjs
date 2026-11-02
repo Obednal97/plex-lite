@@ -248,8 +248,18 @@ test('web layout and zoom follow the window', () => {
   assert.equal(L.webLayout(1024, 768), 'desk');
   assert.equal(L.webLayout(2560, 1080), 'desk');
   assert.equal(L.webZoom('desk', 1440, 900), 1);
-  assert.equal(L.webZoom('desk', 2560, 1080), 1.2);
+  // board size like any web page: a bigger window doesn't make it bigger (browser zoom does)...
+  assert.equal(L.webZoom('desk', 1920, 1080), 1);
+  assert.equal(L.webZoom('desk', 1800, 1125), 1, '1440x900 at 80% zoom: smaller on screen');
+  // ...until a very wide screen, and smaller only when the window can't hold the code view
+  assert.equal(L.webZoom('desk', 2560, 1080), 1.026);
+  assert.equal(L.webZoom('desk', 1152, 720), 0.886, '1440x900 at 125% zoom: still larger on screen');
   assert.equal(L.webZoom('desk', 800, 500), 0.7, 'never below 0.7');
+  // the size setting (1 = the default), within what the window holds
+  assert.equal(L.webZoom('desk', 1920, 1080, 1.2), 1.2);
+  assert.equal(L.webZoom('desk', 1440, 900, 1.3), 1.108);
+  assert.equal(L.webZoom('desk', 1920, 1080, 0.8), 0.8);
+  assert.equal(L.webZoom('desk', 1920, 1080, NaN), 1);
   assert.equal(L.webZoom('stack', 390, 844), 1);
   assert.equal(L.webZoom('short', 844, 390), 1);
   assert.equal(L.webMargin('desk', 1440, 1), 96);

@@ -317,12 +317,16 @@
 
   function clampTo(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-  // How far to zoom the layout's own board sizes for this window.
-  L.webZoom = function (layout, w, h) {
+  // How far to zoom the layout's own board sizes for this window. The desktop layout is drawn at its
+  // board size like any web page (so the browser's zoom and the window's size work as on other sites,
+  // as in the app's desk view, web/web-stage.js): `base` is the size setting (1 = the default),
+  // growing only on very wide screens, and smaller only when the window can't hold the widest board
+  // (the code view, about 1300x760).
+  L.webZoom = function (layout, w, h, base) {
     var z;
     if (layout === 'stack') z = clampTo(Math.min(w / 390, h / 844), 1, 1.35);
     else if (layout === 'short') z = clampTo(Math.min(w / 844, h / 390), 1, 1.2); // never below: 44 px targets
-    else z = clampTo(Math.min(w / 1440, h / 900), 0.7, 1.45);
+    else z = clampTo(Math.min((base > 0 ? base : 1) * Math.max(1, w / 2496), w / 1300, h / 760), 0.7, 1.45);
     return Math.round(z * 1000) / 1000;
   };
 
