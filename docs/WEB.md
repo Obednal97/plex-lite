@@ -18,7 +18,7 @@ and on the TV `PL.isWeb` is false, so it behaves exactly as before.
 | `web/env.js` | Marks the platform. |
 | `web/web-input.js` | The input mode: remote, mouse and keyboard, or touch (see [Input modes](#input-modes)). |
 | `web/web-desktop.js` | Laptop and desktop: the Back [Esc] button, tooltips that name their key, the `/` `M` `N` `?` keys and the `?` shortcuts overlay. |
-| `web/web-stage.js` | The stage's size for a window and how big to fetch artwork (pure, tested in `test/web-stage.test.mjs`; see [Keyboard, mouse and window](#keyboard-mouse-and-window)). |
+| `web/web-stage.js` | The stage's size for a window, the Size on this screen setting and how big to fetch artwork (pure, tested in `test/web-stage.test.mjs`; see [Keyboard, mouse and window](#keyboard-mouse-and-window)). |
 | `web/web.js` | Who we are to Plex (browser and OS), the stage fitted to the window and artwork at the size it is drawn, keyboard and mouse for the remote's buttons, the browser's Back button, Chrome's local-network permission, Settings rows, ending sessions when the page goes away. |
 | `web/web-player.js` | The player with a mouse: transport row, volume, full screen, tooltips, hiding after 3 s, M and N (see [Player with a mouse](#player-with-a-mouse)). |
 | `web/web-cards.js` | Cards and rows with a mouse: hover cards with ▶ and "…", row arrows, the hero following the mouse (see [Cards and rows with a mouse](#cards-and-rows-with-a-mouse)). |
@@ -188,37 +188,59 @@ window (`transform: scale` on the page, so text is redrawn at the final size). T
 (`web/web-stage.js`, applied by `web/web.js`):
 
 - **Desk** (a laptop or desktop: the mouse and keyboard mode, 1100 px wide or more). One stage px is
-  0.6 CSS px, like any web page, and the stage is as wide and as tall as the window then holds: a
-  1440x900 window gets a 2400x1500 stage, 1920x1080 gets 3200x1800. Body text is about 16 px, a
-  poster 150 px wide. A bigger window, or zooming the browser out, shows more (rows show more cards,
-  the library grid adds columns, more rows fit); zooming in makes everything bigger, as on any site.
-  There are no bars. Limits: never narrower than 1920 or shorter than 900 stage px (the stage scales
-  down to fit instead: a 1152 px window, or 1440 at 125% zoom, shows the TV's 1920 width), and past
-  3840 px wide it scales up with the window instead of growing (big monitors).
-- **10-foot** (remote mode, a TV or console browser, Settings → Controls → Remote; the player; stage
-  screens shown over the phone and tablet layer). The TV's 1920 px wide stage is scaled to the
-  window's width and its height follows the window: a 1440x900 window gets a 1920x1200 stage. Below
-  900 stage px (an ultra-wide or very short window) the stage stays 900 tall with bars at the sides;
-  taller than 1440 (narrower than 4:3) it falls back to the 1920x1080 stage fitted with bars. The
-  player always uses this fit: it fills the window, and its bar and menus are laid out for 1920 px.
+  0.65 CSS px by default, like any web page, and the stage is as wide and as tall as the window then
+  holds: a 1440x900 window gets a 2215x1384 stage, 1920x1080 gets 2954x1662. Body text is about
+  17 px, a poster 163 px wide. A bigger window, or zooming the browser out, shows more (rows show
+  more cards, the library grid adds or drops columns, more rows fit); zooming in makes everything
+  bigger, as on any site. There are no bars. Limits: never narrower than 1600 or shorter than 900
+  stage px (the stage scales down to fit instead; below 1920 the library grid drops to 5 or 4
+  columns and a few side-by-side layouts narrow, `html.pl-narrow`), and past 3840 px wide it scales
+  up with the window instead of growing (big monitors). The player uses this fit too: its bar, times,
+  tabs and panes span the stage less the margins and its menus sit over their icons
+  (`js/screens/player.js` and `live-osd.js` lay the bar out from `PL.ui.SCREEN_W`).
+- **10-foot** (remote mode, a TV or console browser, Settings → Controls → Remote; stage screens
+  shown over the phone and tablet layer). The TV's 1920 px wide stage is scaled to the window's width
+  and its height follows the window: a 1440x900 window gets a 1920x1200 stage. Below 900 stage px
+  (an ultra-wide or very short window) the stage stays 900 tall with bars at the sides; taller than
+  1440 (narrower than 4:3) it falls back to the 1920x1080 stage fitted with bars.
+
+**Size on this screen** (Settings → This browser, in the desk view only: not in remote mode, under
+the phone and tablet layer or on the TV) sets the desk view's size on this device: 77% to 131% of
+the default (0.5 to 0.85 CSS px per stage px) in steps of 0.05, kept in this browser's
+`localStorage` (`pl.deskScale`) and never synced. Left and Right step it, the track takes a click or
+a drag, Enter or Reset goes back to 100%. It applies at once, the whole page being the preview, and
+Settings keeps its place and focus. The sign-in screens follow it too. On a small window the stage
+can't go below 1600 px wide, so the largest sizes stop growing there (on a 1280 px window, 123% is
+the most). `web/web-stage.js` has the rules (`density`, `stepDensity`, `percent`, tested in
+`test/web-stage.test.mjs`); a stored value that is not a number in range falls back to the
+default.
 
 `web/web.js` sets the size as `--stage-w` and `--stage-h` on `<html>` (`html.pl-desk` in the desk
 fit) and `PL.ui.SCREEN_W` / `SCREEN_H`, and fires `pl-stageresize` on `document` when it changes,
-after which the rows and grids on screen draw what the new size shows. `web/web.css` adapts what the
-TV lays out for 1920 px: what spans the screen takes the stage's size (backdrops, screens, rows, the
-player's video, the guide, sheets), what is centred moves by half the extra width (`--stage-dx`:
-Settings, message cards, the shortcuts overlay), what sits at the right edge by all of it
-(`--stage-ex`: the A–Z rail, the row arrows), the Live TV guide shows up to an hour more, and the
-home hero stays on the shelves below it. The TV's stage is always 1920x1080 and the TV app loads
-none of this.
+after which the rows and grids on screen draw what the new size shows and the player re-lays its
+bar. `web/web.css` adapts what the TV lays out for 1920 px: what spans the screen takes the stage's
+size (backdrops, screens, rows, the player's video, bar and tabs, the guide, sheets), what is
+centred moves by half the extra width (`--stage-dx`: Settings, message cards, the shortcuts
+overlay), what sits at the right edge by all of it (`--stage-ex`: the A–Z rail, the row arrows),
+the Live TV guide shows up to an hour more (or less on a narrow stage), and the home hero stays on
+the shelves below it. The TV's stage is always 1920x1080, `PL.ui.SCREEN_W` stays 1920 there, and
+the TV app loads none of `web/`.
+
+**The sign-in screens** (welcome, sign-in, the code, Who's watching, PIN) are drawn outside the
+stage ([docs/FIRSTRUN.md](FIRSTRUN.md)) and get the same treatment: on a laptop or desktop their
+boards are drawn at their own size like a web page (so browser zoom works and a bigger window
+doesn't make them bigger), scaled by Size on this screen, smaller only in a window that can't hold
+them (down to 0.7) and a little larger on very wide screens. On a high-density screen the poster
+wall behind them is `web/img/wall-2x.jpg` (3600 px, `tools/make-wall.mjs --hidpi`) instead of the
+TV's 2400 px `wall.jpg`. Phones keep their own layout.
 
 **Artwork.** Plex's photo transcoder is asked for each card's size in stage px, which is right on
 the TV. In a browser a stage px is drawn at the stage's scale × `devicePixelRatio` device pixels, so
 on the web `PL.plex.image` asks for that much more (in steps of 1, 1.25, 1.5, 2, 2.5 and 3, so the
-server's and the browser's caches still hit; never less than the TV): 1.25× on a Retina laptop, 1.5×
-for the player at 1440x900. Full-screen art (the home hero and details backgrounds, which the TV asks
-for at 1280 px wide) is fetched at the window's width in device pixels, in steps of 1280, 1920, 2560,
-3200 and 3840 (3200 on a 1440 px Retina window). Blurred backgrounds stay as they are. The phone and
+server's and the browser's caches still hit; never less than the TV): 1.5× on a Retina laptop at the
+default size. Full-screen art (the home hero and details backgrounds, which the TV asks for at
+1280 px wide) is fetched at the window's width in device pixels, in steps of 1280, 1920, 2560, 3200
+and 3840 (3200 on a 1440 px Retina window). Blurred backgrounds stay as they are. The phone and
 tablet layer sizes its own images in device pixels and is left alone.
 
 **Mouse and keyboard.** With a mouse (`PL.input.mode()` is `pointer`):

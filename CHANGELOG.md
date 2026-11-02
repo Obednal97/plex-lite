@@ -12,11 +12,18 @@ releases are fixes only.
 ### Changed
 
 - **The web app reads like a web page on laptops and desktops.** With a mouse and keyboard the stage
-  is no longer the TV's 1920 px scaled to the window's width: one stage px is 0.6 CSS px and the
+  is no longer the TV's 1920 px scaled to the window's width: one stage px is 0.65 CSS px and the
   stage is as wide and tall as the window holds, so text and cards are a desktop size (body text about
-  16 px on a 1440x900 laptop instead of 20), a wider window shows more cards and grid columns, and
-  browser zoom works as on any site instead of being undone. Remote mode, TV browsers and the player
-  keep the 10-foot view. See docs/WEB.md, "The window".
+  17 px on a 1440x900 laptop instead of 20), a wider window shows more cards and grid columns, and
+  browser zoom works as on any site instead of being undone. The player is desk-sized too, its bar
+  and tabs spanning the window. Remote mode and TV browsers keep the 10-foot view. See docs/WEB.md,
+  "The window".
+- **Settings → Size on this screen** (web, laptops and desktops): a slider from 77% to 131% that
+  makes everything smaller or larger on this device only. Left and Right step it, the mouse clicks or
+  drags it, Enter or Reset goes back to 100%; it applies as it moves.
+- **The sign-in and Who's watching screens** on a laptop or desktop are drawn at their own size like
+  a web page (browser zoom works; a big window no longer blows them up), follow the size setting, and
+  get a sharper poster wall on high-density screens.
 - **Sharp artwork in browsers.** On the web, posters, stills and the hero and details backgrounds
   are fetched at the size they are drawn on this screen (the stage's scale × the screen's pixel
   density, in a few steps), instead of the TV's size: on a Retina laptop the background was fetched
@@ -269,6 +276,11 @@ releases are fixes only.
 
 ### Fixed
 
+- **Mouse and Magic Remote: dim text on a focused row stays readable.** In pointer mode the keyboard
+  focus doesn't show, but a focused Settings row's value (and a sheet row's or chip's dimmer text)
+  kept the white plate's dark ink on the dark ground; under the pointer a focused row now gets the
+  plate. Also on the TV with the Magic Remote.
+- **Web: Live TV's Browse rail** no longer puts its heading under the Back [Esc] button.
 - **Overseerr on the TV notices a session that ended elsewhere** (signed out in Overseerr's own
   pages): it signs in again by itself, as the web build already did, instead of failing with
   "permission" errors.
