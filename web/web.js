@@ -39,32 +39,16 @@
   // Two ways to fit the stage to the window (web/web-stage.js): the desk view on a laptop or desktop
   // with a mouse (0.65 CSS px per stage px by default, the stage as wide and tall as the window holds,
   // so browser zoom and window size work as on any site), and the 10-foot view (the TV's 1920 px wide
-  // stage scaled to the window's width) in remote mode, under the touch layer and for full-screen
-  // stage screens such as the player. The size goes to --stage-w / --stage-h (web/web.css) and
-  // PL.ui.SCREEN_W / SCREEN_H, and 'pl-stageresize' fires on document when it changes.
+  // stage scaled to the window's width) in remote mode and under the phone and tablet layer. The size
+  // goes to --stage-w / --stage-h (web/web.css) and PL.ui.SCREEN_W / SCREEN_H, and 'pl-stageresize'
+  // fires on document when it changes.
   var NARROW = 1100; // web/touch/logic.js: below this the phone and tablet layer takes over
   web.stage = { w: 1920, h: 1080, scale: 1, desk: false };
-
-  // The player keeps the 10-foot view: it fills the screen, and its bar and menus are laid out for
-  // 1920 px.
-  function fullScreen(screen) {
-    return !!screen && !!PL.Player && screen instanceof PL.Player;
-  }
 
   function deskWanted(w) {
     if (w < NARROW || !PL.input || PL.input.mode() === 'remote') return false;
     var T = PL.touch;
-    if (T && (T.engaged || T.visible)) return false;
-    return !fullScreen(underneath());
-  }
-  // The screen that fills the stage: the top one, or the one under overlays (a menu over the player).
-  // incoming: a screen about to be pushed, so it is built (and its art asked for) at its own fit.
-  var incoming = null;
-  function underneath() {
-    if (incoming && !incoming.overlay) return incoming;
-    var stack = (PL.app && PL.app.stack) || [];
-    for (var i = stack.length - 1; i >= 0; i--) if (!stack[i].overlay) return stack[i];
-    return null;
+    return !(T && (T.engaged || T.visible));
   }
   // Whether the desk view can be in use on this window (Settings shows the size row only then).
   web.deskWanted = function () { return deskWanted(document.documentElement.clientWidth || window.innerWidth); };
@@ -118,22 +102,8 @@
   window.addEventListener('resize', PL.rafThrottle(fit));
   fit(); // this script runs at the end of <body>: scale before the first layout
   document.addEventListener('DOMContentLoaded', fit);
-  // the fit depends on the input mode (remote: the 10-foot view) and on the screen on top (the
-  // player): look again after each change, before the browser draws
+  // the fit depends on the input mode (remote: the 10-foot view): look again after each change
   PL.input.on(function () { fit(); });
-  ['push', 'pop', 'replaceTop', 'setRoot'].forEach(function (name) {
-    var orig = PL.app[name];
-    PL.app[name] = function (screen) {
-      if (screen && name !== 'pop') {
-        incoming = screen;
-        fit();
-        incoming = null;
-      }
-      var out = orig.apply(this, arguments);
-      fit();
-      return out;
-    };
-  });
 
   // ---- Artwork at the size it is drawn ---------------------------------------------------------------
 

@@ -12,7 +12,8 @@
   var BANNER_MS = 5000;
   var GUIDE_IDLE_MS = 15000;
   var ENTRY_MS = 2000;
-  var BAR_W = 1728;
+  // the programme bar spans the stage less its margins: 1728 on the TV (web/web.js can widen the stage)
+  function barW() { return PL.ui.SCREEN_W - 2 * PL.ui.MARGIN; }
   var ROW = 104;              // mini guide row pitch
   var ROWS_ABOVE = 3;         // rows shown above the focused one
   var ROWS_BELOW = 4;
@@ -350,9 +351,9 @@
       var buf = this.buffer();
       var availFrom = buf ? Math.max(0, L.progress(a, t - (buf.end - buf.start))) : pos;
       this.set('bf', this.barFill, 'transform', 'scaleX(' + pos.toFixed(4) + ')');
-      this.set('ba', this.barAvail, 'transform', 'translate3d(' + Math.round(availFrom * BAR_W) + 'px,0,0) scaleX(' + Math.max(0, edge - availFrom).toFixed(4) + ')');
-      this.set('be', this.barEdge, 'transform', 'translate3d(' + Math.round(edge * BAR_W) + 'px,0,0)');
-      this.set('bh', this.barHead, 'transform', 'translate3d(' + Math.round(pos * BAR_W) + 'px,0,0)');
+      this.set('ba', this.barAvail, 'transform', 'translate3d(' + Math.round(availFrom * barW()) + 'px,0,0) scaleX(' + Math.max(0, edge - availFrom).toFixed(4) + ')');
+      this.set('be', this.barEdge, 'transform', 'translate3d(' + Math.round(edge * barW()) + 'px,0,0)');
+      this.set('bh', this.barHead, 'transform', 'translate3d(' + Math.round(pos * barW()) + 'px,0,0)');
       this.set('tl', this.timesLeft, 'text', L.clock(a.b) + ' – ' + L.clock(a.e));
       this.set('tn', this.timesNote, 'text', '  ·  ' + (live ? L.span(a.e - t) + ' left' : L.behindText(behindSec)));
     } else {

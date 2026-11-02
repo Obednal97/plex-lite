@@ -78,6 +78,18 @@ html[data-nav="touch"]:not([data-input="remote"]) .lb-hints { display: none; }
    shows that js/screens/livetv.js loads and draws (--guide-ex: web/web.js) */
 .lg-ruler-clip, .lg-progs { width: calc(1412px + var(--guide-ex, 0px)); }
 
+/* ---- The player on a wider stage (js/screens/player.js and live-osd.js lay the bar out from
+   PL.ui.SCREEN_W): the bar, times, tabs and panes span the stage less its margins; the facts column
+   and the subtitles keep to their side and the middle ---------------------------------------------- */
+
+.bar, .bar-segs, .bar-hit, .osd-times, .osd-panel, .pane, .info, .live-bar, .live-bar-avail, .live-bar-fill { width: calc(var(--stage-w) - 192px); }
+/* the facts column keeps to the right edge (1018 px in on the TV's 1728 px row); on a stage narrower
+   than the TV's (html.pl-narrow, web/web.js) the text beside it narrows instead of running under it */
+.info-facts { left: auto; right: 0; }
+.pl-narrow .info-main { width: calc(var(--stage-w) - 998px); }
+.pl-narrow .info-summary { max-width: calc(var(--stage-w) - 998px); }
+.subs { width: calc(var(--stage-w) - 320px); }
+
 /* ---- Settings -> Size on this screen (web/web.js sizeRow) ------------------------------------------ */
 
 .web-size { position: absolute; right: 28px; top: 0; height: 84px; display: flex; align-items: center; white-space: nowrap; }

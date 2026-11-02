@@ -7,7 +7,9 @@
   var screens = PL.screens = PL.screens || {};
   var K = PL.KEY;
   var L = PL.playerLogic;
-  var BAR_W = 1728;
+  // The bar spans the stage less its margins: 1728 on the TV's 1920 px stage (the web build's stage
+  // can be wider, web/web.js).
+  function barW() { return PL.ui.SCREEN_W - 2 * PL.ui.MARGIN; }
   var BAR_GAP = 6;
   var PREVIEW_W = 464;     // preview thumbnail (with its time pill under it)
   var TIME_ONLY_W = 400;   // no preview thumbnails (the usual case): a large time and the chapter
@@ -241,7 +243,7 @@
     this.startOffset = opts.offset || 0;
     this.mediaIndex = opts.mediaIndex || 0;
     this.chapters = [];
-    this.segs = L.segments([], 0, BAR_W, BAR_GAP);
+    this.segs = L.segments([], 0, barW(), BAR_GAP);
     this.subs = { kind: 'none', id: null, cues: [], shown: '', segs: {}, timer: null };
     this.gen = 0;
     this.state = 'idle';
@@ -560,7 +562,7 @@
       if (!rect) rect = hit.getBoundingClientRect();
       var dur = self.durationSec();
       if (!dur) return null;
-      return PL.clamp(L.secAt(self.segs, (e.clientX - rect.left) / rect.width * BAR_W), 0, dur);
+      return PL.clamp(L.secAt(self.segs, (e.clientX - rect.left) / rect.width * barW()), 0, dur);
     };
     hit.addEventListener('mouseenter', function () {
       rect = hit.getBoundingClientRect();
@@ -777,7 +779,7 @@
   Player.prototype.buildSegments = function () {
     var self = this;
     var dur = this.durationSec();
-    this.segs = L.segments(this.live ? [] : this.chapters, dur, BAR_W, BAR_GAP);
+    this.segs = L.segments(this.live ? [] : this.chapters, dur, barW(), BAR_GAP);
     PL.clear(this.segRow);
     this.segNodes = this.segs.map(function (s) {
       var n = PL.el('div', 'seg');
@@ -792,6 +794,12 @@
     });
     Object.keys(this.painted).forEach(function (k) { if (/^s[ab]\d/.test(k)) delete self.painted[k]; });
     this.paintBar();
+  };
+
+  // The web build's stage changed size (web/web-desktop.js): the bar's segments follow its width.
+  Player.prototype.onStageResize = function () {
+    if (this.segRow) this.buildSegments();
+    if (this.menu) this.renderMenu();
   };
 
   Player.prototype.icon = function (id) {
@@ -892,7 +900,7 @@
     if (at != null && dur) {
       var withThumb = this.preview.ok;
       var w = withThumb ? PREVIEW_W : TIME_ONLY_W;
-      var px = PL.clamp(L.xAt(this.segs, at) - w / 2, 0, BAR_W - w);
+      var px = PL.clamp(L.xAt(this.segs, at) - w / 2, 0, barW() - w);
       if (this.painted.pvmode !== withThumb) {
         this.painted.pvmode = withThumb;
         this.previewEl.classList.toggle('no-thumb', !withThumb);
@@ -1101,8 +1109,9 @@
     el.appendChild(box);
     // anchored over its icon, a caret pointing at it
     var n = this.icons.length;
-    var center = 1824 - (n - 1 - m.icon) * 88 - 34;
-    var left = PL.clamp(center - MENU_W + 58, 96, 1824 - MENU_W);
+    var right = PL.ui.SCREEN_W - PL.ui.MARGIN; // the icons' right edge: 1824 on the TV
+    var center = right - (n - 1 - m.icon) * 88 - 34;
+    var left = PL.clamp(center - MENU_W + 58, PL.ui.MARGIN, right - MENU_W);
     box.style.left = left + 'px';
     var caret = PL.el('div', 'menu-caret');
     caret.style.left = (center - 11) + 'px';
