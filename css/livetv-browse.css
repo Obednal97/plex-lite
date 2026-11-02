@@ -52,6 +52,8 @@
 .chip.chip-browse { position: relative; margin-right: 41px; padding-left: 20px; }
 .chip-row.sliding .chip.chip-browse { background: var(--fill-hi); color: var(--text); font-weight: 600; transition: background-color 120ms linear, color 140ms linear 90ms; }
 .chip-row.sliding .chip.chip-browse.focused { background: transparent; color: var(--focus-ink); }
+.pointer .chip-row.sliding .chip.chip-browse.focused { background: var(--fill-hi); color: var(--text); }
+.pointer .chip-row.sliding .chip.chip-browse:hover { background: var(--focus); color: var(--focus-ink); }
 .chip.chip-browse::after { content: ""; position: absolute; right: -22px; top: 12px; width: 2px; height: 28px; border-radius: 1px; background: rgba(255, 255, 255, 0.18); }
 .chip-browse .glyph { display: inline-block; margin-right: 10px; vertical-align: -5px; }
 

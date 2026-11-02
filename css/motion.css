@@ -62,6 +62,13 @@
 }
 .chip-row.sliding .chip.selected { color: var(--text); }
 .chip-row.sliding .chip.focused { color: var(--focus-ink); }
+/* Pointer (Magic Remote): as on every other pill, the chip under the pointer takes the plate, and the
+   keys' capsule stands down so there is one highlight; the rules above would otherwise clear the
+   hovered chip's ground and leave its dark ink on nothing. */
+.pointer .chip-row.sliding .glide-cap { opacity: 0; }
+.pointer .chip-row.sliding .chip.focused { color: var(--text-2); }
+.pointer .chip-row.sliding .chip.selected.focused { color: var(--text); }
+.pointer .chip-row.sliding .chip:hover, .pointer .chip-row.sliding .chip.focused:hover { background: var(--focus); color: var(--focus-ink); }
 
 /* ---- Content changes: out, swap, in ------------------------------------------------------------- */
 

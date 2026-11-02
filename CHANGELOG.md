@@ -280,6 +280,11 @@ releases are fixes only.
   focus doesn't show, but a focused Settings row's value (and a sheet row's or chip's dimmer text)
   kept the white plate's dark ink on the dark ground; under the pointer a focused row now gets the
   plate. Also on the TV with the Magic Remote.
+- **Mouse and Magic Remote: chips get their pill under the pointer.** In a chip row (Recommended /
+  Library / Collections, Live TV's categories, seasons, sort) the chip under the pointer turned its
+  text dark but got no pill, so it nearly vanished, while the keys' white capsule stayed on another
+  chip. Now the chip under the pointer takes the white pill, the capsule waits for the arrow keys, and
+  the chosen chip keeps its glass. Also on the TV with the Magic Remote.
 - **Web: Live TV's Browse rail** no longer puts its heading under the Back [Esc] button.
 - **Overseerr on the TV notices a session that ended elsewhere** (signed out in Overseerr's own
   pages): it signs in again by itself, as the web build already did, instead of failing with
