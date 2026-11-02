@@ -37,8 +37,8 @@
   // ---- The stage (docs/WEB.md, "The window") -----------------------------------------------------
 
   // Two ways to fit the stage to the window (web/web-stage.js): the desk view on a laptop or desktop
-  // with a mouse (a fixed 0.6 CSS px per stage px, the stage as wide and tall as the window holds, so
-  // browser zoom and window size work as on any site), and the 10-foot view (the TV's 1920 px wide
+  // with a mouse (0.65 CSS px per stage px by default, the stage as wide and tall as the window holds,
+  // so browser zoom and window size work as on any site), and the 10-foot view (the TV's 1920 px wide
   // stage scaled to the window's width) in remote mode, under the touch layer and for full-screen
   // stage screens such as the player. The size goes to --stage-w / --stage-h (web/web.css) and
   // PL.ui.SCREEN_W / SCREEN_H, and 'pl-stageresize' fires on document when it changes.
@@ -66,6 +66,18 @@
     for (var i = stack.length - 1; i >= 0; i--) if (!stack[i].overlay) return stack[i];
     return null;
   }
+  // Whether the desk view can be in use on this window (Settings shows the size row only then).
+  web.deskWanted = function () { return deskWanted(document.documentElement.clientWidth || window.innerWidth); };
+
+  // Settings -> Size on this screen: the desk view's CSS px per stage px, kept per browser.
+  web.density = function () { return PL.webStage.density(PL.storage.get('deskScale', null)); };
+  web.setDensity = function (v) {
+    var d = PL.webStage.density(v);
+    if (d === PL.webStage.DESK) PL.storage.del('deskScale');
+    else PL.storage.set('deskScale', d);
+    fit();
+    return d;
+  };
 
   // The layout viewport, not innerWidth: a phone's browser zooms out to show the 1920 px body
   // before it is scaled, which makes innerWidth that wide too.
@@ -78,7 +90,7 @@
     var w = document.documentElement.clientWidth || window.innerWidth;
     var h = document.documentElement.clientHeight || window.innerHeight;
     var desk = deskWanted(w);
-    var st = PL.webStage.size(w, h, desk);
+    var st = PL.webStage.size(w, h, desk, web.density());
     var changed = st.h !== web.stage.h || st.w !== web.stage.w;
     web.stage = { w: st.w, h: st.h, scale: st.scale, desk: desk };
     PL.stageScale = st.scale;
@@ -92,6 +104,9 @@
     // the Live TV guide's extra width, up to the hour it has loaded beyond the TV's two (web/web.css)
     root.style.setProperty('--guide-ex', Math.min(st.w - 1920, 700) + 'px');
     root.classList.toggle('pl-desk', desk);
+    // narrower than the TV's 1920 (a small window or a large size setting): web/web.css tightens a few
+    // side-by-side layouts
+    root.classList.toggle('pl-narrow', st.w < 1920);
     document.body.style.transform = 'translate(' + st.x + 'px,' + st.y + 'px) scale(' + st.scale + ')';
     if (changed) {
       var ev;
@@ -138,12 +153,13 @@
   // ---- A wider stage: grids take more columns, rows fill the width ------------------------------------
 
   // Grids are built with the TV's column count (6 across 1920 px); a wider stage adds a column for
-  // every card pitch it gains. The focus stays on the same title.
+  // every card pitch it gains, a narrower one (down to 1600) drops one. The focus stays on the same
+  // title.
   var ui = PL.ui;
   var gridRender = ui.Grid.prototype.render;
   ui.Grid.prototype.render = function () {
     if (this.tvCols == null) this.tvCols = this.cols;
-    var cols = this.tvCols + Math.max(0, Math.floor((ui.SCREEN_W - 1920) / this.geo.pitch));
+    var cols = Math.max(1, this.tvCols + Math.floor((ui.SCREEN_W - 1920) / this.geo.pitch));
     if (cols !== this.cols) {
       var self = this;
       Object.keys(this.nodes).forEach(function (k) { self.inner.removeChild(self.nodes[k]); });
@@ -428,10 +444,91 @@
 
   // ---- Settings rows (js/screens/settings.js shows them on the web) --------------------------------
 
+  // Settings -> Size on this screen: how big the desk view draws everything, on this device only
+  // (web/web-stage.js has the bounds and steps). Left and Right step it, the track takes a click or a
+  // drag, Enter (or Reset) goes back to the default. It applies at once: the whole page is the preview.
+  function sizeRow() {
+    var S = PL.webStage;
+    var parts = null;
+    function paint() {
+      if (!parts) return;
+      var d = web.density();
+      var f = (d - S.DESK_MIN) / (S.DESK_MAX - S.DESK_MIN);
+      parts.fill.style.transform = 'scaleX(' + f.toFixed(4) + ')';
+      parts.knob.style.left = (f * 100).toFixed(2) + '%';
+      parts.pct.textContent = S.percent(d) + '%';
+      parts.reset.classList.toggle('on', d !== S.DESK);
+    }
+    function set(v) {
+      if (PL.webStage.density(v) === web.density()) return;
+      web.setDensity(v);
+      paint();
+    }
+    return {
+      label: 'Size on this screen',
+      value: '',
+      decorate: function (row) {
+        row.classList.add('web-size-row');
+        var box = PL.el('span', 'web-size');
+        var small = PL.el('span', 'web-size-end web-size-small', 'A');
+        var track = PL.el('span', 'web-size-track');
+        var rail = PL.el('span', 'web-size-rail');
+        var fill = PL.el('span', 'web-size-fill');
+        var knob = PL.el('span', 'web-size-knob');
+        rail.appendChild(fill);
+        // a tick per step, and a taller one at the default
+        var steps = Math.round((S.DESK_MAX - S.DESK_MIN) / S.DESK_STEP);
+        for (var i = 0; i <= steps; i++) {
+          var at = S.DESK_MIN + i * S.DESK_STEP;
+          var tick = PL.el('span', 'web-size-tick' + (Math.abs(at - S.DESK) < 0.001 ? ' web-size-default' : ''));
+          tick.style.left = (i / steps * 100).toFixed(2) + '%';
+          rail.appendChild(tick);
+        }
+        track.appendChild(rail);
+        track.appendChild(knob);
+        var large = PL.el('span', 'web-size-end web-size-large', 'A');
+        var pct = PL.el('span', 'web-size-pct');
+        var reset = PL.el('span', 'web-size-reset', 'Reset');
+        [small, track, large, pct, reset].forEach(function (n) { box.appendChild(n); });
+        row.appendChild(box);
+        parts = { fill: fill, knob: knob, pct: pct, reset: reset };
+        web.tip(track, 'Smaller or larger', '← →', 'above');
+        web.tip(reset, 'Back to ' + S.percent(S.DESK) + '%', 'Enter', 'above');
+        // the track: a click or a drag picks the nearest step. Measured once per press, so the page
+        // resizing under the pointer doesn't make the value run away.
+        var rect = null;
+        var at = function (e) { return S.DESK_MIN + PL.clamp((e.clientX - rect.left) / rect.width, 0, 1) * (S.DESK_MAX - S.DESK_MIN); };
+        track.addEventListener('pointerdown', function (e) {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          e.stopPropagation();
+          rect = rail.getBoundingClientRect();
+          try { track.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+          set(at(e));
+        });
+        track.addEventListener('pointermove', function (e) { if (rect) set(at(e)); });
+        var end = function () { rect = null; };
+        track.addEventListener('pointerup', end);
+        track.addEventListener('pointercancel', end);
+        // a press on the track is not a click on the row (which resets)
+        track.addEventListener('click', function (e) { e.stopPropagation(); });
+        paint();
+      },
+      adjust: function (dir) { set(S.stepDensity(web.density(), dir)); },
+      action: function () {
+        if (web.density() === S.DESK) return;
+        set(S.DESK);
+        PL.toast('Size back to ' + S.percent(S.DESK) + '%');
+      },
+    };
+  }
+
   web.settingsRows = function (rebuild) {
     var full = !!(document.fullscreenElement || document.webkitFullscreenElement);
     return [
       PL.input.settingsRow(rebuild),
+      // only where the desk view can be in use: not in remote mode or under the phone layer
+      web.deskWanted() ? sizeRow() : null,
       { label: 'Local network access', value: web.lnaLabel(), action: explainLna },
       { label: 'Full screen', value: full ? 'On' : 'Off', action: function () {
         web.toggleFullscreen();

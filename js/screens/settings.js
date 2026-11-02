@@ -100,6 +100,8 @@
           var i = rows.length;
           var n = PL.el('div', 'row', d.label);
           if (d.value) n.appendChild(PL.el('span', 'row-value', d.value));
+          // a row may add its own control (the web build's size slider, web/web.js)
+          if (d.decorate) d.decorate(n);
           n.addEventListener('click', function () { index = i; d.action(); });
           panel.appendChild(n);
           rows.push({ node: n, def: d, top: height });
@@ -381,6 +383,11 @@
         }
         if (code === K.ENTER) {
           rows[index].def.action();
+          return true;
+        }
+        // Left and Right move a row's own control if it has one (the web build's size slider)
+        if ((code === K.LEFT || code === K.RIGHT) && rows[index] && rows[index].def.adjust) {
+          rows[index].def.adjust(code === K.RIGHT ? 1 : -1);
           return true;
         }
         return code === K.LEFT || code === K.RIGHT;
