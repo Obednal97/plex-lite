@@ -222,5 +222,11 @@ html, body { background: var(--ground); color: var(--text); }
 .pointer .tab:hover, .pointer .chip:hover, .pointer .btn:hover, .pointer .key:hover,
 .pointer .row:hover, .pointer .sheet-row:hover { background: var(--focus); color: var(--focus-ink); }
 .pointer .tab.focused, .pointer .chip.focused, .pointer .key.focused, .pointer .row.focused, .pointer .sheet-row.focused { background: transparent; color: var(--text); }
+/* The keyboard focus doesn't show in pointer mode, so a focused row's (or chip's) dimmer text keeps its
+   colour on the ground, not the plate's dark ink; under the pointer a row gets the plate, focused or not. */
+.pointer .row.focused .row-value { color: var(--text-2); }
+.pointer .sheet-row.focused .sheet-sub, .pointer .chip.focused .chip-value { color: var(--text-3); }
+.pointer .row.focused:hover, .pointer .sheet-row.focused:hover { background: var(--focus); color: var(--focus-ink); }
+.pointer .row:hover .row-value, .pointer .sheet-row:hover .sheet-sub, .pointer .chip:hover .chip-value { color: rgba(8, 8, 10, 0.55); }
 .pointer .btn.focused { background: var(--control); color: var(--text); }
 .pointer .btn-primary.focused { background: rgba(247, 250, 252, 0.24); color: var(--text); box-shadow: none; }

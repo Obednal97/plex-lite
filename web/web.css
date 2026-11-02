@@ -75,3 +75,9 @@ html[data-nav="touch"]:not([data-input="remote"]) .lb-hints { display: none; }
 /* The Live TV guide shows later programmes in the extra width, up to the hour beyond the two the TV
    shows that js/screens/livetv.js loads and draws (--guide-ex: web/web.js) */
 .lg-ruler-clip, .lg-progs { width: calc(1412px + var(--guide-ex, 0px)); }
+
+/* ---- Live TV's Browse rail: room for Back [Esc] above its heading (mouse and keyboard) ----------- */
+
+html[data-input="pointer"] .lb-title { top: 116px; }
+html[data-input="pointer"] .lb-sub { top: 162px; }
+html[data-input="pointer"] .lb-clip { top: 218px; }
