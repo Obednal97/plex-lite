@@ -81,7 +81,7 @@ html[data-input="pointer"][data-nav="keys"] .web-osd-keys { display: block; }
 
 /* ---- The first-play strip (D3): top centre, once per browser --------------------------------------- */
 
-.web-firstplay { position: absolute; left: 0; top: 45px; width: 1920px; z-index: 8; text-align: center; opacity: 0; transform: translate3d(0, -12px, 0); pointer-events: none; transition: opacity 300ms var(--ease), transform 300ms var(--ease); }
+.web-firstplay { position: absolute; left: 0; top: 45px; width: var(--stage-w); z-index: 8; text-align: center; opacity: 0; transform: translate3d(0, -12px, 0); pointer-events: none; transition: opacity 300ms var(--ease), transform 300ms var(--ease); }
 .web-firstplay.on { opacity: 1; transform: none; }
 .web-firstplay-strip {
   display: inline-flex; align-items: center; height: 59px; padding: 0 24px; border-radius: 30px; box-sizing: border-box;

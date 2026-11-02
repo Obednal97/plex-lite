@@ -4,11 +4,15 @@
 //
 //   node tools/demo/fetch-media.mjs   # once: downloads the posters into the demo media cache
 //   node tools/make-wall.mjs [--out <dir>]
+//   node tools/make-wall.mjs --hidpi [--out <dir>]
 //
 // Writes, into img/firstrun/ (or --out):
 //   wall.jpg        2400x1417, desktop and TV (shown dimmed under scrims, so lightly softened)
 //   wall-phone.jpg  1152x680, phones
 //   wall-soft.jpg   720x425, heavily blurred at build time for the later steps (no CSS filter)
+// With --hidpi, only web/img/wall-2x.jpg instead: 3600x2125, the web build's desktop wall on high-density
+// screens (web/firstrun-web.css), composed at 1.5x the design size so the posters are sharp. The TV
+// never loads it.
 //
 // The wall is a dark ground with tilted columns of rounded posters, every other column offset by
 // half a poster, matching the designer's 2880x1700 mock: the same posters sit in the same places,
@@ -32,7 +36,10 @@ const HERE = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = resolve(HERE, '..');
 const MEDIA = (process.env.PLEXLITE_DEMO_MEDIA || '~/.cache/plexlite/demo-media').replace(/^~\//, homedir() + '/');
 const outIdx = process.argv.indexOf('--out');
-const OUT = resolve(outIdx > 0 ? process.argv[outIdx + 1] : join(ROOT, 'img/firstrun'));
+const HIDPI = process.argv.includes('--hidpi');
+const OUT = resolve(outIdx > 0 ? process.argv[outIdx + 1] : join(ROOT, HIDPI ? 'web/img' : 'img/firstrun'));
+// --hidpi composes everything at this multiple of the design size
+const K = HIDPI ? 1.5 : 1;
 
 // In wall order: column k, row j shows POSTERS[(3k + j) mod 12].
 const POSTERS = [
@@ -52,17 +59,19 @@ const POSTERS = [
 
 // Geometry at the 2880x1700 design size, fitted to the designer's mock (least squares on a
 // greyscale 1440x850 copy).
-const DESIGN = { w: 2880, h: 1700 };
+const DESIGN = { w: 2880 * K, h: 1700 * K };
 const GROUND = '#141416';
 const TILT = 7;              // degrees, anticlockwise: columns lean right going down
-const PW = 302, PH = 447;    // poster size (cover-cropped)
-const RADIUS = 19;           // corner radius
-const COL = 328.5;           // column pitch (poster width + gap), across the tilted columns
-const ROW = 473;             // row pitch (poster height + gap), down a column
-const ORIGIN = [199, 278.5]; // centre of column 0, row 0 (Sprite Fright, left edge of the mock)
-const ODD = -235.5;          // odd columns sit this far up their column (about half a row)
+const PW = Math.round(302 * K), PH = Math.round(447 * K); // poster size (cover-cropped)
+const RADIUS = 19 * K;       // corner radius
+const COL = 328.5 * K;       // column pitch (poster width + gap), across the tilted columns
+const ROW = 473 * K;         // row pitch (poster height + gap), down a column
+const ORIGIN = [199 * K, 278.5 * K]; // centre of column 0, row 0 (Sprite Fright, left edge of the mock)
+const ODD = -235.5 * K;      // odd columns sit this far up their column (about half a row)
 
-const SIZES = [
+const SIZES = HIDPI ? [
+  { name: 'wall-2x.jpg', width: 3600, quality: 62, soften: 0.4, maxKB: 950 },
+] : [
   { name: 'wall.jpg', width: 2400, quality: 64, soften: 0.6, maxKB: 450 },
   { name: 'wall-phone.jpg', width: 1152, quality: 66, soften: 0.5, maxKB: 150 },
   { name: 'wall-soft.jpg', width: 720, quality: 72, maxKB: 40, blur: 16, dim: 74, sat: 80 },

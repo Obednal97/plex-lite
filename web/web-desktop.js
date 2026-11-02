@@ -70,7 +70,7 @@
     var r = web.stageRect(node);
     var w = el.offsetWidth;
     var h = el.offsetHeight;
-    var x = PL.clamp(r.left + r.width / 2 - w / 2, 24, 1920 - 24 - w);
+    var x = PL.clamp(r.left + r.width / 2 - w / 2, 24, PL.ui.SCREEN_W - 24 - w);
     var above = node.getAttribute('data-tip-at') === 'above';
     var y = above ? r.top - h - 14 : r.top + r.height + 14;
     el.style.transform = 'translate3d(' + Math.round(x) + 'px,' + Math.round(y) + 'px,0)';

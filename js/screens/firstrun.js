@@ -414,7 +414,8 @@
   };
 
   // The web build: which layout fits the window (web/firstrun-web.css), and how far to zoom it.
-  //   desk  the 1440x900 boards, zoomed by the window (0.7 to 1.45), the margin growing on wide screens
+  //   desk  the 1440x900 boards at their own size (Settings -> Size on this screen scales them; a small
+  //         window shrinks them to 0.7), the margin growing on wide screens
   //   stack portrait phones and tablets (the phone boards, zoomed up to 1.35 on a tablet)
   //   short phones in landscape (height 500 or less)
   Flow.prototype.fitWeb = function () {
@@ -422,7 +423,7 @@
     var w = document.documentElement.clientWidth || window.innerWidth;
     var h = document.documentElement.clientHeight || window.innerHeight;
     var layout = L.webLayout(w, h);
-    var z = L.webZoom(layout, w, h);
+    var z = L.webZoom(layout, w, h, PL.web && PL.web.density ? PL.web.density() / PL.webStage.DESK : 1);
     var root = this.root;
     ['desk', 'stack', 'short'].forEach(function (l) { root.classList.toggle('fr-l-' + l, l === layout); });
     root.classList.toggle('fr-wide', layout === 'desk' && w / h > 2);
