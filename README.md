@@ -92,7 +92,8 @@ Subtitles and Audio open a small menu above their icon while the video keeps pla
 subtitles (PGS, VobSub) are burned in by the server. Skip Intro and Skip Credits appear from Plex's
 intro and credits markers, which the server creates when intro and credits detection is on (Plex
 settings, Library). The button has the focus while it is shown, stays for 10 seconds, and comes back
-whenever you open the controls during the intro or credits. At the end credits of an episode with a
+whenever you open the controls during the intro or credits. With Skip intros (or credits)
+automatically on, its line counts down 5 seconds before it skips (Back cancels). At the end credits of an episode with a
 next one, a card offers Watch Credits and Next Episode (counting down when autoplay is on). With
 the Magic Remote, point and click: hovering focuses, the seek bar jumps where you click (hover to
 see the time). The LG Magic Remote (MR19) has Play and Pause keys but no fast-forward, so use OK on

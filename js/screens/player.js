@@ -208,6 +208,9 @@
   }
 
   var PILL_MS = 10000;
+  // Auto-skip waits this much playback on the pill first, as Plex does: its intro markers start with
+  // the theme music, which often comes in under the last shot before the titles.
+  var AUTO_SKIP_SEC = 5;
   var CREDITS_FALLBACK_SEC = 30;
 
   function setting(key, dflt) {
@@ -2292,10 +2295,12 @@
 
   // The skip pill is a real button: it takes the remote's focus when it appears (OK skips), stays for
   // PILL_MS, and comes back whenever the controls are opened while the marker is playing.
-  // markerState.pill: {kind: 'intro' | 'credits', id, start, target, shownAt, timedOut}
-  Player.prototype.showPill = function (kind, label, start, target, id) {
+  // markerState.pill: {kind: 'intro' | 'credits', id, start, target, shownAt, timedOut, autoAt}
+  // autoAt (auto-skip on): the position where it skips by itself; Back cancels it.
+  Player.prototype.showPill = function (kind, label, start, target, id, auto) {
     var st = this.markerState;
-    st.pill = { kind: kind, id: id, start: start, target: target, shownAt: Date.now(), timedOut: false };
+    st.pill = { kind: kind, id: id, start: start, target: target, shownAt: Date.now(), timedOut: false,
+      autoAt: auto ? this.position() + AUTO_SKIP_SEC : null };
     this.pillLabel.textContent = label;
     if (this.mayTakeFocus()) this.zone = 'cta';
     this.paintZone();
@@ -2309,7 +2314,7 @@
 
   Player.prototype.pillShown = function () {
     var p = this.markerState && this.markerState.pill;
-    return !!p && !this.upnextNext && (!p.timedOut || !this.osdHidden);
+    return !!p && !this.upnextNext && (!p.timedOut || p.autoAt != null || !this.osdHidden);
   };
 
   // The call to action on screen: the end card, else the skip pill.
@@ -2334,12 +2339,14 @@
     this.paintCtaLine();
   };
 
-  // The teal line along the pill's bottom: how much of the intro (or credits) is left.
+  // The teal line along the pill's bottom: the auto-skip countdown, else how much of the intro (or
+  // credits) is left.
   Player.prototype.paintCtaLine = function () {
     var p = this.pillVisible && this.markerState && this.markerState.pill;
     if (!p) return;
-    var end = p.kind === 'intro' ? p.target : this.durationSec();
-    var f = end > p.start ? PL.clamp((end - this.position()) / (end - p.start), 0, 1) : 0;
+    var end = p.autoAt != null ? p.autoAt : p.kind === 'intro' ? p.target : this.durationSec();
+    var from = p.autoAt != null ? p.autoAt - AUTO_SKIP_SEC : p.start;
+    var f = end > from ? PL.clamp((end - this.position()) / (end - from), 0, 1) : 0;
     this.setPainted('pill-line', this.pillLine, 'transform', 'scaleX(' + f.toFixed(3) + ')');
   };
 
@@ -2372,7 +2379,10 @@
   // Back while only the pill is up: put it away until the controls are opened again.
   Player.prototype.dismissPill = function () {
     var p = this.markerState && this.markerState.pill;
-    if (p) p.timedOut = true;
+    if (p) {
+      p.timedOut = true;
+      p.autoAt = null;
+    }
     this.paintZone();
   };
 
@@ -2393,15 +2403,12 @@
     var pos = this.position();
     var now = Date.now();
     var pill = st.pill;
+    // the countdown ran out, and no jump of the person's is still landing
+    var due = !!pill && pill.autoAt != null && pos >= pill.autoAt && this.jumpTarget == null && !this.seekReq;
     var intro = this.introAt(pos);
     if (intro && !st.introDone[intro.id]) {
-      if (setting('autoSkipIntro', false)) {
-        st.introDone[intro.id] = true;
-        this.seekTo(intro.end);
-        PL.toast('Skipped intro', 2000);
-        return;
-      }
-      if (!pill || pill.kind !== 'intro' || pill.id !== intro.id) this.showPill('intro', 'Skip Intro', intro.start, intro.end, intro.id);
+      if (!pill || pill.kind !== 'intro' || pill.id !== intro.id) this.showPill('intro', 'Skip Intro', intro.start, intro.end, intro.id, setting('autoSkipIntro', false));
+      else if (due) this.activatePill(true);
       else if (!pill.timedOut && now - pill.shownAt > PILL_MS) { pill.timedOut = true; this.paintZone(); }
       return;
     }
@@ -2418,20 +2425,17 @@
       return;
     }
     if (st.creditsHandled) {
-      if (pill && pill.kind === 'credits' && !pill.timedOut && now - pill.shownAt > PILL_MS) { pill.timedOut = true; this.paintZone(); }
+      if (due && pill.kind === 'credits') this.activatePill(true);
+      else if (pill && pill.kind === 'credits' && !pill.timedOut && now - pill.shownAt > PILL_MS) { pill.timedOut = true; this.paintZone(); }
       return;
     }
     st.creditsHandled = true;
     var next = this.nextItem();
     var auto = setting('autoSkipCredits', false);
-    if (next) {
-      if (auto) this.playNext();
-      else this.showUpNext(next);
-      return;
-    }
-    if (!m.creditsFromMarker) return;
-    if (auto) this.finishCredits();
-    else this.showPill('credits', 'Skip Credits', m.creditsStart, null, 0);
+    // auto-skip without a credits marker: the next episode plays at the real end (onEnded)
+    if (auto && m.creditsFromMarker) this.showPill('credits', 'Skip Credits', m.creditsStart, null, 0, true);
+    else if (next && !auto) this.showUpNext(next);
+    else if (!next && m.creditsFromMarker) this.showPill('credits', 'Skip Credits', m.creditsStart, null, 0);
   };
 
   Player.prototype.finishCredits = function () {
@@ -2440,14 +2444,16 @@
     this.exit();
   };
 
-  Player.prototype.activatePill = function () {
+  // auto: the countdown ran out (the pill may be out of sight behind a menu)
+  Player.prototype.activatePill = function (auto) {
     var st = this.markerState;
     var p = st && st.pill;
-    if (!p || !this.pillVisible) return false;
+    if (!p || (!auto && !this.pillVisible)) return false;
     this.hidePill();
     if (p.kind === 'intro') {
       st.introDone[p.id] = true;
       this.seekTo(p.target);
+      if (auto) PL.toast('Skipped intro', 2000);
       if (!this.osdHidden) this.hideOsd();
     } else {
       this.skipCredits();

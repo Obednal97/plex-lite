@@ -91,7 +91,9 @@ which swaps the list for Small / Medium / Large (stored like other settings). Au
 **Skip Intro / Skip Credits (board 3):** controls hidden, a soft bottom-right radial scrim, one 80 px white pill
 "⏩ Skip Intro" at right 96 / bottom 96 with a 5 px teal line along its bottom showing how much of the segment is
 left. It is focused: OK presses it. If the controls are called up during the segment, the pill stays, moves up to
-sit above the round icons, and keeps focus until the person moves away from it.
+sit above the round icons, and keeps focus until the person moves away from it. With auto-skip on, the line
+counts down 5 s of playback instead and then the pill skips (Plex's markers start a few seconds early); Back
+cancels the countdown.
 
 **End of episode (board 4):** at the credits marker (else the last 30 s) of an episode that has a next one:
 bottom-right radial scrim; "UP NEXT · S1 E2", the next title (40 px/700), its runtime, and a 320×180 thumbnail; below,

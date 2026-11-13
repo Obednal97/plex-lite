@@ -11,6 +11,12 @@ releases are fixes only.
 
 ### Changed
 
+- **Auto-skip waits 5 seconds, as Plex does.** With Skip intros (or credits) automatically on, the
+  Skip button appears at the marker and its line counts down 5 seconds of playback before it skips;
+  OK skips at once and Back cancels. Plex's intro markers start with the theme music, which often
+  comes in under the last shot before the titles, so skipping at the marker cut that shot short.
+  Auto-skip credits no longer plays the next episode 30 s before the end of an episode without a
+  credits marker: it waits for the end.
 - **The web app reads like a web page on laptops and desktops.** With a mouse and keyboard the stage
   is no longer the TV's 1920 px scaled to the window's width: one stage px is 0.65 CSS px and the
   stage is as wide and tall as the window holds, so text and cards are a desktop size (body text about
