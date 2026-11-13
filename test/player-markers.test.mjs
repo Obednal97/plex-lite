@@ -38,7 +38,7 @@ function player({ autoIntro = false, autoCredits = false, fromMarker = true, nex
     markers: { intros: [INTRO], creditsStart: 2410.27, creditsFromMarker: fromMarker },
     markerState: { introDone: {}, creditsHandled: false, pill: null },
     state: 'playing', osdHidden: true, zone: 'bar', painted: {}, pos: 0,
-    pillLabel: {}, pillLine: { style: {} }, calls,
+    pillLabel: {}, pillLine: { style: {} }, pill: { classList: { toggle() {} } }, calls,
   });
   p.position = () => p.pos;
   p.durationSec = () => 2453.6;
@@ -60,7 +60,7 @@ test('markers: auto-skip intro shows the pill and counts down 5 s of playback be
   assert.deepEqual(p.calls, [], 'no jump at the marker itself');
   p.at(INTRO.start + 2.5);
   p.paintCtaLine();
-  assert.equal(p.painted['pill-line'], 'scaleX(0.500)', 'the line shows the countdown');
+  assert.equal(p.painted['pill-fill'], '50.0% 0', 'the pill is half filled');
   p.at(INTRO.start + 4.9);
   assert.deepEqual(p.calls, [], 'still counting');
   p.at(INTRO.start + 5);

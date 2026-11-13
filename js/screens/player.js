@@ -2339,15 +2339,19 @@
     this.paintCtaLine();
   };
 
-  // The teal line along the pill's bottom: the auto-skip countdown, else how much of the intro (or
-  // credits) is left.
+  // The pill's progress: during an auto-skip countdown the pill fills with teal from the left (a
+  // gradient in the element's own rounded background, so it stays inside the pill on Chrome 53);
+  // otherwise a teal line along its bottom shows how much of the intro (or credits) is left.
   Player.prototype.paintCtaLine = function () {
     var p = this.pillVisible && this.markerState && this.markerState.pill;
     if (!p) return;
-    var end = p.autoAt != null ? p.autoAt : p.kind === 'intro' ? p.target : this.durationSec();
-    var from = p.autoAt != null ? p.autoAt - AUTO_SKIP_SEC : p.start;
+    var counting = p.autoAt != null;
+    this.pill.classList.toggle('counting', counting);
+    var end = counting ? p.autoAt : p.kind === 'intro' ? p.target : this.durationSec();
+    var from = counting ? p.autoAt - AUTO_SKIP_SEC : p.start;
     var f = end > from ? PL.clamp((end - this.position()) / (end - from), 0, 1) : 0;
-    this.setPainted('pill-line', this.pillLine, 'transform', 'scaleX(' + f.toFixed(3) + ')');
+    if (counting) this.setPainted('pill-fill', this.pillLine, 'backgroundPosition', (f * 100).toFixed(1) + '% 0');
+    else this.setPainted('pill-line', this.pillLine, 'transform', 'scaleX(' + f.toFixed(3) + ')');
   };
 
   Player.prototype.pressCta = function () {
