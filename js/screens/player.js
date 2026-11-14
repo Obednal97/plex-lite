@@ -2303,7 +2303,12 @@
       autoAt: auto ? this.position() + AUTO_SKIP_SEC : null };
     this.pillLabel.textContent = label;
     if (this.mayTakeFocus()) this.zone = 'cta';
+    // a new pill starts at its own first value instead of gliding there from the last pill's
+    var line = this.pillLine;
+    line.style.transition = 'none';
     this.paintZone();
+    void line.offsetWidth;
+    line.style.transition = '';
   };
 
   // Skip / Up Next take the focus from the bar, but not while the remote is in use (a tap on the bar

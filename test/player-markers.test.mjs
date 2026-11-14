@@ -71,6 +71,16 @@ test('markers: auto-skip intro shows the pill and counts down 5 s of playback be
   assert.equal(p.calls.length, 1, 'once');
 });
 
+test('markers: a new pill paints its first value without the glide (no flash of the last pill\'s fill)', () => {
+  const p = player({ autoIntro: true });
+  let during;
+  p.paintZone = () => { p.pillVisible = p.pillShown(); during = p.pillLine.style.transition; p.paintCtaLine(); };
+  p.at(INTRO.start);
+  assert.equal(during, 'none', 'no transition while the first value is painted');
+  assert.equal(p.painted['pill-fill'], '100.0% 0', 'it starts empty');
+  assert.equal(p.pillLine.style.transition, '', 'the glide is back for the countdown');
+});
+
 test('markers: joining the intro part-way counts down from there; Back cancels; OK skips at once', () => {
   const mid = player({ autoIntro: true });
   mid.at(240).at(244.9);
