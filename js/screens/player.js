@@ -31,6 +31,7 @@
   var GLYPHS = {
     subtitles: [['rect', { x: 3, y: 5, width: 18, height: 14, rx: 3 }], ['path', { d: 'M7 15h4M14 15h3M7 11h2M12 11h5' }]],
     audio: [['path', { d: 'M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2' }]],
+    quality: [['path', { d: 'M4.5 17.5a8 8 0 1 1 15 0' }], ['path', { d: 'M12 15.5l3.5-4.5' }]],
     check: [['path', { d: 'M5 12.5l4.5 4.5L19 7' }]],
     chevron: [['path', { d: 'M9 6l6 6-6 6' }]],
     restart: [['path', { d: 'M4 12a8 8 0 1 0 2.5-5.8' }], ['path', { d: 'M4 4v4.5h4.5' }]],
@@ -508,6 +509,7 @@
     }
     on('playing', function () {
       var was = self.state;
+      clearTimeout(self.stallTimer);
       self.setStatus(null);
       self.state = 'playing';
       self.report();
@@ -530,7 +532,9 @@
       if (self.state !== 'playing') return;
       self.setStatus('', true);
       // waiting for a seek to land is part of the seek, not a stall worth telling plugins about
-      if (!v.seeking) self.playback('waiting');
+      if (v.seeking) return;
+      self.playback('waiting');
+      self.onStall();
     });
     on('timeupdate', function () {
       if (self.liveOsd) {
@@ -751,6 +755,7 @@
       var audio = streams.filter(function (s) { return s.streamType === 2; });
       if (subs.length) list.push({ id: 'subtitles', label: 'Subtitles', glyph: 'subtitles', action: function () { self.openMenu('subtitles'); } });
       if (audio.length > 1) list.push({ id: 'audio', label: 'Audio', glyph: 'audio', action: function () { self.openMenu('audio'); } });
+      if (PL.webMedia) list.push({ id: 'quality', label: 'Quality', glyph: 'quality', action: function () { self.openMenu('quality'); } });
       if (this.nextItem()) list.push({ id: 'next', label: 'Next episode', glyph: 'next', action: function () { self.playNext(true); } });
     }
     var was = this.icons[this.iconIndex] && this.icons[this.iconIndex].id;
@@ -1029,6 +1034,7 @@
         } };
       });
     }
+    if (m.kind === 'quality') return this.qualityRows();
     if (m.kind === 'audio') {
       var audio = streams.filter(function (s) { return s.streamType === 2; });
       return audio.map(function (s) {
@@ -1053,6 +1059,35 @@
     return rows;
   };
 
+  // The web build's Quality menu (web/web-media.js): Auto, or a step kept for this route (home or
+  // away). A pick that changes what the server sends restarts the stream where it is.
+  Player.prototype.qualityRows = function () {
+    var self = this;
+    var W = PL.webMedia;
+    var server = PL.plex.server;
+    var q = W.quality(server);
+    var media = this.full.Media && (this.full.Media[this.mediaIndex] || this.full.Media[0]);
+    var pick = function (value) {
+      return function () {
+        self.closeMenu();
+        W.choose(server, value);
+        if (W.quality(server).kbps !== q.kbps) self.start(self.intendedPosition() * 1000);
+      };
+    };
+    var rows = [{
+      label: 'Auto', checked: q.auto, run: pick('auto'),
+      sub: !q.auto ? 'Lowers the quality on a slow connection'
+        : 'Now ' + W.stepLabel(q.kbps) + (q.why === 'lowered' ? ' (lowered)' : q.why === 'relay' ? ' (Plex relay)' : ''),
+    }];
+    W.STEPS.forEach(function (s) {
+      rows.push({
+        label: W.stepLabel(s.kbps), checked: !q.auto && q.kbps === s.kbps, run: pick(s.kbps),
+        sub: !s.kbps && media && media.bitrate ? (media.bitrate / 1000).toFixed(1) + ' Mbps' : '',
+      });
+    });
+    return rows;
+  };
+
   Player.prototype.menuView = function (view) {
     this.menu.view = view;
     this.renderMenu();
@@ -1065,7 +1100,7 @@
     var el = this.menuEl;
     PL.clear(el);
     var box = PL.el('div', 'menu-box');
-    var heading = m.view === 'size' ? 'Subtitle size' : m.kind === 'audio' ? 'Audio' : 'Subtitles';
+    var heading = m.view === 'size' ? 'Subtitle size' : m.kind === 'audio' ? 'Audio' : m.kind === 'quality' ? 'Quality' : 'Subtitles';
     box.appendChild(PL.el('div', 'menu-head', heading));
     var clip = PL.el('div', 'menu-clip');
     var list = m.list = PL.el('div', 'menu-list');
@@ -1657,7 +1692,7 @@
     var q = web ? web.quality(PL.plex.server) : null;
     if (web && !this.live && !transcode) {
       var problem = web.directPlayProblem(media);
-      if (!problem && q.maxDirectKbps && media && media.bitrate > q.maxDirectKbps) problem = 'bitrate over the relay';
+      if (!problem && q.maxDirectKbps && media && media.bitrate > q.maxDirectKbps) problem = 'quality ' + q.why;
       if (problem) transcode = true;
       this.webReason = problem;
     }
@@ -1699,6 +1734,8 @@
       this.report(true, 'stopped', this.position());
     }
     this.rebased = false;
+    clearTimeout(this.stallTimer);
+    this.stalls = [];
     this.teardownVideo();
     this.stopTranscode();
     var gen = ++this.gen;
@@ -1739,6 +1776,30 @@
     }).catch(function (err) { if (gen === self.gen) self.fail(err); });
   };
 
+  // The web build on Auto quality: a stream that stalls twice in a minute, or for 8 s at once,
+  // restarts a step lower (web/web-media.js). Live TV, and the TV, keep their stream.
+  Player.prototype.onStall = function () {
+    var self = this;
+    if (!PL.webMedia || this.live || !PL.webMedia.quality(PL.plex.server).auto) return;
+    var now = Date.now();
+    this.stalls = (this.stalls || []).filter(function (t) { return now - t < 60000; }).concat(now);
+    clearTimeout(this.stallTimer);
+    if (this.stalls.length >= 2) this.lowerQuality();
+    else this.stallTimer = setTimeout(function () { self.lowerQuality(); }, 8000);
+  };
+
+  Player.prototype.lowerQuality = function () {
+    if (this.state !== 'playing') return; // paused or gone meanwhile
+    var W = PL.webMedia;
+    var media = this.full && this.full.Media && this.full.Media[this.mediaIndex];
+    var kbps = W.lower(PL.plex.server, W.quality(PL.plex.server).kbps || (media && media.bitrate) || 20000);
+    this.stalls = [];
+    if (!kbps) return; // already at the lowest step
+    PL.log('stalled: quality down to', kbps, 'kbps');
+    PL.toast('Slow connection: lowering the quality to ' + W.stepLabel(kbps));
+    this.start(this.intendedPosition() * 1000);
+  };
+
   // Why the server converts this stream, for the Info tab.
   Player.prototype.reasonFor = function (part) {
     var kind = subtitleKind(selectedSubtitle(this.full, this.mediaIndex));
@@ -1749,7 +1810,10 @@
       // 'audio eac3' -> "this browser doesn't play EAC3 audio"
       var w = /^(video|audio|container) (.+)$/.exec(this.webReason);
       return w ? 'this browser doesn\'t play ' + w[2].toUpperCase().replace('-BIT', '-bit') + ' ' + w[1]
-        : /relay/.test(this.webReason) ? 'the Plex relay is too slow for the original' : 'this browser can\'t play the file as it is';
+        : this.webReason === 'quality relay' ? 'the Plex relay is too slow for the original'
+          : this.webReason === 'quality lowered' ? 'quality lowered for a slow connection'
+            : this.webReason === 'quality chosen' ? 'quality set to ' + PL.webMedia.stepLabel(PL.webMedia.quality(PL.plex.server).kbps)
+              : 'this browser can\'t play the file as it is';
     }
     if (this.retried) return PL.isWeb ? 'the browser could not play the file' : 'the TV could not play the file';
     var streams = (part && part.Stream) || [];

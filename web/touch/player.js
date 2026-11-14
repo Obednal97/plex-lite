@@ -9,7 +9,7 @@
 //     shows the running total)
 //   drag along the bar: scrub, a time label riding the finger (no preview frames); drag sideways on
 //     the picture with the controls up: a finer scrub; pull down: close; pinch: fill / fit
-//   top bar: close, title, Subtitles, Audio, AirPlay, picture in picture, full screen, lock
+//   top bar: close, title, Subtitles, Audio, Quality, AirPlay, picture in picture, full screen, lock
 //   bottom: the bar (one segment per chapter), times and "Ends at", tabs (Chapters, Cast, Info,
 //     Episodes): under the picture in portrait, over it in landscape
 //
@@ -43,6 +43,7 @@
     down: [['path', { d: 'M5 9l7 7 7-7' }]],
     cc: [['rect', { x: 3, y: 5, width: 18, height: 14, rx: 3 }], ['path', { d: 'M10.5 10a2.2 2.2 0 1 0 0 4M17 10a2.2 2.2 0 1 0 0 4' }]],
     audio: [['path', { d: 'M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2' }]],
+    quality: [['path', { d: 'M4.5 17.5a8 8 0 1 1 15 0' }], ['path', { d: 'M12 15.5l3.5-4.5' }]],
     rotate: [['rect', { x: 7, y: 3, width: 10, height: 18, rx: 2.5 }], ['path', { d: 'M3 9a9 9 0 0 1 3-4M21 15a9 9 0 0 1-3 4' }]],
     full: [['path', { d: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5' }]],
     fullExit: [['path', { d: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' }]],
@@ -866,6 +867,7 @@
       const streams = U.streamsOf(this.full, this.mediaIndex);
       if (streams.some((s) => s.streamType === 3)) list.push(['cc', 'Subtitles', () => this.trackSheet('subtitles'), false, () => this.trackSheet('size')]);
       if (streams.filter((s) => s.streamType === 2).length > 1) list.push(['audio', 'Audio', () => this.trackSheet('audio')]);
+      list.push(['quality', 'Quality', () => this.trackSheet('quality')]);
     }
     const tablet = document.documentElement.classList.contains('t-tablet');
     if (this.pipKind() && (t.land || tablet)) list.push(['pip', 'Picture in picture', () => this.togglePip(), this.inPip()]);
@@ -886,7 +888,7 @@
     });
   };
 
-  // Subtitles, Audio or the subtitle size, as a sheet (the TV's menu rows: same choices, same calls).
+  // Subtitles, Audio, Quality or the subtitle size, as a sheet (the TV's menu rows: same choices, same calls).
   TP.trackSheet = function (kind) {
     if (!this.full) return;
     const rowsFor = (k, view) => {
@@ -900,6 +902,7 @@
     };
     let opts;
     if (kind === 'audio') opts = { title: 'Audio', rows: rowsFor('audio', 'list') };
+    else if (kind === 'quality') opts = { title: 'Quality', rows: rowsFor('quality', 'list') };
     else if (kind === 'size') opts = { title: 'Subtitle size', rows: rowsFor('subtitles', 'size') };
     else opts = { title: 'Subtitles', sections: [{ rows: rowsFor('subtitles', 'list') }, { heading: 'Size', rows: rowsFor('subtitles', 'size') }] };
     opts.cls = 'tp-sheet';

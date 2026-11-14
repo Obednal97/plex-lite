@@ -92,13 +92,62 @@
       .join('+');
   }
 
-  // Quality for the route to the server: the Plex relay is slow (about 2 Mbit/s), so ask for 720p
-  // there; LAN and Remote Access get the original quality.
+  // ---- Quality -----------------------------------------------------------------------------------
+
+  // The steps the viewer can pick, and Auto steps down through (kbps; 0 = the original file). Labels
+  // are what Plex sends for each cap (PMS 1.43): below 4 Mbps it drops 720p for 720x404, and at
+  // 1 Mbps it sends 480x270.
+  var STEPS = [
+    { kbps: 0, label: 'Original' },
+    { kbps: 8000, label: '1080p', res: '1920x1080' },
+    { kbps: 4000, label: '720p', res: '1280x720' },
+    { kbps: 2000, label: '480p', res: '720x480' },
+    { kbps: 1000, label: 'Low', res: '720x480' },
+  ];
+  var lowered = {}; // server uri -> the step Auto went down to after stalls (for this page's life)
+
+  function stepLabel(kbps) {
+    var s = STEPS.filter(function (x) { return x.kbps === kbps; })[0] || STEPS[0];
+    return s.kbps ? s.label + ' · ' + s.kbps / 1000 + ' Mbps' : s.label;
+  }
+
+  function where(server) {
+    return /^(lan|manual-local)/.test((server && server.kind) || '') ? 'lan' : 'wan';
+  }
+
+  // What to ask the server for: the viewer's pick for this route (home or away), else Auto: the
+  // original, 2 Mbps over the Plex relay (about 2 Mbit/s), a step lower after stalls (lower()).
+  // why: what holds it below the original (null, 'relay', 'lowered', 'chosen').
   function quality(server) {
-    var kind = server && server.kind;
-    if (kind === 'relay') return { location: 'wan', maxVideoBitrate: 2000, videoResolution: '1280x720', maxDirectKbps: 2000 };
-    if (kind === 'lan' || kind === 'manual-local') return { location: 'lan', maxVideoBitrate: 200000, videoResolution: '3840x2160', maxDirectKbps: 0 };
-    return { location: 'wan', maxVideoBitrate: 200000, videoResolution: '3840x2160', maxDirectKbps: 0 };
+    var loc = where(server);
+    var pick = PL.storage.get('quality.' + loc, null);
+    var auto = typeof pick !== 'number';
+    var down = server && lowered[server.uri];
+    var kbps = auto ? down || (server && server.kind === 'relay' ? 2000 : 0) : pick;
+    var step = STEPS.filter(function (x) { return x.kbps === kbps; })[0] || STEPS[0];
+    return {
+      auto: auto, kbps: kbps, why: !kbps ? null : !auto ? 'chosen' : down ? 'lowered' : 'relay',
+      location: loc, maxVideoBitrate: kbps || 200000, videoResolution: step.res || '3840x2160', maxDirectKbps: kbps,
+    };
+  }
+
+  // Auto after stalls: the next step below nowKbps (the current cap, else the file's bitrate), kept
+  // for this server. 0 when there's no lower step.
+  function lower(server, nowKbps) {
+    for (var i = 1; i < STEPS.length; i++) {
+      if (STEPS[i].kbps < nowKbps) return (lowered[server.uri] = STEPS[i].kbps);
+    }
+    return 0;
+  }
+
+  // The viewer's pick for this route: 'auto' or a step's kbps. Picking Auto starts it afresh.
+  function choose(server, value) {
+    if (value === 'auto') {
+      PL.storage.del('quality.' + where(server));
+      if (server) delete lowered[server.uri];
+    } else {
+      PL.storage.set('quality.' + where(server), value);
+    }
   }
 
   // ---- Attaching a stream ------------------------------------------------------------------------
@@ -120,7 +169,10 @@
       liveDurationInfinity: true, // a live channel's buffer shows as video.seekable (pause and rewind)
       liveSyncDurationCount: 2, // start a channel close to live (the banner counts "behind live" from the edge)
       backBufferLength: 120,
-      maxBufferLength: 30,
+      // read up to 2 minutes ahead (hls.js stops at 30 s), so a dip in the connection plays from
+      // what's already here; the size cap keeps a high-bitrate stream within the browser's limit
+      maxBufferLength: 120,
+      maxBufferSize: 120 * 1000 * 1000,
       // the transcoder writes segments as it goes: be patient with a fresh session
       manifestLoadPolicy: { default: { maxTimeToFirstByteMs: 20000, maxLoadTimeMs: 30000, timeoutRetry: { maxNumRetry: 4, retryDelayMs: 500, maxRetryDelayMs: 2000 }, errorRetry: { maxNumRetry: 6, retryDelayMs: 1000, maxRetryDelayMs: 4000 } } },
       playlistLoadPolicy: { default: { maxTimeToFirstByteMs: 20000, maxLoadTimeMs: 30000, timeoutRetry: { maxNumRetry: 4, retryDelayMs: 500, maxRetryDelayMs: 2000 }, errorRetry: { maxNumRetry: 6, retryDelayMs: 1000, maxRetryDelayMs: 4000 } } },
@@ -155,7 +207,11 @@
     hls: useNative ? 'native' : hlsJs ? 'hls.js ' + Hls.version : 'none',
     directPlayProblem: directPlayProblem,
     profileExtra: profileExtra,
+    STEPS: STEPS,
+    stepLabel: stepLabel,
     quality: quality,
+    lower: lower,
+    choose: choose,
     attach: attach,
     detach: detach,
   };

@@ -134,6 +134,53 @@ test('web media: the transcoder profile asks for H.264 + stereo AAC HLS, WebVTT 
   assert.equal(PL.webMedia.quality({ kind: 'lan' }).location, 'lan');
 });
 
+test('web media: quality is Auto by default, the original at home and away, 2 Mbps over the relay', () => {
+  const { PL } = load('web', ['web/web-media.js'], chromeLike);
+  const Q = (server) => clone(PL.webMedia.quality(server));
+  assert.deepEqual(Q({ kind: 'remote', uri: 'https://a' }), { auto: true, kbps: 0, why: null, location: 'wan', maxVideoBitrate: 200000, videoResolution: '3840x2160', maxDirectKbps: 0 });
+  assert.deepEqual(Q({ kind: 'relay', uri: 'https://r' }), { auto: true, kbps: 2000, why: 'relay', location: 'wan', maxVideoBitrate: 2000, videoResolution: '720x480', maxDirectKbps: 2000 });
+  assert.equal(Q({ kind: 'manual-local', uri: 'https://l' }).location, 'lan');
+});
+
+test('web media: Auto steps down after stalls, for that server only, and stops at 1 Mbps', () => {
+  const { PL } = load('web', ['web/web-media.js'], chromeLike);
+  const M = PL.webMedia;
+  const away = { kind: 'remote', uri: 'https://a' };
+  assert.equal(M.lower(away, 12000), 8000); // a 12 Mbps file -> 1080p 8 Mbps
+  assert.deepEqual([M.quality(away).kbps, M.quality(away).why, M.quality(away).videoResolution], [8000, 'lowered', '1920x1080']);
+  assert.equal(M.lower(away, 8000), 4000);
+  assert.equal(M.lower(away, 4000), 2000);
+  assert.equal(M.lower(away, 2000), 1000);
+  assert.equal(M.lower(away, 1000), 0);
+  assert.equal(M.quality(away).kbps, 1000); // the bottom step stays
+  assert.equal(M.lower({ kind: 'remote', uri: 'https://b' }, 3000), 2000); // a 3 Mbps file starts below it
+  assert.equal(M.quality({ kind: 'remote', uri: 'https://c' }).kbps, 0); // another server is untouched
+  assert.equal(M.stepLabel(4000), '720p · 4 Mbps');
+  assert.equal(M.stepLabel(0), 'Original');
+  assert.equal(M.stepLabel(1000), 'Low · 1 Mbps');
+  // picking Auto again starts afresh
+  M.choose(away, 'auto');
+  assert.equal(M.quality(away).kbps, 0);
+});
+
+test('web media: a picked quality is kept per route (home or away) and overrides Auto', () => {
+  const { PL, store } = load('web', ['web/web-media.js'], chromeLike);
+  const M = PL.webMedia;
+  const away = { kind: 'remote', uri: 'https://a' };
+  const relay = { kind: 'relay', uri: 'https://r' };
+  const home = { kind: 'lan', uri: 'https://l' };
+  M.choose(away, 4000);
+  assert.equal(store['pl.quality.wan'], '4000');
+  assert.deepEqual([M.quality(away).auto, M.quality(away).kbps, M.quality(away).why], [false, 4000, 'chosen']);
+  assert.equal(M.quality(relay).kbps, 4000); // the relay is away too: the pick wins over its 720p
+  assert.equal(M.quality(home).kbps, 0);
+  M.choose(home, 0); // Original at home, picked
+  assert.deepEqual([M.quality(home).auto, M.quality(home).kbps], [false, 0]);
+  M.choose(away, 'auto');
+  assert.ok(!('pl.quality.wan' in store));
+  assert.equal(M.quality(relay).kbps, 2000);
+});
+
 test('the TV build never loads web/ modules', () => {
   const html = read('index.html');
   assert.doesNotMatch(html, /web\//);

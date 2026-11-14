@@ -108,8 +108,18 @@ Plex universal transcoder as HLS. `web/web-media.js` asks the browser (`canPlayT
   containers and codecs, otherwise HLS with H.264 video (copied when the source is 8-bit H.264,
   converted otherwise) and stereo AAC. HEVC that the browser can't direct play is converted to H.264,
   which costs the server more than the TV did; DTS, E-AC3 and TrueHD audio are converted to AAC.
-- On the Plex relay the stream is limited to 720p at 2 Mbit/s; on the LAN and Remote Access it is
-  the original quality.
+- **Quality** (the player's Quality button; a sheet on phones): Auto, or a fixed step (Original,
+  1080p 8 Mbps, 720p 4 Mbps, 480p 2 Mbps, Low 1 Mbps), kept per browser for home (LAN) and away
+  (Remote Access and the relay). The labels are what Plex sends for each cap: below 4 Mbps it drops
+  720p for 720x404. Auto starts at the original on the LAN and Remote Access and at 2 Mbps on the Plex
+  relay, and steps down when the stream stalls twice in a minute or for 8 s at once: the stream
+  restarts where it was, a step lower, and later titles on that server start there until the page is
+  reloaded or Auto is picked again. It never steps back up by itself. A file above the cap is
+  converted instead of direct played. Live TV keeps its stream; the TV has none of this.
+- hls.js reads up to 2 minutes ahead (120 MB at most), so a dip in the connection plays from what's
+  already loaded. Plex converts ahead as fast as it's asked (about 8x real time for a 1080p H.264
+  episode at 4 Mbps), so the buffer fills. Direct play and Safari's own HLS buffer as the browser
+  decides.
 - Resume, timeline reporting (Plex's dashboard, Continue Watching), watched state, audio and
   subtitle choice, chapters, Skip Intro and Skip Credits, the end card and the next episode work as
   on the TV. Text subtitles are drawn by Plex Lite (external files are fetched, embedded ones arrive

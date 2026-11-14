@@ -9,7 +9,17 @@ releases are fixes only.
 
 ## [Unreleased]
 
+### Added
+
+- **Web: stream quality.** The web player (laptop and phone) has a Quality button: Auto, Original,
+  1080p 8 Mbps, 720p 4 Mbps, 480p 2 Mbps or Low 1 Mbps, kept separately for home and away. On Auto a
+  stream that keeps stalling (twice in a minute, or 8 seconds at once) restarts a step lower where it
+  was, so a weak mobile connection drops quality instead of buffering. The TV is unchanged.
+
 ### Changed
+
+- **Web: the player reads up to 2 minutes ahead** on converted streams (was 30 s), so a short dip in
+  the connection doesn't stall the picture.
 
 - **Auto-skip waits 5 seconds, as Plex does.** With Skip intros (or credits) automatically on, the
   Skip button appears at the marker and fills with teal over 5 seconds of playback before it skips;
