@@ -69,7 +69,9 @@ test('browser: stalls lower the quality, the Quality menu picks one', { skip: !R
     const at = await top(() => PL.app.top().position());
     assert.ok(at > 0.5, 'the restart kept the place: ' + at);
 
-    // a long stall (8 s) steps down once more
+    // a long stall (8 s) steps down once more (after the restart's resume seek: stalls within 5 s of
+    // a seek don't count)
+    await page.waitForTimeout(5200);
     await stall();
     await page.waitForTimeout(7000);
     assert.equal(asked.length, 2);
@@ -97,6 +99,20 @@ test('browser: stalls lower the quality, the Quality menu picks one', { skip: !R
     await waitPlaying();
     assert.deepEqual(asked[4], [200000, 1]);
     assert.equal(await top(() => localStorage.getItem('pl.quality.lan')), null);
+    // a cap above the file's bitrate (1080p 8 Mbps over a smaller file) sends the same stream: no restart
+    await top(() => { const p = PL.app.top(); p.openMenu('quality'); p.menu.index = 2; p.pressMenu(); });
+    await page.waitForTimeout(800);
+    assert.equal(asked.length, 5);
+    assert.equal(await top(() => localStorage.getItem('pl.quality.lan')), '8000');
+    await top(() => { const p = PL.app.top(); p.openMenu('quality'); p.menu.index = 0; p.pressMenu(); });
+    await page.waitForTimeout(800);
+    assert.equal(asked.length, 5);
+    // buffering right after a seek isn't a stall
+    await top(() => { const v = PL.app.top().video; v.dispatchEvent(new Event('seeking')); v.dispatchEvent(new Event('seeked')); });
+    await stall();
+    await stall();
+    await page.waitForTimeout(800);
+    assert.equal(asked.length, 5);
     assert.deepEqual(errors, []);
   } finally {
     await browser.close();

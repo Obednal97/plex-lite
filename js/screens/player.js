@@ -447,6 +447,7 @@
       }
     });
     on('seeked', function () { self.onSeeked(); });
+    on('seeking', function () { self.seekAt = Date.now(); });
     // Plex's playlist covers the whole file and starts at the offset (#EXT-X-START). Browsers and
     // the TV's own player (webOS 4.5, seen 2026-10-29) report that absolute time, so once the video
     // says so, positions stop adding the offset. Without this a resumed or restarted stream (a
@@ -1067,11 +1068,13 @@
     var server = PL.plex.server;
     var q = W.quality(server);
     var media = this.full.Media && (this.full.Media[this.mediaIndex] || this.full.Media[0]);
+    // a cap at or above the file's bitrate sends the same stream
+    var cap = function (kbps) { return kbps && !(media && media.bitrate <= kbps) ? kbps : 0; };
     var pick = function (value) {
       return function () {
         self.closeMenu();
         W.choose(server, value);
-        if (W.quality(server).kbps !== q.kbps) self.start(self.intendedPosition() * 1000);
+        if (cap(W.quality(server).kbps) !== cap(q.kbps)) self.start(self.intendedPosition() * 1000);
       };
     };
     var rows = [{
@@ -1689,7 +1692,7 @@
     // that suits the route to the server
     var web = PL.webMedia || null;
     var media = !this.live && this.full && this.full.Media && this.full.Media[this.mediaIndex];
-    var q = web ? web.quality(PL.plex.server) : null;
+    var q = web ? web.quality(PL.plex.server, !!this.live) : null;
     if (web && !this.live && !transcode) {
       var problem = web.directPlayProblem(media);
       if (!problem && q.maxDirectKbps && media && media.bitrate > q.maxDirectKbps) problem = 'quality ' + q.why;
@@ -1776,12 +1779,14 @@
     }).catch(function (err) { if (gen === self.gen) self.fail(err); });
   };
 
-  // The web build on Auto quality: a stream that stalls twice in a minute, or for 8 s at once,
-  // restarts a step lower (web/web-media.js). Live TV, and the TV, keep their stream.
+  // The web build on Auto quality: a stream that stalls twice in a minute, or for 8 s at once (not
+  // within 5 s of a seek), restarts a step lower (web/web-media.js). Live TV, and the TV, keep their
+  // stream.
   Player.prototype.onStall = function () {
     var self = this;
     if (!PL.webMedia || this.live || !PL.webMedia.quality(PL.plex.server).auto) return;
     var now = Date.now();
+    if (now - (this.seekAt || 0) < 5000) return; // filling in after a seek
     this.stalls = (this.stalls || []).filter(function (t) { return now - t < 60000; }).concat(now);
     clearTimeout(this.stallTimer);
     if (this.stalls.length >= 2) this.lowerQuality();

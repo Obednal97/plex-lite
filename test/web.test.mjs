@@ -174,6 +174,11 @@ test('web media: a picked quality is kept per route (home or away) and overrides
   assert.deepEqual([M.quality(away).auto, M.quality(away).kbps, M.quality(away).why], [false, 4000, 'chosen']);
   assert.equal(M.quality(relay).kbps, 4000); // the relay is away too: the pick wins over its 720p
   assert.equal(M.quality(home).kbps, 0);
+  // Live TV has no Quality menu: it ignores the pick and step-downs (the relay's cap stays)
+  const relay2 = { kind: 'relay', uri: 'https://r2' };
+  M.lower(relay2, 2000);
+  assert.deepEqual([M.quality(away, true).auto, M.quality(away, true).kbps], [true, 0]);
+  assert.equal(M.quality(relay2, true).kbps, 2000);
   M.choose(home, 0); // Original at home, picked
   assert.deepEqual([M.quality(home).auto, M.quality(home).kbps], [false, 0]);
   M.choose(away, 'auto');

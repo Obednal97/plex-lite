@@ -117,12 +117,13 @@
 
   // What to ask the server for: the viewer's pick for this route (home or away), else Auto: the
   // original, 2 Mbps over the Plex relay (about 2 Mbit/s), a step lower after stalls (lower()).
-  // why: what holds it below the original (null, 'relay', 'lowered', 'chosen').
-  function quality(server) {
+  // why: what holds it below the original (null, 'relay', 'lowered', 'chosen'). live: Live TV,
+  // which has no Quality menu, keeps Auto without step-downs.
+  function quality(server, live) {
     var loc = where(server);
-    var pick = PL.storage.get('quality.' + loc, null);
+    var pick = live ? null : PL.storage.get('quality.' + loc, null);
     var auto = typeof pick !== 'number';
-    var down = server && lowered[server.uri];
+    var down = !live && server && lowered[server.uri];
     var kbps = auto ? down || (server && server.kind === 'relay' ? 2000 : 0) : pick;
     var step = STEPS.filter(function (x) { return x.kbps === kbps; })[0] || STEPS[0];
     return {

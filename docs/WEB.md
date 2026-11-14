@@ -112,10 +112,13 @@ Plex universal transcoder as HLS. `web/web-media.js` asks the browser (`canPlayT
   1080p 8 Mbps, 720p 4 Mbps, 480p 2 Mbps, Low 1 Mbps), kept per browser for home (LAN) and away
   (Remote Access and the relay). The labels are what Plex sends for each cap: below 4 Mbps it drops
   720p for 720x404. Auto starts at the original on the LAN and Remote Access and at 2 Mbps on the Plex
-  relay, and steps down when the stream stalls twice in a minute or for 8 s at once: the stream
+  relay, and steps down when the stream stalls twice in a minute or for 8 s at once (buffering in
+  the 5 s after a seek doesn't count): the stream
   restarts where it was, a step lower, and later titles on that server start there until the page is
   reloaded or Auto is picked again. It never steps back up by itself. A file above the cap is
-  converted instead of direct played. Live TV keeps its stream; the TV has none of this.
+  converted instead of direct played, and a pick that doesn't change the stream doesn't restart it.
+  Live TV ignores the pick and the step-downs (only the relay's 2 Mbps applies); the TV has none of
+  this.
 - hls.js reads up to 2 minutes ahead (120 MB at most), so a dip in the connection plays from what's
   already loaded. Plex converts ahead as fast as it's asked (about 8x real time for a 1080p H.264
   episode at 4 Mbps), so the buffer fills. Direct play and Safari's own HLS buffer as the browser
