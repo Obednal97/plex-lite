@@ -251,7 +251,7 @@ html.pl-touch.t-covered, html.pl-touch.t-covered body { overflow: hidden; }
 .t-root .tp .tp-skip { position: absolute; right: var(--tp-gr); top: calc(var(--tp-ftop) + var(--tp-fh) - 52px); z-index: 7; }
 .t-root .tp .tp-pill {
   position: relative; display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border-radius: 20px; overflow: hidden;
-  font-size: 14px; font-weight: 700; color: #08080a; background: #f7fafc; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  font-size: 14px; font-weight: 700; color: #08080a; background: rgba(247, 250, 252, 0.84); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
   transition: opacity 200ms linear, transform 220ms var(--t-ease);
 }
 .t-root .tp .tp-pill .glyph { position: relative; z-index: 1; width: 16px; height: 16px; margin-right: 8px; }
@@ -259,7 +259,7 @@ html.pl-touch.t-covered, html.pl-touch.t-covered body { overflow: hidden; }
 .t-root .tp .tp-pill-line { position: absolute; left: 0; bottom: 0; width: 100%; height: 3px; background: var(--t-accent); transform-origin: 0 0; transition: transform .25s linear, background-position .25s linear; }
 .t-root .tp .tp-pill.counting .tp-pill-line {
   top: 0; height: 100%; border-radius: 20px; transform: none !important;
-  background: linear-gradient(to right, var(--t-accent) 50%, rgba(90, 214, 226, 0) 50%); background-size: 200% 100%;
+  background: linear-gradient(to right, rgba(90, 214, 226, 0.5) 50%, rgba(90, 214, 226, 0) 50%); background-size: 200% 100%;
 }
 .t-root .tp .skip-hidden .tp-pill { opacity: 0; transform: translate3d(0, 10px, 0); pointer-events: none; }
 .t-root .tp.tp-locked .tp-skip { display: none; }

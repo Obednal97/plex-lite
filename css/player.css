@@ -302,15 +302,15 @@
 .osd-open .skip-scrim, .skip-hidden .skip-scrim { opacity: 0; }
 .skip-pill {
   position: absolute; right: 96px; bottom: 96px; height: 80px; line-height: 80px; padding: 0 40px 0 34px; border-radius: 40px; overflow: hidden;
-  white-space: nowrap; font-size: 30px; font-weight: 700; background: var(--control); color: var(--text); box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5);
+  white-space: nowrap; font-size: 30px; font-weight: 700; background: rgba(34, 34, 36, 0.55); color: var(--text); box-shadow: 0 26px 50px rgba(0, 0, 0, 0.5);
   transition: opacity 200ms var(--ease), transform var(--t-scroll) var(--spring), color 60ms linear 70ms;
 }
 .skip-pill .glyph { position: relative; z-index: 1; vertical-align: -5px; margin-right: 16px; }
 .skip-pill span { position: relative; z-index: 1; }
-/* lit by a white plate fading in behind the label (rounded itself: a composited child escapes the
-   pill's clip on Chrome 53) */
+/* see-through over the video, idle and lit; lit by a white plate fading in behind the label (rounded
+   itself: a composited child escapes the pill's clip on Chrome 53) */
 .skip-pill::before {
-  content: ""; position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 40px; background: var(--focus);
+  content: ""; position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 40px; background: rgba(247, 250, 252, 0.84);
   opacity: 0; transition: opacity 200ms linear;
 }
 .skip-pill.focused::before { opacity: 1; }
@@ -321,9 +321,9 @@
 /* auto-skip countdown: the whole pill fills from the left, under the label (player.js paintCtaLine) */
 .skip-pill.counting .cta-line {
   top: 0; height: 100%; border-radius: 40px; transform: none !important;
-  background: linear-gradient(to right, rgba(90, 214, 226, 0.4) 50%, rgba(90, 214, 226, 0) 50%); background-size: 200% 100%;
+  background: linear-gradient(to right, rgba(90, 214, 226, 0.25) 50%, rgba(90, 214, 226, 0) 50%); background-size: 200% 100%;
 }
-.skip-pill.counting.focused .cta-line { background-image: linear-gradient(to right, var(--resume) 50%, rgba(90, 214, 226, 0) 50%); }
+.skip-pill.counting.focused .cta-line { background-image: linear-gradient(to right, rgba(90, 214, 226, 0.5) 50%, rgba(90, 214, 226, 0) 50%); }
 .skip-hidden .skip-pill { opacity: 0; transform: translate3d(0, 16px, 0); pointer-events: none; }
 .osd-open .skip-pill { transform: translate3d(0, -210px, 0); }
 .osd-open .skip-hidden .skip-pill { transform: translate3d(0, -194px, 0); }
